@@ -2,31 +2,60 @@
 //  brain_mdApp.swift
 //  brain-md
 //
-//  Created by Veroft Reidar on 17/09/2026.
-//
 
 import SwiftUI
-import SwiftData
 
 @main
 struct brain_mdApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+    init() {
+        let args = CommandLine.arguments
+        
+        // Custom vault path argument (e.g. brain-md --vault /path/to/notes)
+        if let idx = args.firstIndex(of: "--vault"), idx + 1 < args.count {
+            let path = args[idx + 1]
+            let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            VaultManager.shared.setVaultURL(url)
         }
-    }()
+        
+        // Headless Stdio MCP Server mode
+        if args.contains("--stdio") || args.contains("--mcp") {
+            Task {
+                await MCPStdioServer.shared.run()
+                exit(0)
+            }
+            dispatchMain()
+        }
+        
+        // Default GUI launch: start HTTP/SSE MCP server asynchronously to keep launch instantaneous
+        DispatchQueue.global(qos: .userInitiated).async {
+            MCPHTTPServer.shared.start(preferredPort: 8765)
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(sharedModelContainer)
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unified(showsTitle: true))
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Note") {
+                    VaultManager.shared.promptNewNote()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                
+                Button("Save Note") {
+                    VaultManager.shared.saveCurrentNote()
+                }
+                .keyboardShortcut("s", modifiers: .command)
+            }
+        }
+        
+        Settings {
+            SettingsView(vault: VaultManager.shared)
+        }
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unified(showsTitle: true))
     }
 }

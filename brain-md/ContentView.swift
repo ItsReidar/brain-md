@@ -2,58 +2,79 @@
 //  ContentView.swift
 //  brain-md
 //
-//  Created by Veroft Reidar on 17/09/2026.
-//
 
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    @StateObject private var vault = VaultManager.shared
+    @StateObject private var httpServer = MCPHTTPServer.shared
+    @StateObject private var themeManager = ThemeManager.shared
+    @State private var showingMCPModal = false
+    @State private var newNoteTitle = ""
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-            .toolbar {
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(vault: vault, showingMCPModal: $showingMCPModal)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         } detail: {
-            Text("Select an item")
+            EditorSplitView(vault: vault)
         }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+        .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: $showingMCPModal) {
+            MCPServerModalView()
         }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+        .alert("New Note", isPresented: $vault.showingNewNotePrompt) {
+            TextField("Note title (e.g. Ideas.md)", text: $newNoteTitle)
+            Button("Cancel", role: .cancel) {
+                newNoteTitle = ""
+            }
+            Button("Create") {
+                let trimmed = newNoteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                let nameToUse = trimmed.isEmpty ? vault.newNotePromptDefaultName : trimmed
+                if !nameToUse.isEmpty {
+                    _ = try? vault.createNote(named: nameToUse)
+                }
+                newNoteTitle = ""
             }
         }
+        .onChange(of: vault.showingNewNotePrompt) { _, isPresented in
+            if isPresented {
+                newNoteTitle = vault.newNotePromptDefaultName
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .automatic) {
+                Button(action: { showingMCPModal = true }) {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(httpServer.isRunning ? Color.green : Color.red)
+                            .frame(width: 8, height: 8)
+                        Text(httpServer.isRunning ? "MCP :\(String(httpServer.port))" : "MCP Offline")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .help("Open MCP Server Inspector & Agent Config")
+                
+                Button(action: {
+                    vault.promptNewNote()
+                }) {
+                    Image(systemName: "square.and.pencil")
+                }
+                .help("New Note (⌘N)")
+                .keyboardShortcut("n", modifiers: .command)
+            }
+        }
+        .onAppear {
+            if !httpServer.isRunning {
+                httpServer.start(preferredPort: 8765)
+            }
+        }
+        .preferredColorScheme(themeManager.effectiveColorScheme)
+        .id(themeManager.refreshTrigger)
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
