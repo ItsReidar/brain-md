@@ -14,6 +14,7 @@
 ## ✨ Features
 
 - **⚡ Blazing Fast & Lightweight**: 100% native Swift 6 and SwiftUI. Instant startup, sub-50ms render latency, ~1.2 MB executable binary, and ~4.4 MB total bundle size. Zero electron or web bloat.
+- **🧠 3D Visual Brain Graph**: Native Metal-accelerated 3D graph (Apple SceneKit) showing notes as velvety matte spheres clustered around folder hubs, linked via wikilinks (`[[Note]]`), markdown links, and `#tag` clusters. Features fluid organic floating and breathing animations, rotational elastic inertia, single-click 3D trackball spin, cursor-anchored zoom, dynamic front-facing badge labels, live search filtering, and click-to-inspect popover with instant jump-to-editor navigation (`⌥⌘G`).
 - **📂 Local-First Markdown Vault**: Plain-text `.md` files stored directly on your disk in human-readable hierarchies. Fully interoperable with Obsidian, VS Code, Logseq, and Git.
 - **🤖 Built-in Model Context Protocol (MCP) Server**: Built-in HTTP/SSE and Stdio servers expose 8 native tools (`list_notes`, `read_note`, `create_note`, `update_note`, `delete_note`, `search_notes`, `get_vault_stats`, `move_note`) directly to AI assistants.
 - **🎨 Rich Markdown Editor & Live Preview**: Real-time syntax highlighting, Split/Editor/Preview viewing modes, and GitHub Flavored Markdown (GFM) callouts (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), task lists, tables, and strikethroughs.
@@ -33,6 +34,8 @@ graph TB
         Window["Main Window (ContentView)"]
         Sidebar["Vault Sidebar (SidebarView)"]
         Editor["Editor & Live Preview (EditorSplitView)"]
+        Graph["3D Brain Graph Modal (BrainGraphModalView)"]
+        Scene3D["SceneKit 3D Viewport (Graph3DSceneView)"]
         Highlighter["Syntax Highlighter Engine"]
         Mermaid["Offline Mermaid Engine (WKWebView)"]
         Settings["macOS System Settings (SettingsView)"]
@@ -42,6 +45,7 @@ graph TB
         VM["VaultManager (VaultManaging)"]
         FileWatcher["VaultFileMonitor (Background Watcher)"]
         TemplateEngine["NoteTemplateEngine"]
+        GraphService["NoteGraphService (Link & 3D Force Simulation)"]
         Disk[("Local Filesystem (.md)")]
     end
 
@@ -61,11 +65,15 @@ graph TB
     %% UI to Storage
     Window --> Sidebar
     Window --> Editor
+    Window --> Graph
+    Graph --> Scene3D
+    Graph --> GraphService
     Editor --> Highlighter
     Editor --> Mermaid
     Window --> Settings
     Sidebar --> VM
     Editor --> VM
+    GraphService --> VM
     Settings --> TemplateEngine
 
     %% Storage to Disk
@@ -97,22 +105,26 @@ graph TB
 ### Building from Source
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/your-username/brain-md.git
    cd brain-md
    ```
 
 2. **Open in Xcode**:
+
    ```bash
    open brain-md.xcodeproj
    ```
 
 3. **Or build from terminal**:
+
    ```bash
    xcodebuild -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' build
    ```
 
 4. **Run Unit Tests**:
+
    ```bash
    xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdTests
    ```
@@ -128,10 +140,13 @@ graph TB
 1. Open `brain.md` and click the **MCP Status Badge** in the top-right toolbar (or press `⌘,` and go to the **MCP Server** tab).
 2. Click **"Copy Claude Desktop Config"**.
 3. Open your Claude Desktop configuration file:
+
    ```bash
    code ~/Library/Application\ Support/Claude/claude_desktop_config.json
    ```
+
 4. Paste the configuration:
+
    ```json
    {
      "mcpServers": {
@@ -141,6 +156,7 @@ graph TB
      }
    }
    ```
+
 5. Restart Claude Desktop. You will now see the `brain.md` hammer icon with 8 available tools!
 
 ### Available MCP Tools

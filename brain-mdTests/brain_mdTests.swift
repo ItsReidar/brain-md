@@ -248,6 +248,92 @@ struct brain_mdTests {
         }
         #expect(hasUncheckedTask)
     }
+    
+    @Test func testTableParsingAndAlignment() {
+        let markdown = """
+        | Attribute | Details |
+        | :--- | :--- |
+        | Headquarters | Mechelen, Belgium |
+        | Parent Company | Liberty Global |
+        | Primary Market | Flanders & Brussels |
+        | Core Brands | Telenet, BASE, Telenet Business, Play Media |
+        """
+        
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 1)
+        
+        guard case .table(let headers, let alignments, let rows) = doc.blocks.first else {
+            Issue.record("Expected table block")
+            return
+        }
+        
+        #expect(headers == ["Attribute", "Details"])
+        #expect(alignments == [.leading, .leading])
+        #expect(rows.count == 4)
+        #expect(rows[0] == ["Headquarters", "Mechelen, Belgium"])
+        #expect(rows[1] == ["Parent Company", "Liberty Global"])
+        #expect(rows[2] == ["Primary Market", "Flanders & Brussels"])
+        #expect(rows[3] == ["Core Brands", "Telenet, BASE, Telenet Business, Play Media"])
+    }
+    
+    @Test func testMarkdownPreviewViewRendering() {
+        let sampleMarkdown = """
+        ---
+        title: Sample Preview
+        tags: [swift, test]
+        ---
+        # Header 1
+        This is a test paragraph with **bold** and *italic* text.
+        
+        | Col A | Col B |
+        | :--- | :---: |
+        | 1 | 2 |
+        
+        ```swift
+        let test = "code"
+        ```
+        """
+        let preview = MarkdownPreviewView(markdown: sampleMarkdown)
+        #expect(preview.markdown.contains("Sample Preview"))
+        
+        let doc = MarkdownPreviewView.parseDocument(sampleMarkdown)
+        #expect(!doc.blocks.isEmpty)
+    }
+    
+    @Test func testMarkdownHTMLRenderer() {
+        let sampleMarkdown = """
+        ---
+        title: HTML Render Test
+        tags: [swift, html]
+        ---
+        # Document Title
+        Here is a paragraph with **bold text** and `inline code`.
+        
+        | Feature | Status |
+        | :--- | :--- |
+        | Fast | Yes |
+        
+        ```swift
+        let x = 42
+        ```
+        
+        ```mermaid
+        graph LR
+            A --> B
+        ```
+        """
+        let theme = TerminalThemes.dark[0]
+        let html = MarkdownHTMLRenderer.renderHTML(markdown: sampleMarkdown, theme: theme, contentWidth: 850)
+        
+        #expect(html.contains("<!DOCTYPE html>"))
+        #expect(html.contains("<h1") && html.contains("Document Title</h1>"))
+        #expect(html.contains("<strong>bold text</strong>"))
+        #expect(html.contains("<code>inline code</code>"))
+        #expect(html.contains("<table") && html.contains("Feature</th>"))
+        #expect(html.contains("code-block-container"))
+        #expect(html.contains("mermaid"))
+        #expect(html.contains(theme.backgroundHex))
+    }
 
     @Test func testMermaidDiagramSupport() {
         let markdown = """
@@ -807,12 +893,55 @@ struct brain_mdTests {
         ---
         title: ""
         author: ''
+        description: “”
         ---
         Content.
         """
         let (fm5, _) = FrontmatterParser.parse(emptyQuotes)
         #expect(fm5?.title == "")
         #expect(fm5?.author == "")
+        #expect(fm5?.properties.first(where: { $0.key == "description" })?.value == "")
+        
+        // 6. Quoted tags and trailing commas in array format
+        let quotedTagsTrailingComma = """
+        ---
+        title: “telenet-strategy”
+        Date: 2026-09-23 | 16:24
+        Description: “Strategy note”
+        tags: ["telecom", ]
+        ---
+        Some strategy
+        """
+        let (fm6, _) = FrontmatterParser.parse(quotedTagsTrailingComma)
+        #expect(fm6?.title == "telenet-strategy")
+        #expect(fm6?.properties.first(where: { $0.key.lowercased() == "description" })?.value == "Strategy note")
+        #expect(fm6?.tags == ["telecom"])
+        #expect(fm6?.properties.first(where: { $0.key == "tags" })?.tags == ["telecom"])
+        #expect(fm6?.properties.first(where: { $0.key == "tags" })?.value == "telecom")
+        
+        // 7. Unquoted tags with trailing comma: [telecom, ]
+        let unquotedTagsTrailingComma = """
+        ---
+        tags: [telecom, ]
+        ---
+        Content.
+        """
+        let (fm7, _) = FrontmatterParser.parse(unquotedTagsTrailingComma)
+        #expect(fm7?.tags == ["telecom"])
+        #expect(fm7?.properties.first(where: { $0.key == "tags" })?.tags == ["telecom"])
+        #expect(fm7?.properties.first(where: { $0.key == "tags" })?.value == "telecom")
+        
+        // 8. Smart/curly quoted tags in array with trailing comma: [“telecom”, “belgium”, ]
+        let smartQuotedTags = """
+        ---
+        tags: [“telecom”, ‘belgium’, ]
+        ---
+        Content.
+        """
+        let (fm8, _) = FrontmatterParser.parse(smartQuotedTags)
+        #expect(fm8?.tags == ["telecom", "belgium"])
+        #expect(fm8?.properties.first(where: { $0.key == "tags" })?.tags == ["telecom", "belgium"])
+        #expect(fm8?.properties.first(where: { $0.key == "tags" })?.value == "telecom, belgium")
     }
 
     @Test func testFrontmatterParserWithoutFrontmatter() {

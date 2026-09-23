@@ -18,6 +18,8 @@ graph TD
         ContentView["ContentView"]
         Sidebar["SidebarView"]
         Editor["EditorSplitView"]
+        GraphModal["BrainGraphModalView (3D Brain Graph)"]
+        Scene3D["Graph3DSceneView (SceneKit / Metal)"]
         Settings["SettingsView"]
         Highlighter["SyntaxHighlighter"]
         Mermaid["MermaidDiagramView"]
@@ -25,6 +27,7 @@ graph TD
 
     subgraph Service ["Core Service Layer"]
         VM["VaultManager (@MainActor, ObservableObject)"]
+        GraphService["NoteGraphService (Link & 3D Force Simulation)"]
         Monitor["VaultFileMonitor (FSEvents / DispatchSource)"]
         Template["NoteTemplateEngine"]
     end
@@ -45,6 +48,9 @@ graph TD
     App --> Settings
     ContentView --> Sidebar
     ContentView --> Editor
+    ContentView --> GraphModal
+    GraphModal --> Scene3D
+    GraphModal --> GraphService
     Editor --> Highlighter
     Editor --> Mermaid
     Settings --> Template
@@ -52,6 +58,7 @@ graph TD
     %% Service connections
     Sidebar -->|Observes & mutates| VM
     Editor -->|Observes & saves| VM
+    GraphService -->|Scans notes & reads| VM
     VM -->|Manages| Monitor
     VM -->|Resolves note creation| Template
     Monitor -->|Monitors path changes| FS

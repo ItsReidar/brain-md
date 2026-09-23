@@ -10,6 +10,7 @@ struct ContentView: View {
     @StateObject private var httpServer = MCPHTTPServer.shared
     @StateObject private var themeManager = ThemeManager.shared
     @State private var showingMCPModal = false
+    @State private var showingGraphModal = false
     @State private var newNoteTitle = ""
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
@@ -23,6 +24,9 @@ struct ContentView: View {
         .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showingMCPModal) {
             MCPServerModalView()
+        }
+        .sheet(isPresented: $showingGraphModal) {
+            BrainGraphModalView(vault: vault)
         }
         .alert("New Note", isPresented: $vault.showingNewNotePrompt) {
             TextField("Note title (e.g. Ideas.md)", text: $newNoteTitle)
@@ -55,6 +59,12 @@ struct ContentView: View {
                     }
                 }
                 .help("Open MCP Server Inspector & Agent Config")
+                
+                Button(action: { showingGraphModal = true }) {
+                    Image(systemName: "brain.head.profile")
+                }
+                .help("3D Brain Graph (⌥⌘G)")
+                .keyboardShortcut("g", modifiers: [.option, .command])
                 
                 Button(action: {
                     vault.promptNewNote()

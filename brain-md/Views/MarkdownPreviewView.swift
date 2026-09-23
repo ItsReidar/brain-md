@@ -4,6 +4,8 @@
 //
 
 import SwiftUI
+import WebKit
+import AppKit
 
 public enum AlertType: String, CaseIterable, Sendable {
     case note = "NOTE"
@@ -48,9 +50,11 @@ public enum AlertType: String, CaseIterable, Sendable {
 }
 
 public struct MarkdownPreviewView: View {
-    let markdown: String
-    var onTagSelected: ((String) -> Void)?
+    public let markdown: String
+    public var onTagSelected: ((String) -> Void)?
     
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var themeManager = ThemeManager.shared
     @AppStorage("preview_content_width") private var previewContentWidth: Double = 850.0
     
     public init(markdown: String, onTagSelected: ((String) -> Void)? = nil) {
@@ -114,6 +118,7 @@ public struct MarkdownPreviewView: View {
             .padding(28)
             .frame(maxWidth: previewContentWidth >= 2000 ? .infinity : CGFloat(max(300, previewContentWidth)), alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
+            .textSelection(.enabled)
         }
         .background(Color(NSColor.textBackgroundColor))
     }
@@ -572,40 +577,63 @@ public struct MarkdownPreviewView: View {
     
     @ViewBuilder
     private func renderTable(headers: [String], alignments: [TextAlignment], rows: [[String]]) -> some View {
+        let borderColor = Color.secondary.opacity(0.18)
+        let headerBorderColor = Color.secondary.opacity(0.24)
+        
         ScrollView(.horizontal, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 0) {
-                // Table Header
-                HStack(spacing: 0) {
-                    ForEach(headers.indices, id: \.self) { idx in
-                        let align = idx < alignments.count ? alignments[idx] : .leading
-                        Text(parseAttributedString(headers[idx]))
+            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                // Table Header Row
+                GridRow {
+                    ForEach(headers.indices, id: \.self) { cIdx in
+                        let align = cIdx < alignments.count ? alignments[cIdx] : .leading
+                        Text(parseAttributedString(headers[cIdx]))
                             .font(.system(size: 13, weight: .bold))
-                            .frame(minWidth: 100, alignment: frameAlignment(for: align))
-                            .padding(.horizontal, 12)
+                            .multilineTextAlignment(align)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 8)
+                            .frame(minWidth: 80, maxWidth: .infinity, maxHeight: .infinity, alignment: frameAlignment(for: align))
                             .background(Color(NSColor.controlBackgroundColor))
-                            .border(Color.secondary.opacity(0.15), width: 0.5)
+                            .overlay(alignment: .leading) {
+                                if cIdx > 0 {
+                                    Rectangle().fill(borderColor).frame(width: 0.5)
+                                }
+                            }
+                            .overlay(alignment: .bottom) {
+                                Rectangle().fill(headerBorderColor).frame(height: 1)
+                            }
                     }
                 }
                 
-                // Table Rows
+                // Table Data Rows
                 ForEach(rows.indices, id: \.self) { rIdx in
                     let row = rows[rIdx]
-                    HStack(spacing: 0) {
+                    let isLastRow = (rIdx == rows.count - 1)
+                    GridRow {
                         ForEach(headers.indices, id: \.self) { cIdx in
                             let align = cIdx < alignments.count ? alignments[cIdx] : .leading
                             let cellText = cIdx < row.count ? row[cIdx] : ""
                             Text(parseAttributedString(cellText))
                                 .font(.system(size: 13))
-                                .frame(minWidth: 100, alignment: frameAlignment(for: align))
-                                .padding(.horizontal, 12)
+                                .multilineTextAlignment(align)
+                                .padding(.horizontal, 14)
                                 .padding(.vertical, 7)
-                                .background(rIdx % 2 == 0 ? Color.clear : Color.primary.opacity(0.02))
-                                .border(Color.secondary.opacity(0.15), width: 0.5)
+                                .frame(minWidth: 80, maxWidth: .infinity, maxHeight: .infinity, alignment: frameAlignment(for: align))
+                                .background(rIdx % 2 == 1 ? Color.primary.opacity(0.02) : Color.clear)
+                                .overlay(alignment: .leading) {
+                                    if cIdx > 0 {
+                                        Rectangle().fill(borderColor).frame(width: 0.5)
+                                    }
+                                }
+                                .overlay(alignment: .bottom) {
+                                    if !isLastRow {
+                                        Rectangle().fill(borderColor).frame(height: 0.5)
+                                    }
+                                }
                         }
                     }
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
@@ -1022,4 +1050,932 @@ private struct FlowLayout: Layout {
         }
     }
 }
+
+// MARK: - Markdown HTML Renderer
+
+public enum MarkdownHTMLRenderer {
+    
+    public static func renderHTML(markdown: String, theme: TerminalTheme, contentWidth: Double) -> String {
+        let (frontmatter, bodyMarkdown) = FrontmatterParser.parse(markdown)
+        let doc = MarkdownPreviewView.parseDocument(frontmatter != nil ? bodyMarkdown : markdown)
+        
+        let css = generateCSS(theme: theme, contentWidth: contentWidth)
+        let frontmatterHTML = renderFrontmatterHTML(frontmatter)
+        let bodyHTML = renderBodyHTML(blocks: doc.blocks, footnotes: doc.footnotes)
+        
+        let mermaidScriptTag: String
+        if let scriptURL = MermaidScriptProvider.getScriptURL() {
+            mermaidScriptTag = "<script src=\"\(scriptURL.absoluteString)\"></script>"
+        } else {
+            mermaidScriptTag = "<script src=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js\"></script>"
+        }
+        
+        let mermaidTheme = theme.isDark ? "dark" : "default"
+        
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Markdown Preview</title>
+          <style id="theme-styles">
+          \(css)
+          </style>
+          \(mermaidScriptTag)
+        </head>
+        <body>
+          <div id="markdown-root">
+            \(frontmatterHTML)
+            \(bodyHTML)
+          </div>
+          <script>
+            // Code block copy button handler
+            function copyCode(button) {
+              const container = button.closest('.code-block-container');
+              if (!container) return;
+              const code = container.querySelector('code');
+              if (!code) return;
+              navigator.clipboard.writeText(code.innerText).then(() => {
+                const originalText = button.innerText;
+                button.innerText = 'Copied!';
+                button.classList.add('copied');
+                setTimeout(() => {
+                  button.innerText = originalText;
+                  button.classList.remove('copied');
+                }, 2000);
+              }).catch(() => {});
+            }
+
+            // Tag pill click bridge
+            function handleTagClick(tag) {
+              if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tagHandler) {
+                window.webkit.messageHandlers.tagHandler.postMessage(tag);
+              }
+            }
+
+            // Document live update without scroll jumping
+            window.updateDocument = function(newHTML) {
+              try {
+                const parser = new DOMParser();
+                const newDoc = parser.parseFromString(newHTML, 'text/html');
+                const newRoot = newDoc.getElementById('markdown-root');
+                const currentRoot = document.getElementById('markdown-root');
+                if (newRoot && currentRoot) {
+                  currentRoot.innerHTML = newRoot.innerHTML;
+                }
+                const newStyle = newDoc.getElementById('theme-styles');
+                const currentStyle = document.getElementById('theme-styles');
+                if (newStyle && currentStyle && currentStyle.innerHTML !== newStyle.innerHTML) {
+                  currentStyle.innerHTML = newStyle.innerHTML;
+                }
+                if (window.mermaid) {
+                  try {
+                    window.mermaid.run({ querySelector: '.mermaid' });
+                  } catch (e) {}
+                }
+              } catch (err) {}
+            };
+
+            // Initialize Mermaid diagrams
+            if (window.mermaid) {
+              try {
+                mermaid.initialize({
+                  startOnLoad: true,
+                  theme: '\(mermaidTheme)',
+                  securityLevel: 'loose'
+                });
+              } catch (e) {}
+            }
+          </script>
+        </body>
+        </html>
+        """
+    }
+    
+    // MARK: - Body HTML Generation
+    
+    public static func renderBodyHTML(blocks: [MarkdownPreviewView.MarkdownBlock], footnotes: [MarkdownPreviewView.FootnoteItem]) -> String {
+        var out = ""
+        for block in blocks {
+            switch block {
+            case .h1(let text):
+                out += "<h1 id=\"\(slugify(text))\">\(renderInline(text))</h1>\n"
+            case .h2(let text):
+                out += "<h2 id=\"\(slugify(text))\">\(renderInline(text))</h2>\n"
+            case .h3(let text):
+                out += "<h3 id=\"\(slugify(text))\">\(renderInline(text))</h3>\n"
+            case .h4(let text):
+                out += "<h4 id=\"\(slugify(text))\">\(renderInline(text))</h4>\n"
+            case .h5(let text):
+                out += "<h5 id=\"\(slugify(text))\">\(renderInline(text))</h5>\n"
+            case .h6(let text):
+                out += "<h6 id=\"\(slugify(text))\">\(renderInline(text))</h6>\n"
+            case .alert(let type, let text):
+                out += renderAlertHTML(type: type, text: text) + "\n"
+            case .codeBlock(let lang, let code):
+                out += renderCodeBlockHTML(lang: lang, code: code) + "\n"
+            case .mermaidDiagram(let code):
+                out += renderMermaidHTML(code: code) + "\n"
+            case .blockquote(let text):
+                out += "<blockquote><p>\(renderInline(text))</p></blockquote>\n"
+            case .taskItem(let done, let text):
+                let checkedAttr = done ? "checked" : ""
+                let doneClass = done ? "task-done" : ""
+                out += """
+                <div class="task-list-item">
+                  <input type="checkbox" class="task-checkbox" \(checkedAttr) disabled />
+                  <span class="\(doneClass)">\(renderInline(text))</span>
+                </div>\n
+                """
+            case .listItem(let ordered, let number, let text, let indent):
+                let bullet = ordered ? "\(number)." : "•"
+                let padding = indent * 16
+                out += """
+                <div class="list-item" style="padding-left: \(padding)px;">
+                  <span class="list-bullet">\(bullet)</span>
+                  <span class="list-content">\(renderInline(text))</span>
+                </div>\n
+                """
+            case .table(let headers, let alignments, let rows):
+                out += renderTableHTML(headers: headers, alignments: alignments, rows: rows) + "\n"
+            case .horizontalRule:
+                out += "<hr class=\"markdown-hr\" />\n"
+            case .paragraph(let text):
+                out += "<p>\(renderInline(text))</p>\n"
+            }
+        }
+        
+        if !footnotes.isEmpty {
+            out += "<div class=\"footnotes-section\">\n"
+            out += "<hr class=\"markdown-hr\" />\n"
+            out += "<h4 class=\"footnotes-title\">Footnotes</h4>\n"
+            out += "<ol class=\"footnotes-list\">\n"
+            for fn in footnotes {
+                out += "<li id=\"fn-\(escapeHTML(fn.id))\">"
+                out += "<span>\(renderInline(fn.text))</span> "
+                out += "<a href=\"#fnref-\(escapeHTML(fn.id))\" class=\"footnote-backref\" title=\"Jump back to reference\">↩</a>"
+                out += "</li>\n"
+            }
+            out += "</ol>\n</div>\n"
+        }
+        
+        return out
+    }
+    
+    // MARK: - Frontmatter Card HTML
+    
+    public static func renderFrontmatterHTML(_ frontmatter: ParsedFrontmatter?) -> String {
+        guard let fm = frontmatter, !fm.isEmpty else { return "" }
+        var out = "<details class=\"frontmatter-card\" open>\n"
+        out += "<summary class=\"frontmatter-header\">\n"
+        out += "<span class=\"frontmatter-title\">Properties</span>\n"
+        out += "<span class=\"frontmatter-badge\">\(fm.properties.count)</span>\n"
+        if !fm.tags.isEmpty {
+            out += "<span class=\"frontmatter-tags-count\"># \(fm.tags.count)</span>\n"
+        }
+        out += "</summary>\n"
+        out += "<div class=\"frontmatter-table\">\n"
+        for prop in fm.properties {
+            out += "<div class=\"frontmatter-row\">\n"
+            out += "<div class=\"frontmatter-key\">\(escapeHTML(prop.key))</div>\n"
+            out += "<div class=\"frontmatter-val\">\n"
+            if prop.isTags && !prop.tags.isEmpty {
+                for tag in prop.tags {
+                    out += "<a href=\"brainmd://tag/\(tag)\" class=\"tag-pill\" onclick=\"handleTagClick('\(tag)'); return false;\"><span class=\"tag-hash\">#</span>\(escapeHTML(tag))</a>\n"
+                }
+            } else if prop.value.hasPrefix("http://") || prop.value.hasPrefix("https://") {
+                out += "<a href=\"\(escapeHTML(prop.value))\" class=\"markdown-link\" target=\"_blank\">\(escapeHTML(prop.value))</a>\n"
+            } else {
+                let displayVal = FrontmatterParser.stripQuotes(prop.value)
+                out += "<span>\(escapeHTML(displayVal))</span>\n"
+            }
+            out += "</div>\n</div>\n"
+        }
+        out += "</div>\n</details>\n"
+        return out
+    }
+    
+    // MARK: - Component Renderers
+    
+    public static func renderTableHTML(headers: [String], alignments: [TextAlignment], rows: [[String]]) -> String {
+        var out = "<div class=\"table-container\"><table class=\"markdown-table\">\n"
+        if !headers.isEmpty {
+            out += "<thead>\n<tr>\n"
+            for (idx, h) in headers.enumerated() {
+                let align = idx < alignments.count ? alignments[idx] : .leading
+                let alignStr = align == .center ? "center" : (align == .trailing ? "right" : "left")
+                out += "<th style=\"text-align: \(alignStr);\">\(renderInline(h))</th>\n"
+            }
+            out += "</tr>\n</thead>\n"
+        }
+        if !rows.isEmpty {
+            out += "<tbody>\n"
+            for row in rows {
+                out += "<tr>\n"
+                for (idx, cell) in row.enumerated() {
+                    let align = idx < alignments.count ? alignments[idx] : .leading
+                    let alignStr = align == .center ? "center" : (align == .trailing ? "right" : "left")
+                    out += "<td style=\"text-align: \(alignStr);\">\(renderInline(cell))</td>\n"
+                }
+                out += "</tr>\n"
+            }
+            out += "</tbody>\n"
+        }
+        out += "</table></div>"
+        return out
+    }
+    
+    public static func renderCodeBlockHTML(lang: String, code: String) -> String {
+        let displayLang = lang.trimmingCharacters(in: .whitespaces).isEmpty ? "code" : lang
+        let escapedCode = escapeHTML(code)
+        return """
+        <div class="code-block-container">
+          <div class="code-block-header">
+            <span class="code-lang">\(escapeHTML(displayLang))</span>
+            <button class="copy-button" onclick="copyCode(this)" title="Copy to clipboard">Copy</button>
+          </div>
+          <pre><code class="language-\(escapeHTML(lang))">\(escapedCode)</code></pre>
+        </div>
+        """
+    }
+    
+    public static func renderMermaidHTML(code: String) -> String {
+        let escapedCode = escapeHTML(code)
+        return """
+        <div class="mermaid-container">
+          <div class="mermaid">\(escapedCode)</div>
+        </div>
+        """
+    }
+    
+    public static func renderAlertHTML(type: AlertType, text: String) -> String {
+        let iconSVG = alertIconSVG(for: type)
+        return """
+        <div class="markdown-alert markdown-alert-\(type.rawValue.lowercased())">
+          <div class="markdown-alert-title">
+            <span class="markdown-alert-icon">\(iconSVG)</span>
+            <span>\(type.title)</span>
+          </div>
+          <div class="markdown-alert-content">\(renderInline(text))</div>
+        </div>
+        """
+    }
+    
+    private static func alertIconSVG(for type: AlertType) -> String {
+        switch type {
+        case .note:
+            return "<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path d=\"M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z\"/></svg>"
+        case .tip:
+            return "<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path d=\"M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.21c-.04-.282-.18-.57-.393-.878a16.27 16.27 0 0 0-.582-.733l-.216-.255C3.171 7.734 2.5 6.822 2.5 5.25 2.5 2.31 4.887 0 8 0s5.5 2.31 5.5 5.25c0 1.572-.671 2.484-1.317 3.254l-.216.255c-.177.209-.367.434-.582.733-.213.308-.353.596-.393.878a.75.75 0 0 1-1.484-.21c.084-.594.337-1.079.621-1.49.203-.292.45-.584.673-.848l.214-.253c.56-.679.984-1.32.984-2.304 0-2.06-1.637-3.75-4-3.75ZM6 12a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-1Z\"/></svg>"
+        case .important:
+            return "<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path d=\"M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM7.25 4.75v4.5a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-1.5 0ZM8 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z\"/></svg>"
+        case .warning:
+            return "<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path d=\"M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z\"/></svg>"
+        case .caution:
+            return "<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"currentColor\"><path d=\"M4.47.04c.37-.04.74.08 1.03.32L15.64 10.5c.34.29.54.71.54 1.16v2.59c0 .97-.78 1.75-1.75 1.75H1.57C.6 16 0 15.22 0 14.25v-2.59c0-.45.2-.87.54-1.16L10.68.36c.29-.24.66-.36 1.03-.32ZM8 4.75a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 8 4.75ZM8 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z\"/></svg>"
+        }
+    }
+    
+    // MARK: - Inline Markdown Formatting
+    
+    public static func renderInline(_ text: String) -> String {
+        var str = text
+        str = str.replacingOccurrences(of: "<del>", with: "~~")
+        str = str.replacingOccurrences(of: "</del>", with: "~~")
+        str = str.replacingOccurrences(of: "<s>", with: "~~")
+        str = str.replacingOccurrences(of: "</s>", with: "~~")
+        
+        var placeholders: [String: String] = [:]
+        var pCounter = 0
+        
+        // Step 1: Code spans `code`
+        if let codeSpanRegex = try? NSRegularExpression(pattern: "`([^`]+)`") {
+            let matches = codeSpanRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let codeR = Range(match.range(at: 1), in: str) {
+                    let codeText = String(str[codeR])
+                    let key = "@@CODE_SPAN_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<code>\(escapeHTML(codeText))</code>"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 2: Images ![alt](url)
+        if let imgRegex = try? NSRegularExpression(pattern: "!\\[([^\\]]*)\\]\\(([^\\)]+)\\)") {
+            let matches = imgRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let altR = Range(match.range(at: 1), in: str),
+                   let urlR = Range(match.range(at: 2), in: str) {
+                    let alt = String(str[altR])
+                    let url = String(str[urlR]).trimmingCharacters(in: .whitespaces)
+                    let key = "@@IMG_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<img src=\"\(escapeHTML(url))\" alt=\"\(escapeHTML(alt))\" style=\"max-width: 100%; height: auto; border-radius: 4px;\" />"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 3: Links [text](url)
+        if let linkRegex = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^\\)]+)\\)") {
+            let matches = linkRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let textR = Range(match.range(at: 1), in: str),
+                   let urlR = Range(match.range(at: 2), in: str) {
+                    let linkText = String(str[textR])
+                    let url = String(str[urlR]).trimmingCharacters(in: .whitespaces)
+                    let key = "@@LINK_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<a href=\"\(escapeHTML(url))\" class=\"markdown-link\">\(escapeHTML(linkText))</a>"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 4: Footnote references [^id]
+        if let fnRefRegex = try? NSRegularExpression(pattern: "\\[\\^([^\\]]+)\\]") {
+            let matches = fnRefRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let idR = Range(match.range(at: 1), in: str) {
+                    let fnId = String(str[idR])
+                    let key = "@@FNREF_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<sup id=\"fnref-\(escapeHTML(fnId))\"><a href=\"#fn-\(escapeHTML(fnId))\" class=\"footnote-ref\">[\(escapeHTML(fnId))]</a></sup>"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 5: HTML escape remaining text
+        str = escapeHTML(str)
+        
+        // Step 6: Hex color badges e.g. #0969da
+        if let hexRegex = try? NSRegularExpression(pattern: "(?<=^|[\\s\\(\\)\\[\\]\\{\\},;:])#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\\b") {
+            let matches = hexRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let hexR = Range(match.range(at: 1), in: str) {
+                    let hexDigits = String(str[hexR])
+                    let key = "@@HEX_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<span class=\"hex-badge\"><span class=\"hex-swatch\" style=\"background-color: #\(hexDigits);\"></span>#\(hexDigits)</span>"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 7: Hashtags #tag
+        if let tagRegex = try? NSRegularExpression(pattern: "(?<=^|[\\s\\(\\)\\[\\]])#([a-zA-Z][a-zA-Z0-9_\\-]*)\\b") {
+            let matches = tagRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let tagR = Range(match.range(at: 1), in: str) {
+                    let tagName = String(str[tagR])
+                    let key = "@@TAG_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<a href=\"brainmd://tag/\(tagName)\" class=\"tag-pill\" onclick=\"handleTagClick('\(tagName)'); return false;\"><span class=\"tag-hash\">#</span>\(tagName)</a>"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 8: Bold, Italic, Strikethrough
+        if let boldRegex1 = try? NSRegularExpression(pattern: "\\*\\*([^*]+)\\*\\*") {
+            str = boldRegex1.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<strong>$1</strong>")
+        }
+        if let boldRegex2 = try? NSRegularExpression(pattern: "__([^_]+)__") {
+            str = boldRegex2.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<strong>$1</strong>")
+        }
+        if let italicRegex1 = try? NSRegularExpression(pattern: "\\*([^*]+)\\*") {
+            str = italicRegex1.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<em>$1</em>")
+        }
+        if let italicRegex2 = try? NSRegularExpression(pattern: "(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])") {
+            str = italicRegex2.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<em>$1</em>")
+        }
+        if let strikeRegex = try? NSRegularExpression(pattern: "~~([^~]+)~~") {
+            str = strikeRegex.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<del>$1</del>")
+        }
+        
+        // Step 9: Restore placeholders
+        for (key, val) in placeholders {
+            str = str.replacingOccurrences(of: key, with: val)
+        }
+        
+        return str
+    }
+    
+    // MARK: - CSS Styling
+    
+    public static func generateCSS(theme: TerminalTheme, contentWidth: Double) -> String {
+        let isDark = theme.isDark
+        let borderColor = isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.12)"
+        let codeBg = isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.04)"
+        let headerCodeBg = isDark ? "rgba(255, 255, 255, 0.09)" : "rgba(0, 0, 0, 0.06)"
+        let tableHeaderBg = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"
+        let tableStripeBg = isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)"
+        
+        return """
+        :root {
+          --bg-color: \(theme.backgroundHex);
+          --text-color: \(theme.foregroundHex);
+          --selection-bg: \(theme.selectionBackgroundHex);
+          --accent-color: \(theme.cursorColorHex);
+          --content-max-width: \(contentWidth)px;
+          --border-color: \(borderColor);
+          --code-bg: \(codeBg);
+          --header-code-bg: \(headerCodeBg);
+          --table-header-bg: \(tableHeaderBg);
+          --table-stripe-bg: \(tableStripeBg);
+        }
+
+        * {
+          box-sizing: border-box;
+          -webkit-user-select: text;
+          user-select: text;
+        }
+
+        html, body {
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          font-size: 14px;
+          line-height: 1.6;
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          min-height: 100%;
+          overflow-x: hidden;
+          overflow-y: auto;
+          -webkit-font-smoothing: antialiased;
+        }
+
+        ::selection {
+          background-color: var(--selection-bg);
+          color: inherit;
+        }
+
+        #markdown-root {
+          max-width: var(--content-max-width);
+          margin: 0 auto;
+          padding: 24px 32px 64px 32px;
+        }
+
+        /* Headings */
+        h1, h2, h3, h4, h5, h6 {
+          font-weight: 600;
+          line-height: 1.25;
+          margin-top: 24px;
+          margin-bottom: 12px;
+          color: var(--text-color);
+        }
+        h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
+        h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
+        h3 { font-size: 1.25em; }
+        h4 { font-size: 1em; }
+        h5 { font-size: 0.875em; opacity: 0.85; }
+        h6 { font-size: 0.85em; opacity: 0.7; }
+
+        p {
+          margin-top: 0;
+          margin-bottom: 14px;
+        }
+
+        a {
+          color: var(--accent-color);
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        a:hover {
+          opacity: 0.85;
+        }
+
+        /* Code & Code Blocks */
+        code {
+          font-family: "SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace;
+          font-size: 0.9em;
+          background-color: var(--code-bg);
+          padding: 0.2em 0.4em;
+          border-radius: 4px;
+          border: 1px solid var(--border-color);
+        }
+
+        pre code {
+          background-color: transparent;
+          padding: 0;
+          border: none;
+          font-size: 12.5px;
+          line-height: 1.5;
+        }
+
+        .code-block-container {
+          margin: 16px 0;
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          overflow: hidden;
+          background-color: var(--code-bg);
+        }
+
+        .code-block-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 6px 12px;
+          background-color: var(--header-code-bg);
+          border-bottom: 1px solid var(--border-color);
+          font-family: "SF Mono", Menlo, monospace;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          color: var(--text-color);
+          opacity: 0.8;
+          -webkit-user-select: none;
+          user-select: none;
+        }
+
+        .copy-button {
+          background: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color);
+          border-radius: 4px;
+          padding: 2px 8px;
+          font-size: 11px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          -webkit-user-select: none;
+          user-select: none;
+        }
+        .copy-button:hover {
+          background: var(--border-color);
+        }
+        .copy-button.copied {
+          color: #1a7f37;
+          border-color: #1a7f37;
+        }
+
+        pre {
+          margin: 0;
+          padding: 14px;
+          overflow-x: auto;
+        }
+
+        /* Tables */
+        .table-container {
+          width: 100%;
+          overflow-x: auto;
+          margin: 16px 0;
+        }
+        table.markdown-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13.5px;
+        }
+        table.markdown-table th, table.markdown-table td {
+          border: 1px solid var(--border-color);
+          padding: 8px 12px;
+        }
+        table.markdown-table th {
+          background-color: var(--table-header-bg);
+          font-weight: 600;
+        }
+        table.markdown-table tr:nth-child(even) {
+          background-color: var(--table-stripe-bg);
+        }
+
+        /* Blockquotes */
+        blockquote {
+          margin: 16px 0;
+          padding: 0 16px;
+          color: var(--text-color);
+          opacity: 0.85;
+          border-left: 4px solid var(--border-color);
+        }
+
+        /* GFM Alerts */
+        .markdown-alert {
+          padding: 10px 14px;
+          margin: 16px 0;
+          border-left: 4px solid;
+          border-radius: 0 6px 6px 0;
+        }
+        .markdown-alert-note { border-left-color: #0969da; background-color: rgba(9, 105, 218, 0.08); }
+        .markdown-alert-note .markdown-alert-title { color: #0969da; }
+        .markdown-alert-tip { border-left-color: #1a7f37; background-color: rgba(26, 127, 55, 0.08); }
+        .markdown-alert-tip .markdown-alert-title { color: #1a7f37; }
+        .markdown-alert-important { border-left-color: #8250df; background-color: rgba(130, 80, 223, 0.08); }
+        .markdown-alert-important .markdown-alert-title { color: #8250df; }
+        .markdown-alert-warning { border-left-color: #9a6700; background-color: rgba(154, 103, 0, 0.08); }
+        .markdown-alert-warning .markdown-alert-title { color: #9a6700; }
+        .markdown-alert-caution { border-left-color: #cf222e; background-color: rgba(207, 34, 46, 0.08); }
+        .markdown-alert-caution .markdown-alert-title { color: #cf222e; }
+
+        .markdown-alert-title {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 600;
+          font-size: 13px;
+          margin-bottom: 4px;
+        }
+        .markdown-alert-icon svg {
+          width: 14px;
+          height: 14px;
+          display: block;
+        }
+        .markdown-alert-content {
+          font-size: 13.5px;
+        }
+
+        /* Task list items */
+        .task-list-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          margin: 4px 0;
+        }
+        .task-checkbox {
+          margin-top: 3px;
+        }
+        .task-done {
+          text-decoration: line-through;
+          opacity: 0.65;
+        }
+
+        /* List Items */
+        .list-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          margin: 3px 0;
+        }
+        .list-bullet {
+          font-weight: 600;
+          min-width: 16px;
+          text-align: right;
+          opacity: 0.75;
+        }
+
+        /* Horizontal Rule */
+        hr.markdown-hr {
+          border: none;
+          height: 1px;
+          background-color: var(--border-color);
+          margin: 24px 0;
+        }
+
+        /* Frontmatter */
+        .frontmatter-card {
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          margin-bottom: 24px;
+          background-color: var(--code-bg);
+          overflow: hidden;
+        }
+        .frontmatter-header {
+          padding: 8px 14px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          font-weight: 600;
+          background-color: var(--header-code-bg);
+          -webkit-user-select: none;
+          user-select: none;
+        }
+        .frontmatter-badge {
+          font-size: 10px;
+          background: var(--border-color);
+          padding: 1px 6px;
+          border-radius: 10px;
+        }
+        .frontmatter-tags-count {
+          font-size: 11px;
+          color: var(--accent-color);
+          font-weight: 600;
+        }
+        .frontmatter-table {
+          padding: 10px 14px;
+          font-size: 12px;
+        }
+        .frontmatter-row {
+          display: flex;
+          align-items: baseline;
+          padding: 4px 0;
+        }
+        .frontmatter-key {
+          width: 120px;
+          flex-shrink: 0;
+          font-family: "SF Mono", Menlo, monospace;
+          opacity: 0.75;
+        }
+
+        /* Tags & Hex badges */
+        .tag-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          background: rgba(128, 128, 128, 0.15);
+          border: 1px solid var(--border-color);
+          color: var(--text-color);
+          text-decoration: none;
+          padding: 1px 7px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 500;
+          margin: 0 2px;
+          cursor: pointer;
+        }
+        .tag-pill:hover {
+          border-color: var(--accent-color);
+        }
+        .tag-hash {
+          color: var(--accent-color);
+          font-weight: 700;
+        }
+
+        .hex-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: var(--code-bg);
+          border: 1px solid var(--border-color);
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-family: "SF Mono", Menlo, monospace;
+          font-size: 11.5px;
+        }
+        .hex-swatch {
+          width: 10px;
+          height: 10px;
+          border-radius: 2px;
+          border: 1px solid rgba(128, 128, 128, 0.4);
+          display: inline-block;
+        }
+
+        /* Footnotes */
+        .footnotes-section {
+          margin-top: 32px;
+          font-size: 12.5px;
+          opacity: 0.85;
+        }
+        .footnotes-title {
+          font-size: 13px;
+          margin-bottom: 8px;
+        }
+        .footnotes-list {
+          padding-left: 20px;
+        }
+        .footnote-backref {
+          text-decoration: none;
+          margin-left: 4px;
+        }
+
+        /* Mermaid */
+        .mermaid-container {
+          display: flex;
+          justify-content: center;
+          margin: 16px 0;
+          overflow-x: auto;
+        }
+        .mermaid {
+          text-align: center;
+        }
+        """
+    }
+    
+    // MARK: - Utilities
+    
+    public static func escapeHTML(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+    
+    private static func slugify(_ text: String) -> String {
+        let clean = text.lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_")).inverted)
+            .joined()
+        return clean.isEmpty ? "heading" : clean
+    }
+}
+
+// MARK: - Markdown Web View
+
+public struct MarkdownWebView: NSViewRepresentable {
+    public let html: String
+    public var onTagSelected: ((String) -> Void)?
+    
+    public init(html: String, onTagSelected: ((String) -> Void)? = nil) {
+        self.html = html
+        self.onTagSelected = onTagSelected
+    }
+    
+    public func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    public func makeNSView(context: Context) -> WKWebView {
+        let contentController = WKUserContentController()
+        contentController.add(context.coordinator, name: "tagHandler")
+        
+        let config = WKWebViewConfiguration()
+        config.userContentController = contentController
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+        
+        let baseURL = MermaidScriptProvider.getScriptURL()?.deletingLastPathComponent() ?? Bundle.main.resourceURL
+        webView.loadHTMLString(html, baseURL: baseURL)
+        context.coordinator.lastHTML = html
+        
+        return webView
+    }
+    
+    public func updateNSView(_ nsView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        
+        guard context.coordinator.lastHTML != html else { return }
+        context.coordinator.lastHTML = html
+        
+        if context.coordinator.isPageLoaded {
+            if let data = try? JSONSerialization.data(withJSONObject: [html]),
+               let jsonString = String(data: data, encoding: .utf8) {
+                let js = "if (window.updateDocument) { window.updateDocument(\(jsonString)[0]); }"
+                nsView.evaluateJavaScript(js) { [weak nsView] _, error in
+                    if error != nil {
+                        let baseURL = MermaidScriptProvider.getScriptURL()?.deletingLastPathComponent() ?? Bundle.main.resourceURL
+                        nsView?.loadHTMLString(self.html, baseURL: baseURL)
+                    }
+                }
+            } else {
+                let baseURL = MermaidScriptProvider.getScriptURL()?.deletingLastPathComponent() ?? Bundle.main.resourceURL
+                nsView.loadHTMLString(html, baseURL: baseURL)
+            }
+        } else {
+            let baseURL = MermaidScriptProvider.getScriptURL()?.deletingLastPathComponent() ?? Bundle.main.resourceURL
+            nsView.loadHTMLString(html, baseURL: baseURL)
+        }
+    }
+    
+    public static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
+        nsView.configuration.userContentController.removeScriptMessageHandler(forName: "tagHandler")
+        nsView.navigationDelegate = nil
+        nsView.stopLoading()
+    }
+    
+    @MainActor
+    public final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        var parent: MarkdownWebView
+        var lastHTML: String?
+        var isPageLoaded = false
+        
+        init(_ parent: MarkdownWebView) {
+            self.parent = parent
+        }
+        
+        public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            isPageLoaded = true
+        }
+        
+        public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if let url = navigationAction.request.url {
+                if url.scheme == "brainmd" {
+                    if url.host == "tag" {
+                        let tag = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                        parent.onTagSelected?(tag)
+                    }
+                    decisionHandler(.cancel)
+                    return
+                } else if url.scheme == "http" || url.scheme == "https" {
+                    NSWorkspace.shared.open(url)
+                    decisionHandler(.cancel)
+                    return
+                } else if url.scheme == "file" || url.scheme == "about" {
+                    decisionHandler(.allow)
+                    return
+                }
+            }
+            decisionHandler(.allow)
+        }
+        
+        public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "tagHandler", let tag = message.body as? String {
+                parent.onTagSelected?(tag)
+            }
+        }
+    }
+}
+
 

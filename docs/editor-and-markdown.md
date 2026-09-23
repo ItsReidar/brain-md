@@ -20,6 +20,7 @@ stateDiagram-v2
 ```
 
 ### View Modes
+
 - **Split Mode (`⌘1`)**: Dual-pane view with real-time synchronized editor on the left and rich live preview on the right.
 - **Editor-Only (`⌘2`)**: Full-width focused writing environment optimized for typing and distraction-free editing.
 - **Preview-Only (`⌘3`)**: Full-width presentation and reading mode, ideal for reviewing formatted documents and diagrams.
@@ -43,6 +44,7 @@ flowchart LR
 ```
 
 ### Supported Syntactic Elements
+
 - **Headers**: Scaled dynamic type font weights for `#` through `######`.
 - **Code Fences**: Monospaced font styling with subtle tinted background bands.
 - **Inline Code**: Inline monospaced chips (`code`).
@@ -57,6 +59,7 @@ flowchart LR
 `brain-md` fully supports standard GFM extensions:
 
 ### 1. Callout Alerts
+
 Alert blocks render with distinctive native icons, colored borders, and tinted backgrounds:
 
 ```markdown
@@ -77,7 +80,9 @@ Alert blocks render with distinctive native icons, colored borders, and tinted b
 ```
 
 ### 2. Task Lists
+
 Interactive task list items:
+
 ```markdown
 - [x] Implement MCP JSON-RPC protocol
 - [x] Add offline Mermaid diagram rendering
@@ -85,6 +90,7 @@ Interactive task list items:
 ```
 
 ### 3. Tables with Alignment
+
 ```markdown
 | Feature | Supported | Latency |
 | :--- | :---: | ---: |
@@ -116,6 +122,7 @@ sequenceDiagram
 ```
 
 ### Key Technical Details
+
 1. **Local Bundling**: Uses `mermaid.min.js` stored inside `brain-md/Resources/`. No internet connection or external CDN required.
 2. **Theme Synchronization**: The diagram automatically detects whether the user is in Dark or Light mode (or System preference) and dynamically applies matching Mermaid themes (`dark` or `default`).
 3. **Interactive Controls**: Users can zoom, pan, and reset the diagram view using the built-in toolbar controls in `MermaidDiagramView`.
@@ -128,3 +135,24 @@ sequenceDiagram
    - Gantt Charts (`gantt`)
    - Git Graphs (`gitGraph`)
    - Pie Charts (`pie`)
+
+---
+
+## Frontmatter & Metadata Card
+
+Notes support YAML frontmatter blocks bounded by `---` delimiters at the beginning of the file.
+
+```yaml
+---
+title: "Telenet Strategy"
+date: 2026-09-23 | 16:24
+description: "Overview of enterprise fiber rollout"
+tags: ["telecom", "belgium", ]
+---
+```
+
+### Robust Tag Formatting & Quote Stripping
+
+- **Flexible Syntax**: Tags can be specified as inline arrays (`[telecom, belgium]`), quoted arrays (`["telecom", "belgium", ]`), smart/curly quotes (`[“telecom”, ‘belgium’, ]`), multiline lists (`- telecom`), or comma-separated scalars (`"telecom", "belgium"`).
+- **Trailing Comma Tolerance**: Trailing commas such as `tags: [telecom, ]` or `tags: ["telecom", ]` are gracefully handled without creating phantom blank tags or formatting issues.
+- **Automatic Quote Stripping**: Surrounding double quotes (`"`), single quotes (`'`), smart/curly quotes (`“”‘’`), and backticks (`` ` ``) are automatically stripped from tags, title, description, and other scalar metadata fields when rendered into UI pills, badges, and preview cards.

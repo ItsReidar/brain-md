@@ -182,9 +182,11 @@ public enum FrontmatterParser {
                     currentKey = cleanKey
                     currentListItems = []
                 } else if valCandidate.hasPrefix("[") && valCandidate.hasSuffix("]") {
-                    // Inline array: e.g. [swift, macos, mcp]
+                    // Inline array: e.g. [swift, macos, mcp] or ["telecom", ]
                     let inner = String(valCandidate.dropFirst().dropLast())
-                    let rawItems = inner.split(separator: ",").map { stripQuotes(String($0).trimmingCharacters(in: .whitespaces)) }
+                    let rawItems = inner.split(separator: ",")
+                        .map { stripQuotes(String($0).trimmingCharacters(in: .whitespacesAndNewlines)) }
+                        .filter { !$0.isEmpty }
                     let isTagKey = isTagPropertyKey(cleanKey)
                     
                     var itemTags: [String] = []
@@ -201,9 +203,13 @@ public enum FrontmatterParser {
                         }
                     }
                     
+                    let finalVal = isTagKey && !itemTags.isEmpty
+                        ? itemTags.joined(separator: ", ")
+                        : rawItems.joined(separator: ", ")
+                    
                     properties.append(FrontmatterProperty(
                         key: cleanKey,
-                        value: rawItems.joined(separator: ", "),
+                        value: finalVal,
                         isTags: isTagKey,
                         tags: itemTags
                     ))
@@ -215,7 +221,9 @@ public enum FrontmatterParser {
                     var itemTags: [String] = []
                     if isTagKey {
                         // Could be comma-separated list like "swift, macos, mcp" or single tag
-                        let parts = cleanVal.contains(",") ? cleanVal.split(separator: ",").map(String.init) : [cleanVal]
+                        let parts = valCandidate.contains(",")
+                            ? valCandidate.split(separator: ",").map(String.init)
+                            : [valCandidate]
                         for part in parts {
                             let cleaned = cleanTag(part)
                             if !cleaned.isEmpty {
@@ -228,9 +236,13 @@ public enum FrontmatterParser {
                         }
                     }
                     
+                    let finalVal = isTagKey && !itemTags.isEmpty
+                        ? itemTags.joined(separator: ", ")
+                        : cleanVal
+                    
                     properties.append(FrontmatterProperty(
                         key: cleanKey,
-                        value: cleanVal,
+                        value: finalVal,
                         isTags: isTagKey,
                         tags: itemTags
                     ))
@@ -254,6 +266,9 @@ public enum FrontmatterParser {
         while t.hasPrefix("#") {
             t = String(t.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        t = stripQuotes(t)
+        let quoteChars = CharacterSet(charactersIn: "\"'“”‘’`")
+        t = t.trimmingCharacters(in: quoteChars).trimmingCharacters(in: .whitespacesAndNewlines)
         return t
     }
     
@@ -272,7 +287,8 @@ public enum FrontmatterParser {
                             (res.hasPrefix("‘") && res.hasSuffix("’")) ||
                             (res.hasPrefix("’") && res.hasSuffix("’")) ||
                             (res.hasPrefix("‘") && res.hasSuffix("'")) ||
-                            (res.hasPrefix("'") && res.hasSuffix("’"))
+                            (res.hasPrefix("'") && res.hasSuffix("’")) ||
+                            (res.hasPrefix("`") && res.hasSuffix("`"))
             
             if hasDouble || hasSingle {
                 res = String(res.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -281,7 +297,8 @@ public enum FrontmatterParser {
         }
         
         // Handle empty or stray quote strings
-        if res == "\"\"" || res == "''" || res == "“”" || res == "‘’" || res == "\"" || res == "'" || res == "“" || res == "”" || res == "‘" || res == "’" {
+        let quoteChars = CharacterSet(charactersIn: "\"'“”‘’`")
+        if res.unicodeScalars.allSatisfy({ quoteChars.contains($0) }) {
             return ""
         }
         
