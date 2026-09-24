@@ -468,6 +468,174 @@ public struct SyntaxHighlighter: Sendable {
         return attributed
     }
     
+    // MARK: - HTML Syntax Highlighting
+    
+    private struct HTMLToken {
+        let range: NSRange
+        let cssClass: String
+    }
+    
+    private static let htmlHighlightCache: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 500
+        return cache
+    }()
+    
+    /// Highlights source code into HTML with CSS token spans for web rendering
+    public static func highlightToHTML(code: String, language: SyntaxLanguage) -> String {
+        guard language != .plain, !code.isEmpty else {
+            return escapeHTML(code)
+        }
+        
+        let cacheKey = "\(code.hashValue)_\(language.rawValue)" as NSString
+        if let cached = htmlHighlightCache.object(forKey: cacheKey) {
+            return cached as String
+        }
+        
+        let nsCode = code as NSString
+        let fullRange = NSRange(location: 0, length: nsCode.length)
+        
+        var tokens: [HTMLToken] = []
+        var occupied = [Bool](repeating: false, count: nsCode.length)
+        
+        func addToken(range: NSRange, cssClass: String) {
+            guard range.location != NSNotFound, range.length > 0 else { return }
+            let end = range.location + range.length
+            guard end <= nsCode.length else { return }
+            for i in range.location..<end {
+                if occupied[i] { return }
+            }
+            for i in range.location..<end {
+                occupied[i] = true
+            }
+            tokens.append(HTMLToken(range: range, cssClass: cssClass))
+        }
+        
+        // 1. Comments (highest precedence)
+        let commentRegexes: [NSRegularExpression]
+        switch language {
+        case .swift, .javascript, .typescript, .css:
+            commentRegexes = [slashSlashCommentRegex, slashStarCommentRegex]
+        case .python, .bash, .yaml:
+            commentRegexes = [hashCommentRegex]
+        case .sql:
+            commentRegexes = [sqlDashCommentRegex, slashStarCommentRegex]
+        case .html:
+            commentRegexes = [htmlCommentRegex]
+        case .mermaid:
+            commentRegexes = [mermaidCommentRegex]
+        default:
+            commentRegexes = [slashSlashCommentRegex, hashCommentRegex]
+        }
+        for commentRegex in commentRegexes {
+            let matches = commentRegex.matches(in: code, range: fullRange)
+            for m in matches {
+                addToken(range: m.range, cssClass: "tok-comment")
+            }
+        }
+        
+        // 2. JSON Keys (higher precedence than generic strings so keys are highlighted distinctly)
+        if language == .json {
+            let jsonMatches = jsonKeyRegex.matches(in: code, range: fullRange)
+            for m in jsonMatches {
+                let keyRange = NSRange(location: m.range.location, length: m.range(at: 1).length + 2)
+                addToken(range: keyRange, cssClass: "tok-key")
+            }
+        }
+        
+        // 3. Strings
+        let strMatches = strRegex.matches(in: code, range: fullRange)
+        for m in strMatches {
+            addToken(range: m.range, cssClass: "tok-str")
+        }
+        
+        // 4. Attributes / Decorators
+        if language == .swift || language == .python || language == .typescript {
+            let attrMatches = attrRegex.matches(in: code, range: fullRange)
+            for m in attrMatches {
+                addToken(range: m.range, cssClass: "tok-attr")
+            }
+        }
+        
+        // 5. HTML Tags & Attributes
+        if language == .html {
+            let tagMatches = htmlTagRegex.matches(in: code, range: fullRange)
+            for m in tagMatches {
+                addToken(range: m.range, cssClass: "tok-tag")
+            }
+            let attrMatches = htmlAttrRegex.matches(in: code, range: fullRange)
+            for m in attrMatches {
+                addToken(range: m.range(at: 1), cssClass: "tok-attr")
+            }
+        }
+        
+        // 6. Function Calls
+        if language == .swift || language == .python || language == .javascript || language == .typescript {
+            let matches = funcRegex.matches(in: code, range: fullRange)
+            for m in matches {
+                let fnRange = m.range(at: 1)
+                let name = nsCode.substring(with: fnRange)
+                if !isKeyword(name.lowercased(), in: language), name.first?.isUppercase != true {
+                    addToken(range: fnRange, cssClass: "tok-fn")
+                }
+            }
+        }
+        
+        // 7. Numbers
+        let numMatches = numRegex.matches(in: code, range: fullRange)
+        for m in numMatches {
+            addToken(range: m.range, cssClass: "tok-num")
+        }
+        
+        // 8. Identifiers, Keywords, Types, Booleans
+        let wordMatches = wordRegex.matches(in: code, range: fullRange)
+        for m in wordMatches {
+            let word = nsCode.substring(with: m.range)
+            let lowerWord = word.lowercased()
+            if isKeyword(lowerWord, in: language) {
+                addToken(range: m.range, cssClass: "tok-kw")
+            } else if booleansAndLiterals.contains(lowerWord) {
+                addToken(range: m.range, cssClass: "tok-bool")
+            } else if word.first?.isUppercase == true && language != .bash && language != .sql && language != .mermaid {
+                addToken(range: m.range, cssClass: "tok-type")
+            }
+        }
+        
+        tokens.sort { $0.range.location < $1.range.location }
+        
+        var result = ""
+        result.reserveCapacity(code.utf8.count + tokens.count * 30)
+        var currentIndex = 0
+        
+        for token in tokens {
+            if token.range.location > currentIndex {
+                let unformattedRange = NSRange(location: currentIndex, length: token.range.location - currentIndex)
+                let unformattedText = nsCode.substring(with: unformattedRange)
+                result += escapeHTML(unformattedText)
+            }
+            let tokenText = nsCode.substring(with: token.range)
+            result += "<span class=\"\(token.cssClass)\">\(escapeHTML(tokenText))</span>"
+            currentIndex = token.range.location + token.range.length
+        }
+        
+        if currentIndex < nsCode.length {
+            let remainingRange = NSRange(location: currentIndex, length: nsCode.length - currentIndex)
+            let remainingText = nsCode.substring(with: remainingRange)
+            result += escapeHTML(remainingText)
+        }
+        
+        htmlHighlightCache.setObject(result as NSString, forKey: cacheKey)
+        return result
+    }
+    
+    public static func escapeHTML(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+    
     private static func isKeyword(_ word: String, in language: SyntaxLanguage) -> Bool {
         switch language {
         case .swift:

@@ -60,7 +60,8 @@ Built entirely in **native Apple SceneKit (Metal-accelerated)**, the visualizer 
 4. **Fluid Organic Floating & Elastic Spin Dynamics**:
    - **Organic Harmonic Breathing**: Nodes gently float and undulate in 3D space with harmonic multi-axis sinusoidal waves and golden-ratio phase dispersion ($\phi_i = i \times 1.618$). Folder hubs anchor with subtle breathing ($A \approx 0.05$), while note dots drift gracefully ($A \approx 0.15$), making the graph feel alive like a neural suspension.
    - **Rotational Elastic Fluidity**: When dragging to spin the 3D ball or during inertia momentum, nodes react with realistic fluid inertia, flexing backwards against the spin velocity ($\vec{\delta}_{\text{lag}} = -\vec{\omega} \cdot k_{\text{flex}}$). When rotation stops, nodes gently spring-rebound back to their rest positions with smooth damped oscillation.
-   - **Dynamic Synaptic Flexing**: Connection lines dynamically stretch and track their moving node endpoints in real time (< 0.12 ms/frame), keeping the network seamlessly connected.
+   - **Dynamic 3D Synaptic Cylinders & Thickness**: Rather than 1-pixel hairlines (which are faint on high-DPI Retina screens), connections render as true 3D `SCNCylinder` geometries with calibrated thickness (Direct links: radius 0.048, Folder hubs: radius 0.040, Tag clusters: radius 0.035). Edges feature vibrant theme colors, subtle emission glow (0.35 alpha), and constant lighting so they never dim or get lost in shadows during rotation.
+   - **Zero-Allocation 120 FPS Tracking**: As nodes float and rotate, connection endpoints are dynamically positioned, oriented via SIMD quaternions, and scaled along their local Y-axis in real time with zero heap geometry reallocations.
 
 5. **Interactive Inspection Pop-up**:
    - Clicking any note or folder node triggers SceneKit raycast hit-testing.

@@ -198,6 +198,43 @@ struct brain_mdTests {
         #expect(SyntaxTheme.monokai.name == "Monokai")
     }
     
+    @Test func testSyntaxHighlighterHTML() {
+        let swiftCode = """
+        // Example Swift
+        import Foundation
+        struct User {
+            let id: Int = 101
+            var name: String = "Alice"
+        }
+        func calculate(total: Double) -> Double {
+            return total * 1.21
+        }
+        """
+        let htmlSwift = SyntaxHighlighter.highlightToHTML(code: swiftCode, language: .swift)
+        #expect(htmlSwift.contains("<span class=\"tok-comment\">// Example Swift</span>"))
+        #expect(htmlSwift.contains("<span class=\"tok-kw\">import</span>"))
+        #expect(htmlSwift.contains("<span class=\"tok-kw\">struct</span>"))
+        #expect(htmlSwift.contains("<span class=\"tok-type\">User</span>"))
+        #expect(htmlSwift.contains("<span class=\"tok-num\">101</span>"))
+        #expect(htmlSwift.contains("<span class=\"tok-str\">&quot;Alice&quot;</span>"))
+        #expect(htmlSwift.contains("<span class=\"tok-fn\">calculate</span>"))
+        #expect(htmlSwift.contains("<span class=\"tok-kw\">return</span>"))
+        
+        let jsonCode = """
+        {
+            "status": "active",
+            "count": 42
+        }
+        """
+        let htmlJSON = SyntaxHighlighter.highlightToHTML(code: jsonCode, language: .json)
+        #expect(htmlJSON.contains("<span class=\"tok-key\">&quot;status&quot;</span>"))
+        #expect(htmlJSON.contains("<span class=\"tok-num\">42</span>"))
+        
+        let plainCode = "Hello <World> & Everyone"
+        let htmlPlain = SyntaxHighlighter.highlightToHTML(code: plainCode, language: .plain)
+        #expect(htmlPlain == "Hello &lt;World&gt; &amp; Everyone")
+    }
+    
     @Test func testGFMBlockParsing() {
         let markdown = """
         > [!NOTE]
@@ -331,6 +368,9 @@ struct brain_mdTests {
         #expect(html.contains("<code>inline code</code>"))
         #expect(html.contains("<table") && html.contains("Feature</th>"))
         #expect(html.contains("code-block-container"))
+        #expect(html.contains("window-dots"))
+        #expect(html.contains("<span class=\"tok-kw\">let</span>"))
+        #expect(html.contains("<span class=\"tok-num\">42</span>"))
         #expect(html.contains("mermaid"))
         #expect(html.contains(theme.backgroundHex))
     }

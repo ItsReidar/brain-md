@@ -156,3 +156,27 @@ tags: ["telecom", "belgium", ]
 - **Flexible Syntax**: Tags can be specified as inline arrays (`[telecom, belgium]`), quoted arrays (`["telecom", "belgium", ]`), smart/curly quotes (`[“telecom”, ‘belgium’, ]`), multiline lists (`- telecom`), or comma-separated scalars (`"telecom", "belgium"`).
 - **Trailing Comma Tolerance**: Trailing commas such as `tags: [telecom, ]` or `tags: ["telecom", ]` are gracefully handled without creating phantom blank tags or formatting issues.
 - **Automatic Quote Stripping**: Surrounding double quotes (`"`), single quotes (`'`), smart/curly quotes (`“”‘’`), and backticks (`` ` ``) are automatically stripped from tags, title, description, and other scalar metadata fields when rendered into UI pills, badges, and preview cards.
+
+---
+
+## Vibrant Codeblock Rendering & macOS Container Styling
+
+Rendered code blocks in the live preview are styled as macOS-native code windows rather than dull, flat grey containers:
+
+```mermaid
+flowchart TD
+    RawCode["Markdown Code Block (```lang)"] --> Parser["MarkdownHTMLRenderer"]
+    Parser --> Lexer["SyntaxHighlighter.highlightToHTML()"]
+    Lexer --> Tokens["Token Spans (.tok-kw, .tok-type, .tok-str, .tok-fn, ...)"]
+    Tokens --> ThemeCSS["Theme ANSI Palette (--syn-kw, --syn-str, ...)"]
+    ThemeCSS --> Container["macOS Window Container (Traffic Lights, Pill, Copy)"]
+```
+
+### Visual and Functional Features
+
+- **macOS Window Traffic Lights**: Iconic red (`#ff5f56`), yellow (`#ffbd2e`), and green (`#27c93f`) window controls embedded in the header.
+- **Theme-Driven Syntax Tokens**: Full syntax highlighting across Swift, Python, JavaScript, TypeScript, JSON, Bash, SQL, HTML, CSS, YAML, and Mermaid, mapped directly to the active `TerminalTheme`'s 16-color ANSI palette.
+- **Accent Language Pill**: Clean badge displaying the uppercase language identifier with accent coloring.
+- **Elevated Contrast Background**: Replaced flat monochromatic grey with rich elevated dark (`#161b22`) or crisp light (`#f6f8fa`) surfaces with subtle depth shadow.
+- **One-Click Copy**: Fast clipboard copy with instant "Copied!" green feedback indicator.
+- **Polished Inline Code**: Inline code chips with subtle theme-tinted backgrounds and borders.

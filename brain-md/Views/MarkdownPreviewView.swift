@@ -1097,11 +1097,12 @@ public enum MarkdownHTMLRenderer {
               const code = container.querySelector('code');
               if (!code) return;
               navigator.clipboard.writeText(code.innerText).then(() => {
-                const originalText = button.innerText;
-                button.innerText = 'Copied!';
+                const span = button.querySelector('span');
+                const origText = span ? span.innerText : button.innerText;
+                if (span) span.innerText = 'Copied!'; else button.innerText = 'Copied!';
                 button.classList.add('copied');
                 setTimeout(() => {
-                  button.innerText = originalText;
+                  if (span) span.innerText = origText; else button.innerText = origText;
                   button.classList.remove('copied');
                 }, 2000);
               }).catch(() => {});
@@ -1287,15 +1288,31 @@ public enum MarkdownHTMLRenderer {
     }
     
     public static func renderCodeBlockHTML(lang: String, code: String) -> String {
-        let displayLang = lang.trimmingCharacters(in: .whitespaces).isEmpty ? "code" : lang
-        let escapedCode = escapeHTML(code)
+        let cleanLang = lang.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayLang = cleanLang.isEmpty ? "code" : cleanLang
+        let syntaxLang = SyntaxLanguage.from(identifier: cleanLang)
+        let highlighted = SyntaxHighlighter.highlightToHTML(code: code, language: syntaxLang)
+        
         return """
         <div class="code-block-container">
           <div class="code-block-header">
-            <span class="code-lang">\(escapeHTML(displayLang))</span>
-            <button class="copy-button" onclick="copyCode(this)" title="Copy to clipboard">Copy</button>
+            <div class="code-header-left">
+              <div class="window-dots" aria-hidden="true">
+                <span class="window-dot dot-red"></span>
+                <span class="window-dot dot-yellow"></span>
+                <span class="window-dot dot-green"></span>
+              </div>
+              <span class="code-lang">\(escapeHTML(displayLang))</span>
+            </div>
+            <button class="copy-button" onclick="copyCode(this)" title="Copy to clipboard">
+              <svg class="copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>Copy</span>
+            </button>
           </div>
-          <pre><code class="language-\(escapeHTML(lang))">\(escapedCode)</code></pre>
+          <pre class="code-block-pre"><code class="language-\(escapeHTML(cleanLang))">\(highlighted)</code></pre>
         </div>
         """
     }
@@ -1475,9 +1492,29 @@ public enum MarkdownHTMLRenderer {
     
     public static func generateCSS(theme: TerminalTheme, contentWidth: Double) -> String {
         let isDark = theme.isDark
+        let palette = theme.palette
         let borderColor = isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.12)"
-        let codeBg = isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.04)"
-        let headerCodeBg = isDark ? "rgba(255, 255, 255, 0.09)" : "rgba(0, 0, 0, 0.06)"
+        
+        // Code block container styling
+        let codeBg = isDark ? "#161b22" : "#f6f8fa"
+        let headerCodeBg = isDark ? "#0d1117" : "#eaeef2"
+        let codeBorder = isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.12)"
+        let inlineCodeBg = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"
+        let inlineCodeColor = isDark ? "#79c0ff" : "#0969da"
+        let codeLangBg = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)"
+        
+        // Syntax Token Colors mapped to Theme ANSI Palette with vibrant fallbacks
+        let synKw = palette.indices.contains(1) ? palette[1] : (isDark ? "#ff7b72" : "#cf222e")
+        let synStr = palette.indices.contains(2) ? palette[2] : (isDark ? "#7ee787" : "#116329")
+        let synNum = palette.indices.contains(11) ? palette[11] : (palette.indices.contains(3) ? palette[3] : (isDark ? "#79c0ff" : "#0550ae"))
+        let synFn = palette.indices.contains(4) ? palette[4] : (isDark ? "#58a6ff" : "#0969da")
+        let synType = palette.indices.contains(5) ? palette[5] : (isDark ? "#bc8cff" : "#8250df")
+        let synAttr = palette.indices.contains(6) ? palette[6] : (isDark ? "#39c5cf" : "#1b7c83")
+        let synComment = palette.indices.contains(8) ? palette[8] : (isDark ? "#8b949e" : "#6e7781")
+        let synBool = palette.indices.contains(9) ? palette[9] : synKw
+        let synTag = palette.indices.contains(14) ? palette[14] : (palette.indices.contains(6) ? palette[6] : (isDark ? "#56d4dd" : "#0550ae"))
+        let synKey = palette.indices.contains(12) ? palette[12] : synFn
+        
         let tableHeaderBg = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"
         let tableStripeBg = isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)"
         
@@ -1491,6 +1528,23 @@ public enum MarkdownHTMLRenderer {
           --border-color: \(borderColor);
           --code-bg: \(codeBg);
           --header-code-bg: \(headerCodeBg);
+          --code-border: \(codeBorder);
+          --inline-code-bg: \(inlineCodeBg);
+          --inline-code-color: \(inlineCodeColor);
+          --code-lang-bg: \(codeLangBg);
+          
+          /* Syntax Token Colors */
+          --syn-kw: \(synKw);
+          --syn-str: \(synStr);
+          --syn-num: \(synNum);
+          --syn-fn: \(synFn);
+          --syn-type: \(synType);
+          --syn-attr: \(synAttr);
+          --syn-comment: \(synComment);
+          --syn-bool: \(synBool);
+          --syn-tag: \(synTag);
+          --syn-key: \(synKey);
+
           --table-header-bg: \(tableHeaderBg);
           --table-stripe-bg: \(tableStripeBg);
         }
@@ -1560,70 +1614,125 @@ public enum MarkdownHTMLRenderer {
         code {
           font-family: "SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace;
           font-size: 0.9em;
-          background-color: var(--code-bg);
-          padding: 0.2em 0.4em;
+          background-color: var(--inline-code-bg);
+          color: var(--inline-code-color);
+          padding: 0.18em 0.45em;
           border-radius: 4px;
           border: 1px solid var(--border-color);
         }
 
         pre code {
           background-color: transparent;
+          color: var(--text-color);
           padding: 0;
           border: none;
-          font-size: 12.5px;
-          line-height: 1.5;
+          font-size: 13px;
+          line-height: 1.55;
         }
 
         .code-block-container {
-          margin: 16px 0;
-          border: 1px solid var(--border-color);
-          border-radius: 6px;
+          margin: 20px 0;
+          border: 1px solid var(--code-border);
+          border-radius: 8px;
           overflow: hidden;
           background-color: var(--code-bg);
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
         }
 
         .code-block-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 6px 12px;
+          padding: 8px 14px;
           background-color: var(--header-code-bg);
-          border-bottom: 1px solid var(--border-color);
-          font-family: "SF Mono", Menlo, monospace;
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-          color: var(--text-color);
-          opacity: 0.8;
+          border-bottom: 1px solid var(--code-border);
           -webkit-user-select: none;
           user-select: none;
         }
 
-        .copy-button {
-          background: transparent;
-          border: 1px solid var(--border-color);
-          color: var(--text-color);
+        .code-header-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .window-dots {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .window-dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          display: inline-block;
+        }
+        .dot-red { background-color: #ff5f56; }
+        .dot-yellow { background-color: #ffbd2e; }
+        .dot-green { background-color: #27c93f; }
+
+        .code-lang {
+          font-family: "SF Mono", Menlo, monospace;
+          font-size: 10.5px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--accent-color);
+          background-color: var(--code-lang-bg);
+          padding: 2px 7px;
           border-radius: 4px;
-          padding: 2px 8px;
+          letter-spacing: 0.6px;
+        }
+
+        .copy-button {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: transparent;
+          border: 1px solid var(--code-border);
+          color: var(--text-color);
+          border-radius: 5px;
+          padding: 3px 8px;
           font-size: 11px;
+          font-weight: 500;
           cursor: pointer;
           transition: all 0.15s ease;
           -webkit-user-select: none;
           user-select: none;
+          opacity: 0.85;
         }
         .copy-button:hover {
-          background: var(--border-color);
+          opacity: 1;
+          background: var(--code-lang-bg);
+          border-color: var(--accent-color);
         }
         .copy-button.copied {
-          color: #1a7f37;
-          border-color: #1a7f37;
+          color: #2ea043;
+          border-color: #2ea043;
+          opacity: 1;
+        }
+        .copy-icon {
+          width: 12px;
+          height: 12px;
         }
 
-        pre {
+        pre.code-block-pre {
           margin: 0;
-          padding: 14px;
+          padding: 14px 16px;
           overflow-x: auto;
         }
+
+        /* Syntax Token Highlighting */
+        .tok-kw { color: var(--syn-kw); font-weight: 600; }
+        .tok-str { color: var(--syn-str); }
+        .tok-num { color: var(--syn-num); }
+        .tok-fn { color: var(--syn-fn); }
+        .tok-type { color: var(--syn-type); font-weight: 600; }
+        .tok-attr { color: var(--syn-attr); }
+        .tok-comment { color: var(--syn-comment); font-style: italic; opacity: 0.85; }
+        .tok-bool { color: var(--syn-bool); font-weight: 600; }
+        .tok-tag { color: var(--syn-tag); font-weight: 600; }
+        .tok-key { color: var(--syn-key); font-weight: 600; }
 
         /* Tables */
         .table-container {

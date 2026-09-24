@@ -5,7 +5,7 @@
 [![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20AppKit-blue?style=flat-square)](https://developer.apple.com/xcode/swiftui/)
 [![MCP](https://img.shields.io/badge/MCP-1.0%20Compliant-purple?style=flat-square)](https://modelcontextprotocol.io)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](LICENSE)
-[![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20External-emerald?style=flat-square)](#architecture)
+[![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20External-emerald?style=flat-square)](#️-system-architecture)
 
 > **The ultra-fast, local-first macOS Markdown knowledge base with an embedded Model Context Protocol (MCP) server.** Seamlessly bridge your personal thoughts with AI coding assistants (Claude Desktop, Cursor, Gemini, and autonomous agents).
 
@@ -14,10 +14,12 @@
 ## ✨ Features
 
 - **⚡ Blazing Fast & Lightweight**: 100% native Swift 6 and SwiftUI. Instant startup, sub-50ms render latency, ~1.2 MB executable binary, and ~4.4 MB total bundle size. Zero electron or web bloat.
-- **🧠 3D Visual Brain Graph**: Native Metal-accelerated 3D graph (Apple SceneKit) showing notes as velvety matte spheres clustered around folder hubs, linked via wikilinks (`[[Note]]`), markdown links, and `#tag` clusters. Features fluid organic floating and breathing animations, rotational elastic inertia, single-click 3D trackball spin, cursor-anchored zoom, dynamic front-facing badge labels, live search filtering, and click-to-inspect popover with instant jump-to-editor navigation (`⌥⌘G`).
+- **🧠 3D Visual Brain Graph**: Native Metal-accelerated 3D graph (Apple SceneKit) showing notes as velvety matte spheres clustered around folder hubs, linked via prominent 3D synaptic cylinders (`SCNCylinder` with glowing emissive materials for crystal-clear visibility), wikilinks (`[[Note]]`), markdown links, and `#tag` clusters. Features fluid organic floating and breathing animations, rotational elastic inertia, zero-allocation 120 FPS dynamic line tracking, single-click 3D trackball spin, cursor-anchored zoom, dynamic front-facing badge labels, live search filtering, and click-to-inspect popover with instant jump-to-editor navigation (`⌥⌘G`).
 - **📂 Local-First Markdown Vault**: Plain-text `.md` files stored directly on your disk in human-readable hierarchies. Fully interoperable with Obsidian, VS Code, Logseq, and Git.
 - **🤖 Built-in Model Context Protocol (MCP) Server**: Built-in HTTP/SSE and Stdio servers expose 8 native tools (`list_notes`, `read_note`, `create_note`, `update_note`, `delete_note`, `search_notes`, `get_vault_stats`, `move_note`) directly to AI assistants.
 - **🎨 Rich Markdown Editor & Live Preview**: Real-time syntax highlighting, Split/Editor/Preview viewing modes, and GitHub Flavored Markdown (GFM) callouts (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), task lists, tables, and strikethroughs.
+- **💻 Vibrant Codeblocks & macOS Window Styling**: Code blocks rendered as macOS windows with traffic light dots, accent language badges, theme-driven 16-color ANSI syntax highlighting (Swift, Python, JS, TS, JSON, Bash, SQL, HTML, etc.), elevated contrast surfaces, and one-click copy.
+- **🖼️ Crisp White-Background macOS App Icon**: Apple HIG squircle icon with clean white canvas gradient and subtle edge bezel for optimal contrast across light and dark macOS dock setups.
 - **📊 Offline Mermaid Diagrams**: Interactive diagrams (flowcharts, sequence, class, state, git graphs) rendered completely offline via bundled `mermaid.min.js` with adaptive dark/light themes.
 - **🎨 112 Custom Themes (terminalcolors.com)**: Comprehensive catalog of 80 dark and 32 light themes across 36 iconic theme families (Catppuccin, Tokyo Night, Dracula, Gruvbox, Nord, Rosé Pine, GitHub, Ayu, Solarized, Zenbones, etc.). Powers real-time syntax highlighting, custom editor canvas styling, and live color swatch previews in Settings.
 - **⚙️ Modern macOS System Settings**: Native Ventura/Sonoma/Sequoia-style settings menu with custom note title formats (with dynamic tokens like `{date}`, `{time}`, `{year}`) and customizable Markdown content templates.

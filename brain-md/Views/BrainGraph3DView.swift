@@ -6,6 +6,7 @@
 import SwiftUI
 import SceneKit
 import AppKit
+import simd
 
 // MARK: - Custom Trackball SCNView
 
@@ -528,28 +529,31 @@ public struct Graph3DSceneView: NSViewRepresentable {
                 
                 let edgeColor: NSColor
                 let opacity: CGFloat
+                let radius: CGFloat
                 
                 switch edge.type {
                 case .folderMember:
                     // Soft structural link from folder to note
                     let group = sourceNode.isFolder ? sourceNode.group : targetNode.group
-                    edgeColor = groupColors[group] ?? NSColor.gray
-                    opacity = 0.22
+                    edgeColor = groupColors[group] ?? NSColor.systemGray
+                    opacity = 0.55
+                    radius = 0.040
                 case .link:
-                    // Direct explicit link between notes
-                    edgeColor = NSColor(red: 0.35, green: 0.70, blue: 1.0, alpha: 0.6)
-                    opacity = 0.50
+                    // Direct explicit link between notes (vibrant sky blue)
+                    edgeColor = NSColor(red: 0.35, green: 0.72, blue: 1.0, alpha: 0.85)
+                    opacity = 0.70
+                    radius = 0.048
                 case .tag:
-                    // Shared tag cluster connection
-                    edgeColor = NSColor(red: 0.75, green: 0.45, blue: 0.95, alpha: 0.4)
-                    opacity = 0.28
+                    // Shared tag cluster connection (purple/magenta)
+                    edgeColor = NSColor(red: 0.78, green: 0.48, blue: 0.98, alpha: 0.80)
+                    opacity = 0.45
+                    radius = 0.035
                 }
                 
-                if let lineNode = createLineNode(from: p1, to: p2, color: edgeColor, opacity: opacity) {
-                    lineNode.name = "edge:\(edge.id)"
-                    graphRoot.addChildNode(lineNode)
-                    edgeNodeMap.append((id: edge.id, sourceId: edge.sourceId, targetId: edge.targetId, lineNode: lineNode))
-                }
+                let lineNode = createLineNode(from: p1, to: p2, color: edgeColor, opacity: opacity, radius: radius)
+                lineNode.name = "edge:\(edge.id)"
+                graphRoot.addChildNode(lineNode)
+                edgeNodeMap.append((id: edge.id, sourceId: edge.sourceId, targetId: edge.targetId, lineNode: lineNode))
             }
         }
         
@@ -609,34 +613,56 @@ public struct Graph3DSceneView: NSViewRepresentable {
                 updatedPositions[nodeId] = finalPos
             }
             
-            // 2. Update dynamic edge line endpoints to track moving nodes
+            // 2. Update dynamic edge line endpoints to track moving nodes (zero geometry reallocation)
             for edge in edgeNodeMap {
                 guard let p1 = updatedPositions[edge.sourceId],
                       let p2 = updatedPositions[edge.targetId] else { continue }
                 
-                let source = SCNGeometrySource(vertices: [p1, p2])
-                let element = SCNGeometryElement(indices: [0, 1] as [Int32], primitiveType: .line)
-                let newGeom = SCNGeometry(sources: [source], elements: [element])
-                if let oldMat = edge.lineNode.geometry?.materials.first {
-                    newGeom.materials = [oldMat]
-                }
-                edge.lineNode.geometry = newGeom
+                let transform = transformBetween(p1: p1, p2: p2)
+                edge.lineNode.position = transform.position
+                edge.lineNode.orientation = transform.orientation
+                edge.lineNode.scale = SCNVector3(1.0, transform.length, 1.0)
             }
         }
         
-        private func createLineNode(from p1: SCNVector3, to p2: SCNVector3, color: NSColor, opacity: CGFloat) -> SCNNode? {
-            let indices: [Int32] = [0, 1]
-            let source = SCNGeometrySource(vertices: [p1, p2])
-            let element = SCNGeometryElement(indices: indices, primitiveType: .line)
-            let geom = SCNGeometry(sources: [source], elements: [element])
+        private func transformBetween(p1: SCNVector3, p2: SCNVector3) -> (position: SCNVector3, orientation: SCNVector4, length: CGFloat) {
+            let mid = SCNVector3((p1.x + p2.x) * 0.5, (p1.y + p2.y) * 0.5, (p1.z + p2.z) * 0.5)
+            let v = simd_float3(Float(p2.x - p1.x), Float(p2.y - p1.y), Float(p2.z - p1.z))
+            let len = simd_length(v)
+            if len < 0.0001 {
+                return (mid, SCNVector4(0, 0, 0, 1), 0.0001)
+            }
+            let dir = v / len
+            let up = simd_float3(0, 1, 0)
+            let dot = simd_dot(up, dir)
+            let q: simd_quatf
+            if dot > 0.99999 {
+                q = simd_quatf(angle: 0, axis: simd_float3(0, 1, 0))
+            } else if dot < -0.99999 {
+                q = simd_quatf(angle: .pi, axis: simd_float3(1, 0, 0))
+            } else {
+                q = simd_quatf(from: up, to: dir)
+            }
+            let quat = SCNVector4(CGFloat(q.vector.x), CGFloat(q.vector.y), CGFloat(q.vector.z), CGFloat(q.vector.w))
+            return (mid, quat, CGFloat(len))
+        }
+        
+        private func createLineNode(from p1: SCNVector3, to p2: SCNVector3, color: NSColor, opacity: CGFloat, radius: CGFloat) -> SCNNode {
+            let transform = transformBetween(p1: p1, p2: p2)
+            let cylinder = SCNCylinder(radius: radius, height: 1.0)
+            cylinder.radialSegmentCount = 8
             
             let mat = SCNMaterial()
+            mat.lightingModel = .constant
             mat.diffuse.contents = color
-            mat.emission.contents = color.withAlphaComponent(0.2)
+            mat.emission.contents = color.withAlphaComponent(0.35)
             mat.transparency = opacity
-            geom.materials = [mat]
+            cylinder.materials = [mat]
             
-            let node = SCNNode(geometry: geom)
+            let node = SCNNode(geometry: cylinder)
+            node.position = transform.position
+            node.orientation = transform.orientation
+            node.scale = SCNVector3(1.0, transform.length, 1.0)
             return node
         }
         
@@ -802,8 +828,16 @@ public struct Graph3DSceneView: NSViewRepresentable {
                     edgeVisible = sourceMatches || targetMatches
                 }
                 
-                let baseOpacity: CGFloat = edge.type.isTag ? 0.28 : (edge.type.isFolder ? 0.22 : 0.50)
-                edgeNode.opacity = edgeVisible ? baseOpacity : 0.04
+                let baseOpacity: CGFloat
+                switch edge.type {
+                case .folderMember:
+                    baseOpacity = 0.55
+                case .link:
+                    baseOpacity = 0.70
+                case .tag:
+                    baseOpacity = 0.45
+                }
+                edgeNode.opacity = edgeVisible ? (hasSelection ? min(1.0, baseOpacity * 1.35) : baseOpacity) : 0.05
             }
         }
     }

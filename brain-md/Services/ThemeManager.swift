@@ -12,10 +12,10 @@ public final class ThemeManager: ObservableObject {
     public static let shared = ThemeManager()
     
     // UserDefaults keys
-    public static let appColorSchemeKey = "app_color_scheme"
-    public static let selectedDarkThemeIdKey = "selected_dark_theme_id"
-    public static let selectedLightThemeIdKey = "selected_light_theme_id"
-    public static let customThemeOverrideKey = "custom_theme_override"
+    nonisolated public static let appColorSchemeKey = "app_color_scheme"
+    nonisolated public static let selectedDarkThemeIdKey = "selected_dark_theme_id"
+    nonisolated public static let selectedLightThemeIdKey = "selected_light_theme_id"
+    nonisolated public static let customThemeOverrideKey = "custom_theme_override"
     
     @AppStorage(appColorSchemeKey) public var appColorScheme: String = "system"
     @AppStorage(selectedDarkThemeIdKey) public var selectedDarkThemeId: String = "github-dark"
@@ -32,7 +32,7 @@ public final class ThemeManager: ObservableObject {
     }
     
     /// Static resolution reading directly from UserDefaults (thread-safe, callable from any actor)
-    public static func resolveTheme(for colorScheme: ColorScheme) -> TerminalTheme {
+    nonisolated public static func resolveTheme(for colorScheme: ColorScheme) -> TerminalTheme {
         let customOverride = UserDefaults.standard.string(forKey: customThemeOverrideKey) ?? "auto"
         if customOverride != "auto", let explicit = TerminalThemes.byId[customOverride] {
             return explicit
