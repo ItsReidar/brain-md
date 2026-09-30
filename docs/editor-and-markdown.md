@@ -54,6 +54,137 @@ flowchart LR
 
 ---
 
+## Editor Typography & Native Substitution Controls
+
+To guarantee reliable Markdown syntax editing without unexpected macOS text transformations:
+
+1. **Ligature Suppression**: Font ligatures are explicitly turned off (`.ligature: 0` and `kCommonLigaturesOffSelector`), preventing consecutive dashes (`---`) or symbols from merging into single connected glyphs.
+2. **Raw Dashes & Quotes**:
+   - `isAutomaticDashSubstitutionEnabled = false`: Typing three dashes (`---`) remains raw ASCII dashes, ensuring YAML frontmatter and thematic horizontal rules never turn into em-dashes (`—`).
+   - `isAutomaticQuoteSubstitutionEnabled = false`: Preserves straight single (`'`) and double (`"`) quotes required for code blocks, frontmatter values, and HTML attributes without macOS "smart quote" conversion.
+   - `isAutomaticTextReplacementEnabled = false`: Prevents accidental substitution of Markdown snippets.
+
+---
+
+## Markdown Autocomplete, Auto-Pairing & Selection Wrapping
+
+The editor features responsive code-editor grade auto-pairing and autocomplete:
+
+### 1. Delimiter Auto-Pairing & Overtype Skip
+
+- Typing `'`, `"`, `(`, `[`, `{`, `<`, or `` ` `` automatically inserts the matching closing delimiter and places the insertion point between them.
+- If the cursor is positioned directly before a closing character and the user types that character, the cursor cleanly skips over without duplicating it.
+
+### 2. Markdown Emphasis & Code Block Autocomplete
+
+- **Triple Backtick (`\`\`\``) Expansion**: Typing a 3rd backtick expands immediately into a multiline fenced code block with the cursor positioned on the middle line:
+
+  ````markdown
+  ```
+  |
+  ```
+  ````
+
+- **Double Asterisks (`**`) & Tildes (`~~`)**: Typing the second `*` or `~` immediately creates the closing pair (`**|**` or `~~|~~`).
+- **Balanced Pair Deletion**: Pressing Backspace when the cursor is between paired symbols (`''`, `""`, `()`, `[]`, `{}`, `<>`, pairs of backticks, `****`, `~~~~`, `____`) cleanly deletes both opening and closing delimiters.
+- **VS Code-Style Hierarchical List Continuation**: Pressing Return on a list item (`-`, `*`, `+`, `1.`, `- [ ]`) automatically preserves the exact leading indentation level (`24pt` per level).
+- **Progressive Outdenting on Return**: Pressing Return on an empty indented list item (such as an indented bullet) progressively outdents it by 2 spaces (to root level) instead of deleting the line, matching VS Code and Obsidian workflows. Pressing Return on a root-level empty bullet exits list mode cleanly.
+- **Tab & Shift-Tab Indentation**:
+  - `Tab`: Indents the current list item or selected line block by 2 spaces.
+  - `Shift-Tab` (`insertBacktab`): Outdents the current line or selection by removing up to 2 leading spaces.
+
+### 3. Selection Wrapping
+
+Selecting text and typing any pairing character (`'`, `"`, `(`, `[`, `{`, `<`, backtick, `*`, `_`, `~`) wraps the selected text in the delimiters while preserving the selection.
+
+---
+
+## 120 FPS ProMotion Performance & Architecture
+
+To achieve butter-smooth 120 FPS typing responsiveness on Apple Silicon ProMotion displays:
+
+1. **Hardware-Accelerated Layer Backing**:
+   - `NSScrollView`, its clip view (`contentView`), and `MarkdownNSTextView` all run with `wantsLayer = true` and `canDrawConcurrently = true`. Core Animation and Metal handle display compositing with zero main-thread CPU layout bottlenecks.
+2. **Debounced Preview Synchronization (~90ms)**:
+   - Keystrokes in `MarkdownNSTextView` do not trigger synchronous document re-parsing or SwiftUI preview view-tree recreations. Document synchronization to `@Binding var text` is debounced by 90ms.
+   - Any pending sync is immediately flushed on Save (`⌘S`) or when the editor resigns first responder.
+3. **Coalesced Syntax Highlighting Pass (~40ms)**:
+   - Regular-expression evaluation across the document runs with a 40ms debounce, ensuring keystroke latency stays under `1ms` for seamless 120 FPS input.
+
+---
+
+## Hierarchical Bullet Indentation & Heading Spacing
+
+### VS Code-Style Bullet Glyph Hierarchy
+
+Both the native SwiftUI preview (`MarkdownPreviewView`) and the HTML/PDF renderer (`MarkdownHTMLRenderer`) map nested list indentation (`24pt` per level) to distinct hierarchical bullet glyphs matching VS Code:
+
+| Nesting Level | Indentation | Native Glyph | Visual Style |
+| :--- | :--- | :--- | :--- |
+| **Level 0** (Root) | `0pt` | `•` | Solid disc (`Circle().fill(...)`) |
+| **Level 1** (1st Nest) | `24pt` | `◦` | Hollow ring (`Circle().strokeBorder(...)`) |
+| **Level 2** (2nd Nest) | `48pt` | `▪` | Solid square (`Rectangle().fill(...)`) |
+| **Level 3+** (Deep) | `72pt+` | `▫` | Hollow square (`Rectangle().strokeBorder(...)`) |
+
+### Generous Heading Spacing
+
+Headings feature expansive top and bottom spacing to provide clear typographic hierarchy:
+
+- **H1 (`#`)**: `28pt` top margin, `12pt` bottom margin with subtle thematic divider.
+- **H2 (`##`)**: `24pt` top margin, `10pt` bottom margin with divider.
+- **H3 (`###`)**: `20pt` top margin, `8pt` bottom margin.
+- **H4 (`####`)**: `16pt` top margin, `6pt` bottom margin.
+- **H5 (`#####`)**: `14pt` top margin, `4pt` bottom margin.
+- **H6 (`######`)**: `12pt` top margin, `4pt` bottom margin.
+- **In-Editor Spacing**: `SyntaxHighlighter` dynamically applies paragraph spacing before headings (`paragraphSpacingBefore`) directly within AppKit `NSTextStorage`.
+
+---
+
+## Toolbar Formatting & Menu Controls
+
+The editor header features quick formatting controls located directly above the editor pane:
+
+### 1. Dedicated Headings Toolbar Item (`#`)
+
+Located as a standalone toolbar button with a dropdown menu:
+
+- **Heading 1 (`#`)**: `⌘⌥1`
+- **Heading 2 (`##`)**: `⌘⌥2`
+- **Heading 3 (`###`)**: `⌘⌥3`
+- **Heading 4 (`####`)**: `⌘⌥4`
+- **Heading 5 (`#####`)**: `⌘⌥5`
+- **Heading 6 (`######`)**: `⌘⌥6`
+
+*Behavior*: If a line or text is selected, it toggles/replaces the heading prefix; if empty, it inserts the heading template with placeholder text selected.
+
+### 2. Format Toolbar Section (`textformat`)
+
+Provides instant insertion and wrapping for all standard Markdown syntax elements:
+
+- **Paragraphs**: Inserts clean double-spaced paragraph blocks.
+- **Line Breaks**: Inserts standard two-space trailing line breaks.
+- **Emphasis**:
+  - **Bold** (`**text**` / `⌘B`)
+  - **Italic** (`*text*` / `⌘I`)
+  - **Bold & Italic** (`***text***`)
+  - **Strikethrough** (`~~text~~`)
+- **Blockquotes**: Prepends `>` to selected lines or inserts blockquote template.
+- **Lists**:
+  - **Bullet List** (`- item`)
+  - **Numbered List** (`1. item`)
+  - **Task List** (`- [ ] task`)
+- **Code**:
+  - **Inline Code** (`` `code` `` / `⌘E`)
+  - **Code Block** (```` ``` ```` / `⌘⌥C`)
+- **Horizontal Rules**: Inserts `\n\n---\n\n`.
+- **Links & Images**:
+  - **Link** (`[title](url)` / `⌘K`)
+  - **Image** (`![alt](url)`)
+- **Escaping Characters**: Escapes Markdown syntax characters (`\*`, `\#`, etc.).
+- **HTML**: Inserts Markdown-compatible HTML container blocks (`<div class="note">...</div>`).
+
+All formatting actions integrate seamlessly with AppKit undo/redo (`⌘Z` / `⇧⌘Z`).
+
 ## GitHub Flavored Markdown (GFM) Enhancements
 
 `brain-md` fully supports standard GFM extensions:
@@ -97,6 +228,144 @@ Interactive task list items:
 | Native Swift 6 | Yes | < 1ms |
 | GFM Alerts | Yes | < 5ms |
 | Mermaid Diagrams | Yes (Offline) | ~30ms |
+| HTML & Markdown Hacks | Yes | < 2ms |
+```
+
+---
+
+## Complete Markdown Guide & GitHub Standards
+
+`brain-md` strictly adheres to the specifications from [Markdown Guide Basic Syntax](https://www.markdownguide.org/basic-syntax/), [Extended Syntax](https://www.markdownguide.org/extended-syntax/), and [Markdown Hacks](https://www.markdownguide.org/hacks/).
+
+```mermaid
+flowchart TD
+    Raw["Markdown & HTML Source"] --> Parser["MarkdownPreviewView.parseDocument()"]
+    Parser --> Setext["Setext Headings (===, ---) & Custom IDs ({#id})"]
+    Parser --> Tildes["Tilde Code Blocks (~~~lang)"]
+    Parser --> Details["Collapsible Blocks (<details><summary>)"]
+    Parser --> DefList["Definition Lists (Term / : Definition)"]
+    Parser --> Comments["Markdown Comments ([comment]: #)"]
+    Parser --> Inline["Inline Sanitizer & Formatter"]
+    Inline --> Highlights["Highlights (==text== / <mark>)"]
+    Inline --> SubSup["Subscript (~sub~ / <sub>) & Superscript (^sup^ / <sup>)"]
+    Inline --> Tags["HTML Elements (<kbd>, <ins>, <u>, <font>, <span>)"]
+    Inline --> Emojis["Emoji Shortcodes (:tada:, :rocket:, ...)"]
+    Inline --> Entities["HTML Entities (&nbsp;, &copy;, &mdash;, &#124;)"]
+    Inline --> URLs["Bare URL Autolinking (<https://...>)"]
+    Inline --> Render["SwiftUI Preview & Vector PDF/HTML Export"]
+```
+
+### 1. Setext Headings & Custom Heading IDs
+
+In addition to ATX headings (`#` through `######`), `brain-md` fully supports **Setext headings** and **custom heading IDs**:
+
+```markdown
+Heading 1 (Setext)
+==================
+
+Heading 2 (Setext)
+------------------
+
+### Section Title {#custom-anchor-id}
+```
+
+- When custom IDs (`{#id}`) are specified, the ID is stripped from the visual title in the native preview and rendered into the HTML/PDF output as `<h3 id="custom-anchor-id">Section Title</h3>` for deep-linking.
+
+### 2. Tilde Code Blocks (`~~~`)
+
+Code blocks can be fenced using either standard triple backticks (```` ``` ````) or tildes (`~~~`):
+
+````markdown
+~~~python
+def calculate_area(radius):
+    return 3.14159 * radius ** 2
+~~~
+````
+
+Both backticks and tildes are highlighted in real-time in the editor, rendered inside macOS traffic light window containers in preview, and syntax-highlighted in PDF export.
+
+### 3. Collapsible Accordions (`<details>` and `<summary>`)
+
+Native interactive disclosure accordions using standard HTML syntax:
+
+```html
+<details>
+<summary>Click to view system specifications</summary>
+
+- **Processor**: Apple M3 Max
+- **Memory**: 64 GB Unified
+- **Graphics**: 40-core GPU
+</details>
+```
+
+- **In Live Preview**: Renders as an interactive SwiftUI `DisclosureGroup` with animated expand/collapse, matching the active theme's styling.
+- **In PDF / HTML Export**: Renders as an openable semantic `<details><summary>` container styled with custom hover and border states.
+
+### 4. Definition Lists
+
+Standard definition list syntax for terms and descriptions:
+
+```markdown
+Apple Silicon
+: A series of system on a chip (SoC) processors designed by Apple Inc.
+
+Metal
+: A low-overhead, hardware-accelerated 3D graphic and compute API.
+```
+
+Renders semantically into styled `<dl>`, `<dt>`, and `<dd>` elements in HTML/PDF and dedicated term/definition callout layouts in the native SwiftUI preview.
+
+### 5. Extended Typography: Highlights, Subscript & Superscript
+
+```markdown
+This is ==highlighted text==.
+Chemical formula: H~2~O.
+Exponential math: E = mc^2^ or X^2^ + Y^2^ = Z^2^.
+```
+
+- **Highlights**: Wrapped in `==...==` or `<mark>...</mark>`, rendering with an elevated yellow background and darkened text contrast.
+- **Subscript**: Wrapped in `~...~` or `<sub>...</sub>`, formatting chemical equations like `H~2~O` into `H<sub>2</sub>O`.
+- **Superscript**: Wrapped in `^...^` or `<sup>...</sup>`, formatting exponents like `X^2^` into `X<sup>2</sup>`.
+
+### 6. Full HTML Tag Support & Formatting Hacks
+
+`brain-md` preserves and natively renders inline and block HTML tags across both the preview pane and HTML/PDF export:
+
+| HTML Element | Markdown Guide Usage | Live Preview & PDF Presentation |
+| :--- | :--- | :--- |
+| `<kbd>⌘</kbd> + <kbd>C</kbd>` | Keyboard shortcuts | Elevated macOS keyboard key badges with border and drop shadow |
+| `<mark>important</mark>` | Text highlighting | Tinted background highlight pill |
+| `<ins>inserted</ins>` / `<u>underlined</u>` | Underlined text | Clean text underline |
+| `<sub>sub</sub>` / `<sup>sup</sup>` | Mathematical & chemical notation | Baseline-shifted subscript and superscript |
+| `<font color="#3b82f6">blue</font>` | Custom colored text | Colorized text matching specified hex or web color |
+| `<span style="...">` | Inline styled spans | Attribute-preserved inline rendering |
+| `<center>...</center>` | Centered content | Horizontally centered alignment |
+| `<figure>` / `<figcaption>` | Captioned diagrams & images | Semantic figure container with muted caption text |
+| `&nbsp;`, `&copy;`, `&mdash;`, `&#124;` | HTML character entities | Automatically decoded into native Unicode characters |
+
+### 7. Emoji Shortcodes
+
+Full GitHub emoji shortcode support:
+
+```markdown
+:tada: Party popper
+:rocket: Launch rocket
+:warning: Warning badge
+:white_check_mark: Completed task
+:bulb: Idea lamp
+:fire: Hot topic
+:heart: Red heart
+:+1: Thumbs up
+```
+
+Shortcodes are automatically translated to their respective Unicode emojis in both the live preview and HTML export.
+
+### 8. Markdown Comments
+
+Non-printing Markdown comments are safely recognized and ignored from preview and export:
+
+```markdown
+[comment]: # (This is an internal developer note that will not be rendered)
 ```
 
 ---
@@ -180,3 +449,26 @@ flowchart TD
 - **Elevated Contrast Background**: Replaced flat monochromatic grey with rich elevated dark (`#161b22`) or crisp light (`#f6f8fa`) surfaces with subtle depth shadow.
 - **One-Click Copy**: Fast clipboard copy with instant "Copied!" green feedback indicator.
 - **Polished Inline Code**: Inline code chips with subtle theme-tinted backgrounds and borders.
+
+---
+
+## Vector PDF Export Engine
+
+`brain-md` includes an asynchronous, high-fidelity vector PDF export engine managed by `PDFExportService.swift`:
+
+```mermaid
+flowchart LR
+    Note["Active Note Markdown"] --> Renderer["MarkdownHTMLRenderer.renderHTML()"]
+    Renderer --> WebEngine["Offscreen WKWebView"]
+    WebEngine --> PrintCSS["@media print Layout Rules"]
+    PrintCSS --> PDFEngine["createPDF(configuration:)"]
+    PDFEngine --> FileOutput["Target .pdf File"]
+```
+
+### Key Capabilities
+
+- **Single-Click Toolbar Export**: Tap the `arrow.down.doc` toolbar button in the editor header to bring up a native `NSSavePanel` prefilled with `<NoteTitle>.pdf`.
+- **Keyboard Shortcut (`⌘P`)**: Quick export shortcut available from the editor or the File menu (**File > Export Preview as PDF...**).
+- **Theme-Conscious Vector Styling**: Preserves your active syntax highlighting theme with `@media print` rules, `-webkit-print-color-adjust: exact`, and clean print margins.
+- **Page Break Isolation**: Automated page break management ensures codeblocks, GFM callouts, tables, and blockquotes do not split mid-element across pages.
+- **Interactive Feedback**: Instant confirmation via the floating status capsule notification upon completion.

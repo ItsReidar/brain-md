@@ -1167,15 +1167,23 @@ public struct AboutSettingsPane: View {
   public var body: some View {
     VStack(spacing: 20) {
       VStack(spacing: 10) {
-        Image(systemName: "brain.head.profile")
-          .font(.system(size: 52))
-          .foregroundStyle(
-            LinearGradient(
-              colors: [.blue, .purple],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
+        if let appIcon = Bundle.main.image(forResource: "brain-md") ?? NSImage(named: "brain-md") ?? NSImage(named: "NSApplicationIcon") {
+          Image(nsImage: appIcon)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 72, height: 72)
+            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 3)
+        } else {
+          Image(systemName: "brain.head.profile")
+            .font(.system(size: 52))
+            .foregroundStyle(
+              LinearGradient(
+                colors: [.blue, .purple],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              )
             )
-          )
+        }
 
         Text("Brain.md")
           .font(.system(size: 22, weight: .bold, design: .rounded))

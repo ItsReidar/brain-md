@@ -797,6 +797,24 @@ public struct MarkdownSyntaxHighlighter: Sendable {
     private static let codeBlockRegex = try! NSRegularExpression(
         pattern: "(?s)(```[a-zA-Z0-9_-]*\\n.*?\\n```)"
     )
+    private static let tildeCodeBlockRegex = try! NSRegularExpression(
+        pattern: "(?s)(~~~[a-zA-Z0-9_-]*\\n.*?\\n~~~)"
+    )
+    private static let highlightRegex = try! NSRegularExpression(
+        pattern: "==(?=\\S)(.+?)(?<=\\S)=="
+    )
+    private static let subscriptRegex = try! NSRegularExpression(
+        pattern: "(?<![~a-zA-Z0-9])~([^~\\s\\n]+)~(?!~)"
+    )
+    private static let superscriptRegex = try! NSRegularExpression(
+        pattern: "\\^([^\\^\\s\\n]+)\\^"
+    )
+    private static let htmlTagRegex = try! NSRegularExpression(
+        pattern: "</?[a-zA-Z][a-zA-Z0-9]*\\b[^>]*\\/?>"
+    )
+    private static let emojiShortcodeRegex = try! NSRegularExpression(
+        pattern: ":[a-zA-Z0-9_+-]+:"
+    )
     
     public static func highlight(textStorage: NSTextStorage, theme: MarkdownNSTheme, baseFont: NSFont) {
         let string = textStorage.string
@@ -815,7 +833,8 @@ public struct MarkdownSyntaxHighlighter: Sendable {
         textStorage.setAttributes([
             .font: baseFont,
             .foregroundColor: theme.foreground,
-            .paragraphStyle: paragraphStyle
+            .paragraphStyle: paragraphStyle,
+            .ligature: 0
         ], range: fullRange)
         
         // 2. YAML Frontmatter
@@ -850,6 +869,12 @@ public struct MarkdownSyntaxHighlighter: Sendable {
             default: scale = 1.0
             }
             let headingFont = NSFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.bold), size: baseFont.pointSize * scale) ?? boldFont
+            
+            let headingStyle = NSMutableParagraphStyle()
+            headingStyle.lineSpacing = 4
+            headingStyle.paragraphSpacingBefore = hashCount <= 2 ? 14 : (hashCount == 3 ? 10 : 6)
+            headingStyle.paragraphSpacing = 4
+            textStorage.addAttribute(.paragraphStyle, value: headingStyle, range: m.range)
             
             textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: markRange)
             textStorage.addAttribute(.font, value: headingFont, range: markRange)
@@ -970,6 +995,43 @@ public struct MarkdownSyntaxHighlighter: Sendable {
             textStorage.addAttribute(.font, value: monoFont, range: m.range)
             textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
             textStorage.addAttribute(.backgroundColor, value: theme.codeBlockFence.withAlphaComponent(0.08), range: m.range)
+        }
+        
+        // 17. Tilde Code Blocks (~~~lang ... ~~~)
+        let tildeBlockMatches = tildeCodeBlockRegex.matches(in: string, range: fullRange)
+        for m in tildeBlockMatches {
+            textStorage.addAttribute(.font, value: monoFont, range: m.range)
+            textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
+            textStorage.addAttribute(.backgroundColor, value: theme.codeBlockFence.withAlphaComponent(0.08), range: m.range)
+        }
+        
+        // 18. HTML Tags (<tag>, </tag>)
+        let htmlTagMatches = htmlTagRegex.matches(in: string, range: fullRange)
+        for m in htmlTagMatches {
+            textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: m.range)
+        }
+        
+        // 19. Text Highlight (==text==)
+        let hlMatches = highlightRegex.matches(in: string, range: fullRange)
+        for m in hlMatches {
+            textStorage.addAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.35), range: m.range)
+        }
+        
+        // 20. Subscript (~text~) and Superscript (^text^)
+        let subFont = NSFont.systemFont(ofSize: baseFont.pointSize * 0.85)
+        let subMatches = subscriptRegex.matches(in: string, range: fullRange)
+        for m in subMatches {
+            textStorage.addAttribute(.font, value: subFont, range: m.range)
+        }
+        let supMatches = superscriptRegex.matches(in: string, range: fullRange)
+        for m in supMatches {
+            textStorage.addAttribute(.font, value: subFont, range: m.range)
+        }
+        
+        // 21. Emoji Shortcodes (:tada:)
+        let emojiMatches = emojiShortcodeRegex.matches(in: string, range: fullRange)
+        for m in emojiMatches {
+            textStorage.addAttribute(.foregroundColor, value: theme.taskBox, range: m.range)
         }
     }
     

@@ -127,6 +127,11 @@ public struct EditorSplitView: View {
                 .allowsHitTesting(false)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExportCurrentNoteAsPDF"))) { _ in
+            if let item = vault.selectedItem, !item.isDirectory {
+                exportPreviewAsPDF(item: item)
+            }
+        }
     }
     
     // MARK: - Editor Header
@@ -187,6 +192,84 @@ public struct EditorSplitView: View {
                     .foregroundColor(.secondary)
             }
             
+            // Format & Heading Toolbar Items
+            HStack(spacing: 6) {
+                // Standalone Headings Toolbar Item
+                Menu {
+                    Button("Heading 1 (#)") { applyMarkdownFormat(.heading(level: 1)) }
+                    Button("Heading 2 (##)") { applyMarkdownFormat(.heading(level: 2)) }
+                    Button("Heading 3 (###)") { applyMarkdownFormat(.heading(level: 3)) }
+                    Button("Heading 4 (####)") { applyMarkdownFormat(.heading(level: 4)) }
+                    Button("Heading 5 (#####)") { applyMarkdownFormat(.heading(level: 5)) }
+                    Button("Heading 6 (######)") { applyMarkdownFormat(.heading(level: 6)) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "number")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("Headings")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(5)
+                }
+                .menuStyle(.borderlessButton)
+                .help("Insert Headings (# - ######)")
+                
+                // Format Section Toolbar Item
+                Menu {
+                    Button("Paragraph") { applyMarkdownFormat(.paragraph) }
+                    Button("Line Break") { applyMarkdownFormat(.lineBreak) }
+                    
+                    Divider()
+                    
+                    Menu("Emphasis") {
+                        Button("Bold (**text**)") { applyMarkdownFormat(.bold) }
+                        Button("Italic (*text*)") { applyMarkdownFormat(.italic) }
+                        Button("Bold & Italic (***text***)") { applyMarkdownFormat(.boldItalic) }
+                        Button("Strikethrough (~~text~~)") { applyMarkdownFormat(.strikethrough) }
+                    }
+                    
+                    Button("Blockquote (> quote)") { applyMarkdownFormat(.blockquote) }
+                    
+                    Menu("Lists") {
+                        Button("Bullet List (- item)") { applyMarkdownFormat(.unorderedList) }
+                        Button("Numbered List (1. item)") { applyMarkdownFormat(.orderedList) }
+                        Button("Task List (- [ ] task)") { applyMarkdownFormat(.taskList) }
+                    }
+                    
+                    Menu("Code") {
+                        Button("Inline Code (`code`)") { applyMarkdownFormat(.inlineCode) }
+                        Button("Code Block (```)") { applyMarkdownFormat(.codeBlock) }
+                    }
+                    
+                    Divider()
+                    
+                    Button("Horizontal Rule (---)") { applyMarkdownFormat(.horizontalRule) }
+                    Button("Link ([title](url))") { applyMarkdownFormat(.link) }
+                    Button("Image (![alt](url))") { applyMarkdownFormat(.image) }
+                    
+                    Divider()
+                    
+                    Button("Escaping Characters (\\*)") { applyMarkdownFormat(.escapingCharacters) }
+                    Button("HTML (<div>...</div>)") { applyMarkdownFormat(.html) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "textformat")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("Format")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(5)
+                }
+                .menuStyle(.borderlessButton)
+                .help("Markdown Formatting Elements")
+            }
+            
             // View Mode Switcher
             Picker("View Mode", selection: $viewMode) {
                 ForEach(ViewMode.allCases) { mode in
@@ -199,10 +282,18 @@ public struct EditorSplitView: View {
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
+                // Export as PDF Button
+                ToolbarIconButton(
+                    icon: "arrow.down.doc",
+                    helpText: "Export Preview as PDF (⌘P)"
+                ) {
+                    exportPreviewAsPDF(item: item)
+                }
+                
                 // Download File Button
                 ToolbarIconButton(
                     icon: "square.and.arrow.down",
-                    helpText: "Download File"
+                    helpText: "Download Markdown File"
                 ) {
                     downloadFile(item: item)
                 }
@@ -215,13 +306,20 @@ public struct EditorSplitView: View {
                     copyMarkdownContent()
                 }
             }
-            // Hidden Save shortcut (⌘S)
+            // Hidden Save shortcut (⌘S) & Export PDF shortcut (⌘P)
             .background(
-                Button("") {
-                    vault.saveCurrentNote()
-                    showBubble(message: "Note saved")
+                Group {
+                    Button("") {
+                        vault.saveCurrentNote()
+                        showBubble(message: "Note saved")
+                    }
+                    .keyboardShortcut("s", modifiers: .command)
+                    
+                    Button("") {
+                        exportPreviewAsPDF(item: item)
+                    }
+                    .keyboardShortcut("p", modifiers: .command)
                 }
-                .keyboardShortcut("s", modifiers: .command)
                 .opacity(0)
                 .frame(width: 0, height: 0)
             )
@@ -232,6 +330,16 @@ public struct EditorSplitView: View {
     }
     
     // MARK: - Actions
+    
+    private func applyMarkdownFormat(_ element: MarkdownFormatElement) {
+        if viewMode == .preview {
+            viewMode = .split
+        }
+        NotificationCenter.default.post(
+            name: MarkdownFormatService.notificationName,
+            object: element
+        )
+    }
     
     private func copyMarkdownContent() {
         NSPasteboard.general.clearContents()
@@ -277,6 +385,56 @@ public struct EditorSplitView: View {
         } else {
             if savePanel.runModal() == .OK, let targetURL = savePanel.url {
                 writeOperation(targetURL)
+            }
+        }
+    }
+    
+    private func exportPreviewAsPDF(item: NoteItem) {
+        vault.saveCurrentNote()
+        
+        let savePanel = NSSavePanel()
+        savePanel.title = "Export Preview as PDF"
+        savePanel.message = "Choose destination to save the rendered PDF"
+        savePanel.prompt = "Export"
+        savePanel.allowedContentTypes = [.pdf]
+        
+        var baseName = item.name
+        if baseName.hasSuffix(".md") {
+            baseName = String(baseName.dropLast(3))
+        } else if baseName.hasSuffix(".markdown") {
+            baseName = String(baseName.dropLast(9))
+        }
+        savePanel.nameFieldStringValue = "\(baseName).pdf"
+        savePanel.canCreateDirectories = true
+        
+        if let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+            savePanel.directoryURL = downloadsDir
+        }
+        
+        let exportOperation: (URL) -> Void = { targetURL in
+            Task { @MainActor in
+                do {
+                    try await PDFExportService.shared.exportPDF(
+                        markdown: self.vault.editorContent,
+                        theme: ThemeManager.shared.currentTheme,
+                        to: targetURL
+                    )
+                    self.showBubble(message: "PDF exported successfully")
+                } catch {
+                    self.showBubble(message: "PDF export failed: \(error.localizedDescription)")
+                }
+            }
+        }
+        
+        if let window = NSApp.keyWindow {
+            savePanel.beginSheetModal(for: window) { response in
+                if response == .OK, let targetURL = savePanel.url {
+                    exportOperation(targetURL)
+                }
+            }
+        } else {
+            if savePanel.runModal() == .OK, let targetURL = savePanel.url {
+                exportOperation(targetURL)
             }
         }
     }

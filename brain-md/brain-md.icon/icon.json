@@ -2,6 +2,12 @@
   "fill" : {
     "solid" : "display-p3:0.97229,0.93930,1.00000,1.00000"
   },
+  "fill-specializations" : [
+    {
+      "appearance" : "dark",
+      "value" : "system-dark"
+    }
+  ],
   "groups" : [
     {
       "layers" : [

@@ -159,6 +159,9 @@ public struct MarkdownPreviewView: View {
         case taskItem(done: Bool, text: String)
         case listItem(ordered: Bool, number: Int, text: String, indent: Int)
         case table(headers: [String], alignments: [TextAlignment], rows: [[String]])
+        case collapsible(summary: String, content: String)
+        case definitionList(term: String, definitions: [String])
+        case rawHTML(String)
         case horizontalRule
         case paragraph(String)
     }
@@ -192,7 +195,7 @@ public struct MarkdownPreviewView: View {
             let line = lines[i]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             
-            // 1. Skip HTML Comments <!-- ... -->
+            // 1. Skip HTML Comments & Markdown Comments <!-- ... -->, [comment]: # (...), [//]: # (...)
             if trimmed.hasPrefix("<!--") {
                 if trimmed.contains("-->") {
                     i += 1
@@ -204,15 +207,20 @@ public struct MarkdownPreviewView: View {
                 i += 1
                 continue
             }
+            if trimmed.hasPrefix("[comment]: #") || trimmed.hasPrefix("[//]: #") || trimmed.hasPrefix("[comment]: <>") {
+                i += 1
+                continue
+            }
             
-            // 2. Code Block or Mermaid Diagram ```
-            if trimmed.hasPrefix("```") {
+            // 2. Code Block or Mermaid Diagram (``` or ~~~)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                let fence = trimmed.hasPrefix("```") ? "```" : "~~~"
                 let lang = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                 var codeLines: [String] = []
                 i += 1
                 while i < lines.count {
                     let codeLine = lines[i]
-                    if codeLine.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    if codeLine.trimmingCharacters(in: .whitespaces).hasPrefix(fence) {
                         i += 1
                         break
                     }
@@ -228,7 +236,43 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 3. GitHub Alerts > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
+            // 3. Collapsible <details> Block
+            if trimmed.lowercased().hasPrefix("<details") {
+                var detailsLines: [String] = [line]
+                i += 1
+                while i < lines.count {
+                    let curLine = lines[i]
+                    detailsLines.append(curLine)
+                    if curLine.lowercased().contains("</details>") {
+                        i += 1
+                        break
+                    }
+                    i += 1
+                }
+                let (summary, content) = parseDetailsHTML(detailsLines.joined(separator: "\n"))
+                blocks.append(.collapsible(summary: summary, content: content))
+                continue
+            }
+            
+            // 4. Raw HTML Block Elements (<figure>, <center>)
+            if trimmed.lowercased().hasPrefix("<center>") || trimmed.lowercased().hasPrefix("<figure>") {
+                let closingTag = trimmed.lowercased().hasPrefix("<center>") ? "</center>" : "</figure>"
+                var htmlLines: [String] = [line]
+                i += 1
+                while i < lines.count {
+                    let curLine = lines[i]
+                    htmlLines.append(curLine)
+                    if curLine.lowercased().contains(closingTag) {
+                        i += 1
+                        break
+                    }
+                    i += 1
+                }
+                blocks.append(.rawHTML(htmlLines.joined(separator: "\n")))
+                continue
+            }
+            
+            // 5. GitHub Alerts > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
             if isAlertStart(trimmed) {
                 let alertType = extractAlertType(trimmed)
                 var alertLines: [String] = []
@@ -250,7 +294,7 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 4. Standard Blockquote >
+            // 6. Standard Blockquote >
             if trimmed.hasPrefix(">") {
                 var quoteLines: [String] = [String(trimmed.dropFirst(1)).trimmingCharacters(in: .whitespaces)]
                 i += 1
@@ -267,7 +311,7 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 5. GFM Tables (| Header | Header |)
+            // 7. GFM Tables (| Header | Header |)
             if isTableRow(trimmed) && i + 1 < lines.count && isTableDelimiterRow(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
                 let headerCells = parseTableCells(trimmed)
                 let alignments = parseTableAlignments(lines[i + 1].trimmingCharacters(in: .whitespaces))
@@ -286,14 +330,52 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 6. Footnotes definition [^id]: text
+            // 8. Footnotes definition [^id]: text
             if let footnote = parseFootnoteLine(trimmed) {
                 footnotes.append(footnote)
                 i += 1
                 continue
             }
             
-            // 7. Headings (# to ######)
+            // 9. Setext Headings (===, ---) & Definition Lists
+            if !trimmed.isEmpty && i + 1 < lines.count {
+                let nextTrimmed = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                
+                // Setext H1 (===)
+                if nextTrimmed.count >= 2 && nextTrimmed.allSatisfy({ $0 == "=" }) {
+                    blocks.append(.h1(trimmed))
+                    i += 2
+                    continue
+                }
+                
+                // Setext H2 (---)
+                if !trimmed.hasPrefix("-") && !trimmed.hasPrefix("*") && !trimmed.hasPrefix("+") && !trimmed.hasPrefix("#") && !trimmed.hasPrefix(">") && !trimmed.hasPrefix("|") && nextTrimmed.count >= 2 && nextTrimmed.allSatisfy({ $0 == "-" }) {
+                    blocks.append(.h2(trimmed))
+                    i += 2
+                    continue
+                }
+                
+                // Definition List (Term\n: Definition)
+                if !trimmed.hasPrefix("-") && !trimmed.hasPrefix("*") && !trimmed.hasPrefix("+") && !trimmed.hasPrefix("#") && !trimmed.hasPrefix(">") && !trimmed.hasPrefix("|") && (nextTrimmed.hasPrefix(": ") || nextTrimmed.hasPrefix(":\t")) {
+                    let term = trimmed
+                    i += 1
+                    var defs: [String] = []
+                    while i < lines.count {
+                        let curTrimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                        if curTrimmed.hasPrefix(": ") || curTrimmed.hasPrefix(":\t") {
+                            let defText = String(curTrimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                            defs.append(defText)
+                            i += 1
+                        } else {
+                            break
+                        }
+                    }
+                    blocks.append(.definitionList(term: term, definitions: defs))
+                    continue
+                }
+            }
+            
+            // 10. ATX Headings (# to ######)
             if trimmed.hasPrefix("# ") {
                 blocks.append(.h1(String(trimmed.dropFirst(2))))
                 i += 1
@@ -320,14 +402,17 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 8. Horizontal Rules
-            if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+            // 11. Horizontal Rules (---, ***, ___, - - -, * * *)
+            if (trimmed.count >= 3 && trimmed.allSatisfy({ $0 == "-" })) ||
+               (trimmed.count >= 3 && trimmed.allSatisfy({ $0 == "*" })) ||
+               (trimmed.count >= 3 && trimmed.allSatisfy({ $0 == "_" })) ||
+               trimmed == "- - -" || trimmed == "* * *" {
                 blocks.append(.horizontalRule)
                 i += 1
                 continue
             }
             
-            // 9. Task Lists (- [ ] or - [x])
+            // 12. Task Lists (- [ ] or - [x])
             if trimmed.hasPrefix("- [ ] ") {
                 blocks.append(.taskItem(done: false, text: String(trimmed.dropFirst(6))))
                 i += 1
@@ -338,8 +423,10 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 10. Unordered & Ordered Lists
-            let indent = line.prefix(while: { $0 == " " || $0 == "\t" }).count
+            // 13. Unordered & Ordered Lists
+            let leadingChars = line.prefix(while: { $0 == " " || $0 == "\t" })
+            let spaceCount = leadingChars.reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
+            let indent = spaceCount >= 2 ? max(1, spaceCount / 2) : 0
             if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") {
                 blocks.append(.listItem(ordered: false, number: 0, text: String(trimmed.dropFirst(2)), indent: indent))
                 i += 1
@@ -350,7 +437,7 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 11. Regular Paragraph
+            // 14. Regular Paragraph
             if !trimmed.isEmpty {
                 blocks.append(.paragraph(line))
             }
@@ -434,51 +521,205 @@ public struct MarkdownPreviewView: View {
         return (num, text)
     }
     
+    // MARK: - Extended Parsing Helpers
+    
+    public static let emojiMap: [String: String] = [
+        "tada": "🎉", "smile": "😄", "smiley": "😃", "grinning": "😀", "heart": "❤️",
+        "sparkles": "✨", "rocket": "🚀", "fire": "🔥", "star": "⭐", "warning": "⚠️",
+        "bulb": "💡", "eyes": "👀", "white_check_mark": "✅", "check": "✔️", "x": "❌",
+        "memo": "📝", "pencil": "✏️", "books": "📚", "book": "📖", "link": "🔗",
+        "lock": "🔒", "key": "🔑", "gear": "⚙️", "wrench": "🔧", "hammer": "🔨",
+        "zap": "⚡", "100": "💯", "thumbsup": "👍", "+1": "👍", "thumbsdown": "👎",
+        "-1": "👎", "clap": "👏", "wave": "👋", "raised_hands": "🙌", "pray": "🙏",
+        "coffee": "☕", "tea": "🍵", "beer": "🍺", "pizza": "🍕", "burger": "🍔",
+        "apple": "🍎", "bug": "🐛", "art": "🎨", "recycle": "♻️", "globe": "🌐",
+        "earth_americas": "🌎", "bell": "🔔", "mega": "📣", "loudspeaker": "📢",
+        "pin": "📌", "pushpin": "📌", "shield": "🛡️", "package": "📦", "crystal_ball": "🔮",
+        "muscle": "💪", "thinking": "🤔", "innocent": "😇", "sunglasses": "😎",
+        "cry": "😢", "sob": "😭", "joy": "😂", "rofl": "🤣", "skull": "💀",
+        "ghost": "👻", "alien": "👽", "robot": "🤖", "see_no_evil": "🙈",
+        "hear_no_evil": "🙉", "speak_no_evil": "🙊"
+    ]
+    
+    public static func replaceEmojiShortcodes(_ text: String) -> String {
+        guard text.contains(":") else { return text }
+        var result = text
+        if let regex = try? NSRegularExpression(pattern: ":([a-zA-Z0-9_+-]+):") {
+            let matches = regex.matches(in: text, range: NSRange(location: 0, length: text.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: text),
+                   let codeRange = Range(match.range(at: 1), in: text) {
+                    let code = String(text[codeRange])
+                    if let emoji = emojiMap[code] {
+                        result.replaceSubrange(r, with: emoji)
+                    }
+                }
+            }
+        }
+        return result
+    }
+    
+    public static func decodeHTMLEntities(_ text: String) -> String {
+        guard text.contains("&") else { return text }
+        var result = text
+        let entityMap: [String: String] = [
+            "&nbsp;": "\u{00A0}",
+            "&copy;": "©",
+            "&reg;": "®",
+            "&trade;": "™",
+            "&mdash;": "—",
+            "&ndash;": "–",
+            "&bull;": "•",
+            "&#124;": "|",
+            "&euro;": "€",
+            "&pound;": "£",
+            "&yen;": "¥",
+            "&cent;": "¢",
+            "&hellip;": "…",
+            "&times;": "×",
+            "&divide;": "÷",
+            "&plusmn;": "±",
+            "&le;": "≤",
+            "&ge;": "≥",
+            "&ne;": "≠",
+            "&approx;": "≈",
+            "&check;": "✓",
+            "&cross;": "✗",
+            "&quot;": "\"",
+            "&apos;": "'",
+            "&amp;": "&"
+        ]
+        for (ent, val) in entityMap {
+            result = result.replacingOccurrences(of: ent, with: val)
+        }
+        if let decRegex = try? NSRegularExpression(pattern: "&#([0-9]{1,6});") {
+            let matches = decRegex.matches(in: result, range: NSRange(location: 0, length: result.utf16.count))
+            for m in matches.reversed() {
+                if let r = Range(m.range, in: result),
+                   let codeR = Range(m.range(at: 1), in: result),
+                   let code = UInt32(result[codeR]),
+                   let scalar = UnicodeScalar(code) {
+                    result.replaceSubrange(r, with: String(Character(scalar)))
+                }
+            }
+        }
+        if let hexRegex = try? NSRegularExpression(pattern: "&#x([0-9a-fA-F]{1,6});") {
+            let matches = hexRegex.matches(in: result, range: NSRange(location: 0, length: result.utf16.count))
+            for m in matches.reversed() {
+                if let r = Range(m.range, in: result),
+                   let codeR = Range(m.range(at: 1), in: result),
+                   let code = UInt32(result[codeR], radix: 16),
+                   let scalar = UnicodeScalar(code) {
+                    result.replaceSubrange(r, with: String(Character(scalar)))
+                }
+            }
+        }
+        return result
+    }
+    
+    public static func parseHeadingTextAndID(_ raw: String) -> (text: String, id: String?) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if let match = trimmed.range(of: #"\s*\{#([a-zA-Z0-9_\-]+)\}\s*$"#, options: .regularExpression) {
+            let idRange = trimmed.range(of: #"[a-zA-Z0-9_\-]+"#, options: .regularExpression, range: match)!
+            let id = String(trimmed[idRange])
+            let text = String(trimmed[..<match.lowerBound]).trimmingCharacters(in: .whitespaces)
+            return (text, id)
+        }
+        return (trimmed, nil)
+    }
+    
+    public static func parseDetailsHTML(_ rawHTML: String) -> (summary: String, content: String) {
+        var summary = "Details"
+        var content = ""
+        
+        if let sumStart = rawHTML.range(of: "<summary[^>]*>", options: [.regularExpression, .caseInsensitive]),
+           let sumEnd = rawHTML.range(of: "</summary>", options: [.caseInsensitive], range: sumStart.upperBound..<rawHTML.endIndex) {
+            summary = String(rawHTML[sumStart.upperBound..<sumEnd.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            let remaining = rawHTML[sumEnd.upperBound...]
+            if let detailsClose = remaining.range(of: "</details>", options: [.caseInsensitive]) {
+                content = String(remaining[..<detailsClose.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                content = String(remaining).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        } else {
+            if let detailsStart = rawHTML.range(of: "<details[^>]*>", options: [.regularExpression, .caseInsensitive]),
+               let detailsEnd = rawHTML.range(of: "</details>", options: [.caseInsensitive]) {
+                content = String(rawHTML[detailsStart.upperBound..<detailsEnd.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return (summary, content)
+    }
+
+    public static func parseLinkAndTitle(_ raw: String) -> (url: String, title: String?) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if let quoteIdx = trimmed.firstIndex(of: "\""), quoteIdx > trimmed.startIndex {
+            let urlPart = String(trimmed[..<quoteIdx]).trimmingCharacters(in: .whitespaces)
+            let rest = String(trimmed[quoteIdx...])
+            let titlePart = rest.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+            return (urlPart, titlePart.isEmpty ? nil : titlePart)
+        }
+        return (trimmed, nil)
+    }
+    
     // MARK: - View Rendering
     
     @ViewBuilder
     private func renderBlock(_ block: MarkdownBlock) -> some View {
         switch block {
         case .h1(let text):
-            VStack(alignment: .leading, spacing: 6) {
-                Text(parseAttributedString(text))
+            let (title, _) = Self.parseHeadingTextAndID(text)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(parseAttributedString(title))
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundColor(.primary)
                 Divider()
             }
-            .padding(.top, 14)
-            .padding(.bottom, 4)
+            .padding(.top, 28)
+            .padding(.bottom, 12)
             
         case .h2(let text):
+            let (title, _) = Self.parseHeadingTextAndID(text)
             VStack(alignment: .leading, spacing: 6) {
-                Text(parseAttributedString(text))
+                Text(parseAttributedString(title))
                     .font(.system(size: 21, weight: .bold, design: .rounded))
                     .foregroundColor(.primary)
                 Divider()
             }
-            .padding(.top, 10)
-            .padding(.bottom, 2)
+            .padding(.top, 24)
+            .padding(.bottom, 10)
             
         case .h3(let text):
-            Text(parseAttributedString(text))
+            let (title, _) = Self.parseHeadingTextAndID(text)
+            Text(parseAttributedString(title))
                 .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .foregroundColor(.primary)
-                .padding(.top, 6)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
             
         case .h4(let text):
-            Text(parseAttributedString(text))
+            let (title, _) = Self.parseHeadingTextAndID(text)
+            Text(parseAttributedString(title))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.primary)
+                .padding(.top, 16)
+                .padding(.bottom, 6)
             
         case .h5(let text):
-            Text(parseAttributedString(text))
+            let (title, _) = Self.parseHeadingTextAndID(text)
+            Text(parseAttributedString(title))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.secondary)
+                .padding(.top, 14)
+                .padding(.bottom, 4)
             
         case .h6(let text):
-            Text(parseAttributedString(text))
+            let (title, _) = Self.parseHeadingTextAndID(text)
+            Text(parseAttributedString(title))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.secondary)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
             
         case .alert(let type, let text):
             renderAlert(type: type, content: text)
@@ -521,19 +762,39 @@ public struct MarkdownPreviewView: View {
                         .foregroundColor(.secondary)
                         .frame(minWidth: 20, alignment: .trailing)
                 } else {
-                    Circle()
-                        .fill(Color.primary.opacity(0.75))
-                        .frame(width: 5, height: 5)
-                        .padding(.top, 6)
+                    renderBulletGlyph(for: indent)
                 }
                 Text(parseAttributedString(text))
                     .font(.system(size: 14))
                     .lineSpacing(3)
             }
-            .padding(.leading, CGFloat(indent * 8))
+            .padding(.leading, CGFloat(indent * 24))
             
         case .table(let headers, let alignments, let rows):
             renderTable(headers: headers, alignments: alignments, rows: rows)
+            
+        case .collapsible(let summary, let content):
+            CollapsibleDetailsView(summary: summary, content: content)
+            
+        case .definitionList(let term, let definitions):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(parseAttributedString(term))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.primary)
+                ForEach(definitions.indices, id: \.self) { dIdx in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text(parseAttributedString(definitions[dIdx]))
+                            .font(.system(size: 13.5))
+                            .foregroundColor(.secondary)
+                            .lineSpacing(3)
+                    }
+                    .padding(.leading, 18)
+                }
+            }
+            .padding(.vertical, 4)
+            
+        case .rawHTML(let html):
+            renderRawHTMLBlock(html)
             
         case .horizontalRule:
             Divider()
@@ -544,7 +805,60 @@ public struct MarkdownPreviewView: View {
         }
     }
     
+    @ViewBuilder
+    private func renderRawHTMLBlock(_ html: String) -> some View {
+        let trimmed = html.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("<center>") {
+            let stripped = trimmed
+                .replacingOccurrences(of: "<center>", with: "", options: .caseInsensitive)
+                .replacingOccurrences(of: "</center>", with: "", options: .caseInsensitive)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            Text(parseAttributedString(stripped))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
+        } else {
+            let stripped = trimmed.replacingOccurrences(of: "</?[a-zA-Z][a-zA-Z0-9]*\\b[^>]*\\/?>", with: "", options: .regularExpression)
+            if !stripped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(parseAttributedString(stripped))
+                    .font(.system(size: 14))
+                    .padding(.vertical, 2)
+            }
+        }
+    }
+    
     // MARK: - Component Renderers
+    
+    @ViewBuilder
+    private func renderBulletGlyph(for indent: Int) -> some View {
+        let level = indent % 4
+        switch level {
+        case 0:
+            // Level 0: Solid disc •
+            Circle()
+                .fill(Color.primary.opacity(0.75))
+                .frame(width: 5, height: 5)
+                .padding(.top, 6)
+        case 1:
+            // Level 1: Hollow circle ◦ (matching VS Code)
+            Circle()
+                .strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.25)
+                .frame(width: 5, height: 5)
+                .padding(.top, 6)
+        case 2:
+            // Level 2: Solid square ▪
+            Rectangle()
+                .fill(Color.primary.opacity(0.75))
+                .frame(width: 4.5, height: 4.5)
+                .padding(.top, 6.5)
+        default:
+            // Level 3+: Hollow square ▫
+            Rectangle()
+                .strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.25)
+                .frame(width: 4.5, height: 4.5)
+                .padding(.top, 6.5)
+        }
+    }
     
     @ViewBuilder
     private func renderAlert(type: AlertType, content: String) -> some View {
@@ -700,32 +1014,153 @@ public struct MarkdownPreviewView: View {
     // MARK: - Inline Markdown Parsing
     
     private func parseAttributedString(_ markdown: String) -> AttributedString {
+        Self.parseStaticAttributedString(markdown)
+    }
+    
+    public static func parseStaticAttributedString(_ markdown: String) -> AttributedString {
         let cacheKey = "\(markdown.hashValue)_\(markdown.count)" as NSString
-        if let cached = Self.inlineStringCache.object(forKey: cacheKey) {
+        if let cached = inlineStringCache.object(forKey: cacheKey) {
             return cached.value
         }
         
         let sanitized = sanitizeMarkdown(markdown)
-        let attributed: AttributedString
+        var attributed: AttributedString
         do {
             var options = AttributedString.MarkdownParsingOptions()
             options.interpretedSyntax = .inlineOnlyPreservingWhitespace
             attributed = (try? AttributedString(markdown: sanitized, options: options)) ?? AttributedString(markdown)
         }
-        Self.inlineStringCache.setObject(InlineStringCacheBox(attributed), forKey: cacheKey)
+        
+        attributed = applyHighlightBackground(to: attributed, original: markdown)
+        inlineStringCache.setObject(InlineStringCacheBox(attributed), forKey: cacheKey)
         return attributed
     }
     
-    private func sanitizeMarkdown(_ text: String) -> String {
+    public static func sanitizeMarkdown(_ text: String) -> String {
         var result = text
         
-        // Convert HTML strikethrough <del> / <s> to markdown ~~
+        // 1. Decode HTML entities
+        result = decodeHTMLEntities(result)
+        
+        // 2. Map emoji shortcodes
+        result = replaceEmojiShortcodes(result)
+        
+        // 3. HTML formatting tags to Markdown syntax
         result = result.replacingOccurrences(of: "<del>", with: "~~")
         result = result.replacingOccurrences(of: "</del>", with: "~~")
         result = result.replacingOccurrences(of: "<s>", with: "~~")
         result = result.replacingOccurrences(of: "</s>", with: "~~")
+        result = result.replacingOccurrences(of: "<strike>", with: "~~")
+        result = result.replacingOccurrences(of: "</strike>", with: "~~")
+        result = result.replacingOccurrences(of: "<b>", with: "**")
+        result = result.replacingOccurrences(of: "</b>", with: "**")
+        result = result.replacingOccurrences(of: "<strong>", with: "**")
+        result = result.replacingOccurrences(of: "</strong>", with: "**")
+        result = result.replacingOccurrences(of: "<i>", with: "*")
+        result = result.replacingOccurrences(of: "</i>", with: "*")
+        result = result.replacingOccurrences(of: "<em>", with: "*")
+        result = result.replacingOccurrences(of: "</em>", with: "*")
+        result = result.replacingOccurrences(of: "<br>", with: "\n")
+        result = result.replacingOccurrences(of: "<br/>", with: "\n")
+        result = result.replacingOccurrences(of: "<br />", with: "\n")
+        
+        // 4. Convert <kbd>key</kbd> to `key`
+        if let kbdRegex = try? NSRegularExpression(pattern: "<kbd>([^<]+)</kbd>") {
+            result = kbdRegex.stringByReplacingMatches(in: result, range: NSRange(location: 0, length: result.utf16.count), withTemplate: "`$1`")
+        }
+        
+        // 5. Convert <mark>text</mark> to ==text==
+        result = result.replacingOccurrences(of: "<mark>", with: "==")
+        result = result.replacingOccurrences(of: "</mark>", with: "==")
+        
+        // 6. Strip presentation tags while preserving inner content (<font ...>, <span>, <u>, <ins>, etc.)
+        if let tagStripRegex = try? NSRegularExpression(pattern: "</?(?:font|span|u|ins|sub|sup|abbr|small|big|cite|dfn)\\b[^>]*>") {
+            result = tagStripRegex.stringByReplacingMatches(in: result, range: NSRange(location: 0, length: result.utf16.count), withTemplate: "")
+        }
+        
+        // 7. Strip == from sanitized string so AttributedString renders clean text
+        result = result.replacingOccurrences(of: "==", with: "")
         
         return result
+    }
+    
+    private static func applyHighlightBackground(to attributed: AttributedString, original: String) -> AttributedString {
+        guard original.contains("==") || original.contains("<mark>") else { return attributed }
+        var copy = attributed
+        if let highlightRegex = try? NSRegularExpression(pattern: "==([^=\\n]+)==") {
+            let matches = highlightRegex.matches(in: original, range: NSRange(location: 0, length: original.utf16.count))
+            for m in matches {
+                if let r = Range(m.range(at: 1), in: original) {
+                    let target = String(original[r])
+                    if let range = copy.range(of: target) {
+                        copy[range].backgroundColor = Color.yellow.opacity(0.32)
+                    }
+                }
+            }
+        }
+        return copy
+    }
+}
+
+// MARK: - CollapsibleDetailsView
+
+public struct CollapsibleDetailsView: View {
+    public let summary: String
+    public let content: String
+    
+    @State private var isExpanded: Bool = false
+    
+    public init(summary: String, content: String) {
+        self.summary = summary
+        self.content = content
+    }
+    
+    public var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            let innerDoc = MarkdownPreviewView.parseDocument(content)
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(innerDoc.blocks.indices, id: \.self) { idx in
+                    renderSubBlock(innerDoc.blocks[idx])
+                }
+            }
+            .padding(.top, 8)
+            .padding(.leading, 8)
+        } label: {
+            Text(MarkdownPreviewView.parseStaticAttributedString(summary))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.primary)
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.03))
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
+    }
+    
+    @ViewBuilder
+    private func renderSubBlock(_ block: MarkdownPreviewView.MarkdownBlock) -> some View {
+        switch block {
+        case .paragraph(let text):
+            Text(MarkdownPreviewView.parseStaticAttributedString(text))
+                .font(.system(size: 14))
+                .lineSpacing(3)
+        case .codeBlock(let lang, let code):
+            CodeBlockView(language: lang, code: code)
+        case .listItem(let ordered, let number, let text, let indent):
+            HStack(alignment: .top, spacing: 6) {
+                Text(ordered ? "\(number)." : "•")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.secondary)
+                Text(MarkdownPreviewView.parseStaticAttributedString(text))
+                    .font(.system(size: 13.5))
+            }
+            .padding(.leading, CGFloat(indent * 16))
+        default:
+            Text(MarkdownPreviewView.parseStaticAttributedString(String(describing: block)))
+                .font(.system(size: 13.5))
+        }
     }
 }
 
@@ -1161,17 +1596,29 @@ public enum MarkdownHTMLRenderer {
         for block in blocks {
             switch block {
             case .h1(let text):
-                out += "<h1 id=\"\(slugify(text))\">\(renderInline(text))</h1>\n"
+                let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
+                let anchor = id ?? slugify(title)
+                out += "<h1 id=\"\(anchor)\">\(renderInline(title))</h1>\n"
             case .h2(let text):
-                out += "<h2 id=\"\(slugify(text))\">\(renderInline(text))</h2>\n"
+                let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
+                let anchor = id ?? slugify(title)
+                out += "<h2 id=\"\(anchor)\">\(renderInline(title))</h2>\n"
             case .h3(let text):
-                out += "<h3 id=\"\(slugify(text))\">\(renderInline(text))</h3>\n"
+                let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
+                let anchor = id ?? slugify(title)
+                out += "<h3 id=\"\(anchor)\">\(renderInline(title))</h3>\n"
             case .h4(let text):
-                out += "<h4 id=\"\(slugify(text))\">\(renderInline(text))</h4>\n"
+                let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
+                let anchor = id ?? slugify(title)
+                out += "<h4 id=\"\(anchor)\">\(renderInline(title))</h4>\n"
             case .h5(let text):
-                out += "<h5 id=\"\(slugify(text))\">\(renderInline(text))</h5>\n"
+                let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
+                let anchor = id ?? slugify(title)
+                out += "<h5 id=\"\(anchor)\">\(renderInline(title))</h5>\n"
             case .h6(let text):
-                out += "<h6 id=\"\(slugify(text))\">\(renderInline(text))</h6>\n"
+                let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
+                let anchor = id ?? slugify(title)
+                out += "<h6 id=\"\(anchor)\">\(renderInline(title))</h6>\n"
             case .alert(let type, let text):
                 out += renderAlertHTML(type: type, text: text) + "\n"
             case .codeBlock(let lang, let code):
@@ -1190,8 +1637,9 @@ public enum MarkdownHTMLRenderer {
                 </div>\n
                 """
             case .listItem(let ordered, let number, let text, let indent):
-                let bullet = ordered ? "\(number)." : "•"
-                let padding = indent * 16
+                let bullets = ["•", "◦", "▪", "▫"]
+                let bullet = ordered ? "\(number)." : bullets[min(max(0, indent), bullets.count - 1)]
+                let padding = indent * 24
                 out += """
                 <div class="list-item" style="padding-left: \(padding)px;">
                   <span class="list-bullet">\(bullet)</span>
@@ -1200,6 +1648,23 @@ public enum MarkdownHTMLRenderer {
                 """
             case .table(let headers, let alignments, let rows):
                 out += renderTableHTML(headers: headers, alignments: alignments, rows: rows) + "\n"
+            case .collapsible(let summary, let content):
+                let (title, _) = MarkdownPreviewView.parseHeadingTextAndID(summary)
+                let innerDoc = MarkdownPreviewView.parseDocument(content)
+                out += "<details class=\"markdown-details\">\n"
+                out += "<summary class=\"markdown-summary\">\(renderInline(title))</summary>\n"
+                out += "<div class=\"markdown-details-body\">\n"
+                out += renderBodyHTML(blocks: innerDoc.blocks, footnotes: innerDoc.footnotes)
+                out += "</div>\n</details>\n"
+            case .definitionList(let term, let definitions):
+                out += "<dl class=\"markdown-dl\">\n"
+                out += "<dt class=\"markdown-dt\">\(renderInline(term))</dt>\n"
+                for def in definitions {
+                    out += "<dd class=\"markdown-dd\">\(renderInline(def))</dd>\n"
+                }
+                out += "</dl>\n"
+            case .rawHTML(let html):
+                out += html + "\n"
             case .horizontalRule:
                 out += "<hr class=\"markdown-hr\" />\n"
             case .paragraph(let text):
@@ -1362,6 +1827,8 @@ public enum MarkdownHTMLRenderer {
         str = str.replacingOccurrences(of: "</del>", with: "~~")
         str = str.replacingOccurrences(of: "<s>", with: "~~")
         str = str.replacingOccurrences(of: "</s>", with: "~~")
+        str = str.replacingOccurrences(of: "<strike>", with: "~~")
+        str = str.replacingOccurrences(of: "</strike>", with: "~~")
         
         var placeholders: [String: String] = [:]
         var pCounter = 0
@@ -1389,10 +1856,12 @@ public enum MarkdownHTMLRenderer {
                    let altR = Range(match.range(at: 1), in: str),
                    let urlR = Range(match.range(at: 2), in: str) {
                     let alt = String(str[altR])
-                    let url = String(str[urlR]).trimmingCharacters(in: .whitespaces)
+                    let rawUrl = String(str[urlR]).trimmingCharacters(in: .whitespaces)
+                    let (url, title) = MarkdownPreviewView.parseLinkAndTitle(rawUrl)
+                    let titleAttr = title != nil ? " title=\"\(escapeHTML(title!))\"" : ""
                     let key = "@@IMG_\(pCounter)@@"
                     pCounter += 1
-                    placeholders[key] = "<img src=\"\(escapeHTML(url))\" alt=\"\(escapeHTML(alt))\" style=\"max-width: 100%; height: auto; border-radius: 4px;\" />"
+                    placeholders[key] = "<img src=\"\(escapeHTML(url))\" alt=\"\(escapeHTML(alt))\"\(titleAttr) style=\"max-width: 100%; height: auto; border-radius: 4px;\" />"
                     str.replaceSubrange(r, with: key)
                 }
             }
@@ -1406,16 +1875,46 @@ public enum MarkdownHTMLRenderer {
                    let textR = Range(match.range(at: 1), in: str),
                    let urlR = Range(match.range(at: 2), in: str) {
                     let linkText = String(str[textR])
-                    let url = String(str[urlR]).trimmingCharacters(in: .whitespaces)
+                    let rawUrl = String(str[urlR]).trimmingCharacters(in: .whitespaces)
+                    let (url, title) = MarkdownPreviewView.parseLinkAndTitle(rawUrl)
+                    let titleAttr = title != nil ? " title=\"\(escapeHTML(title!))\"" : ""
                     let key = "@@LINK_\(pCounter)@@"
                     pCounter += 1
-                    placeholders[key] = "<a href=\"\(escapeHTML(url))\" class=\"markdown-link\">\(escapeHTML(linkText))</a>"
+                    placeholders[key] = "<a href=\"\(escapeHTML(url))\"\(titleAttr) class=\"markdown-link\">\(escapeHTML(linkText))</a>"
                     str.replaceSubrange(r, with: key)
                 }
             }
         }
         
-        // Step 4: Footnote references [^id]
+        // Step 4: Angle bracket links <https://example.com>
+        if let autoLinkRegex = try? NSRegularExpression(pattern: "<(https?:\\/\\/[^>\\s]+)>") {
+            let matches = autoLinkRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let urlR = Range(match.range(at: 1), in: str) {
+                    let url = String(str[urlR])
+                    let key = "@@AUTOLINK_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<a href=\"\(escapeHTML(url))\" class=\"markdown-link\">\(escapeHTML(url))</a>"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        if let emailRegex = try? NSRegularExpression(pattern: "<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})>") {
+            let matches = emailRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str),
+                   let emailR = Range(match.range(at: 1), in: str) {
+                    let email = String(str[emailR])
+                    let key = "@@EMAIL_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = "<a href=\"mailto:\(escapeHTML(email))\" class=\"markdown-link\">\(escapeHTML(email))</a>"
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 5: Footnote references [^id]
         if let fnRefRegex = try? NSRegularExpression(pattern: "\\[\\^([^\\]]+)\\]") {
             let matches = fnRefRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
             for match in matches.reversed() {
@@ -1430,10 +1929,38 @@ public enum MarkdownHTMLRenderer {
             }
         }
         
-        // Step 5: HTML escape remaining text
+        // Step 6: Preserve raw HTML entities (&copy;, &#124;, &nbsp;, etc.)
+        if let entityRegex = try? NSRegularExpression(pattern: "&([a-zA-Z0-9]+|#[0-9]{1,6}|#x[0-9a-fA-F]{1,6});") {
+            let matches = entityRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str) {
+                    let ent = String(str[r])
+                    let key = "@@HTML_ENT_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = ent
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 7: Preserve valid HTML tags (<u>, </u>, <mark>, <kbd>, <ins>, <font color="...">, <span style="...">, <br>, <sub>, <sup>, etc.)
+        if let tagRegex = try? NSRegularExpression(pattern: "</?[a-zA-Z][a-zA-Z0-9]*\\b[^>]*\\/?>") {
+            let matches = tagRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
+            for match in matches.reversed() {
+                if let r = Range(match.range, in: str) {
+                    let tag = String(str[r])
+                    let key = "@@HTML_TAG_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = tag
+                    str.replaceSubrange(r, with: key)
+                }
+            }
+        }
+        
+        // Step 8: HTML escape remaining text
         str = escapeHTML(str)
         
-        // Step 6: Hex color badges e.g. #0969da
+        // Step 9: Hex color badges e.g. #0969da
         if let hexRegex = try? NSRegularExpression(pattern: "(?<=^|[\\s\\(\\)\\[\\]\\{\\},;:])#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\\b") {
             let matches = hexRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
             for match in matches.reversed() {
@@ -1448,7 +1975,7 @@ public enum MarkdownHTMLRenderer {
             }
         }
         
-        // Step 7: Hashtags #tag
+        // Step 10: Hashtags #tag
         if let tagRegex = try? NSRegularExpression(pattern: "(?<=^|[\\s\\(\\)\\[\\]])#([a-zA-Z][a-zA-Z0-9_\\-]*)\\b") {
             let matches = tagRegex.matches(in: str, range: NSRange(location: 0, length: str.utf16.count))
             for match in matches.reversed() {
@@ -1463,7 +1990,17 @@ public enum MarkdownHTMLRenderer {
             }
         }
         
-        // Step 8: Bold, Italic, Strikethrough
+        // Step 11: Auto-link bare URLs
+        if let bareUrlRegex = try? NSRegularExpression(pattern: "(?<!href=\")(?<!src=\")\\b(https?:\\/\\/[a-zA-Z0-9\\-\\._~:\\/\\?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=%]+)") {
+            str = bareUrlRegex.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<a href=\"$1\" class=\"markdown-link\">$1</a>")
+        }
+        
+        // Step 12: Highlight ==text== -> <mark>text</mark>
+        if let hlRegex = try? NSRegularExpression(pattern: "==([^=\\n]+)==") {
+            str = hlRegex.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<mark>$1</mark>")
+        }
+        
+        // Step 13: Bold, Italic, Strikethrough (run before subscript to consume ~~)
         if let boldRegex1 = try? NSRegularExpression(pattern: "\\*\\*([^*]+)\\*\\*") {
             str = boldRegex1.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<strong>$1</strong>")
         }
@@ -1480,7 +2017,20 @@ public enum MarkdownHTMLRenderer {
             str = strikeRegex.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<del>$1</del>")
         }
         
-        // Step 9: Restore placeholders
+        // Step 14: Subscript ~text~ -> <sub>text</sub>
+        if let subRegex = try? NSRegularExpression(pattern: "(?<!~)~([^~\\s\\n]+)~(?!~)") {
+            str = subRegex.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<sub>$1</sub>")
+        }
+        
+        // Step 15: Superscript ^text^ -> <sup>text</sup>
+        if let supRegex = try? NSRegularExpression(pattern: "(?<!\\^)\\^([^\\^\\s\\n]+)\\^(?!\\^)") {
+            str = supRegex.stringByReplacingMatches(in: str, range: NSRange(location: 0, length: str.utf16.count), withTemplate: "<sup>$1</sup>")
+        }
+        
+        // Step 16: Emoji shortcodes
+        str = MarkdownPreviewView.replaceEmojiShortcodes(str)
+        
+        // Step 17: Restore placeholders
         for (key, val) in placeholders {
             str = str.replacingOccurrences(of: key, with: val)
         }
@@ -1584,17 +2134,15 @@ public enum MarkdownHTMLRenderer {
         /* Headings */
         h1, h2, h3, h4, h5, h6 {
           font-weight: 600;
-          line-height: 1.25;
-          margin-top: 24px;
-          margin-bottom: 12px;
+          line-height: 1.3;
           color: var(--text-color);
         }
-        h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
-        h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
-        h3 { font-size: 1.25em; }
-        h4 { font-size: 1em; }
-        h5 { font-size: 0.875em; opacity: 0.85; }
-        h6 { font-size: 0.85em; opacity: 0.7; }
+        h1 { font-size: 2em; margin-top: 36px; margin-bottom: 16px; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
+        h2 { font-size: 1.5em; margin-top: 30px; margin-bottom: 14px; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
+        h3 { font-size: 1.25em; margin-top: 26px; margin-bottom: 12px; }
+        h4 { font-size: 1em; margin-top: 20px; margin-bottom: 10px; }
+        h5 { font-size: 0.875em; margin-top: 18px; margin-bottom: 8px; opacity: 0.85; }
+        h6 { font-size: 0.85em; margin-top: 16px; margin-bottom: 6px; opacity: 0.7; }
 
         p {
           margin-top: 0;
@@ -1955,6 +2503,118 @@ public enum MarkdownHTMLRenderer {
         }
         .mermaid {
           text-align: center;
+        }
+
+        /* Extended Markdown & HTML Syntax */
+        mark {
+          background-color: #fff8c5;
+          color: #24292f;
+          padding: 0.15em 0.35em;
+          border-radius: 3px;
+        }
+        @media (prefers-color-scheme: dark) {
+          mark {
+            background-color: rgba(187, 128, 9, 0.4);
+            color: #f0f6fc;
+          }
+        }
+        kbd {
+          font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+          font-size: 0.85em;
+          background-color: var(--inline-code-bg);
+          color: var(--text-color);
+          padding: 0.2em 0.45em;
+          border-radius: 4px;
+          border: 1px solid var(--border-color);
+          box-shadow: inset 0 -1px 0 var(--border-color);
+        }
+        ins, u {
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        sub {
+          font-size: 0.75em;
+          line-height: 0;
+          position: relative;
+          vertical-align: baseline;
+          bottom: -0.25em;
+        }
+        sup {
+          font-size: 0.75em;
+          line-height: 0;
+          position: relative;
+          vertical-align: baseline;
+          top: -0.5em;
+        }
+        dl.markdown-dl {
+          margin: 12px 0;
+        }
+        dt.markdown-dt {
+          font-weight: 600;
+          margin-top: 8px;
+          color: var(--text-color);
+        }
+        dd.markdown-dd {
+          margin-left: 24px;
+          margin-bottom: 6px;
+          color: var(--text-color);
+          opacity: 0.88;
+        }
+        details.markdown-details {
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          padding: 8px 14px;
+          margin: 12px 0;
+          background-color: var(--inline-code-bg);
+        }
+        summary.markdown-summary {
+          font-weight: 600;
+          cursor: pointer;
+          padding: 4px 0;
+          outline: none;
+          user-select: none;
+        }
+        .markdown-details-body {
+          margin-top: 10px;
+          padding-top: 8px;
+          border-top: 1px solid var(--border-color);
+        }
+        figure {
+          margin: 16px 0;
+          text-align: center;
+        }
+        figcaption {
+          font-size: 0.88em;
+          color: var(--text-color);
+          opacity: 0.75;
+          margin-top: 6px;
+        }
+
+        /* Print & PDF Export Optimizations */
+        @media print {
+          @page {
+            margin: 16mm 14mm;
+          }
+          html, body {
+            background-color: var(--bg-color) !important;
+            color: var(--text-color) !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #markdown-root {
+            max-width: 100% !important;
+            padding: 0 !important;
+          }
+          .code-block-container, blockquote, .markdown-alert, table, tr, pre, .frontmatter-card {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .code-block-header button, .code-copy-btn, .copy-button {
+            display: none !important;
+          }
+          a {
+            text-decoration: underline !important;
+          }
         }
         """
     }

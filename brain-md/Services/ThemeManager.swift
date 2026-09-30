@@ -59,6 +59,12 @@ public final class ThemeManager: ObservableObject {
         ThemeManager.resolveTheme(for: colorScheme)
     }
     
+    /// Returns the currently active theme based on effective application appearance
+    public var currentTheme: TerminalTheme {
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return currentTheme(for: isDark ? .dark : .light)
+    }
+    
     /// Returns the active syntax theme for code blocks and diagrams
     public func currentSyntaxTheme(for colorScheme: ColorScheme) -> SyntaxTheme {
         currentTheme(for: colorScheme).toSyntaxTheme()

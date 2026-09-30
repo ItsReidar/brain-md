@@ -1279,7 +1279,432 @@ struct brain_mdTests {
             #expect(fmKeyColor == nsTheme.frontmatterKey)
         }
     }
+    // MARK: - PDFExportService Tests
+    
+    @Test @MainActor func testPDFExportServiceDataGeneration() async throws {
+        let sampleMarkdown = """
+        # PDF Export Document Title
+        
+        This document verifies the vector PDF generation engine.
+        
+        > [!NOTE]
+        > High-fidelity vector callout block.
+        
+        | Feature | Tested |
+        | :--- | :--- |
+        | Vector Fonts | Yes |
+        | Codeblock Styling | Yes |
+        
+        ```swift
+        let status = "success"
+        ```
+        """
+        
+        // 1. Generate PDF Data in memory
+        let pdfData = try await PDFExportService.shared.generatePDFData(
+            markdown: sampleMarkdown,
+            theme: TerminalThemes.dark[0]
+        )
+        
+        #expect(!pdfData.isEmpty)
+        #expect(pdfData.count > 1000)
+        
+        // 2. Validate PDF signature (%PDF-)
+        let header = String(data: pdfData.prefix(5), encoding: .ascii)
+        #expect(header?.hasPrefix("%PDF") == true)
+        
+        // 3. Test writing to file
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_export_\(UUID().uuidString).pdf")
+        try await PDFExportService.shared.exportPDF(
+            markdown: sampleMarkdown,
+            theme: TerminalThemes.light[0],
+            to: tempURL
+        )
+        
+        #expect(FileManager.default.fileExists(atPath: tempURL.path))
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: tempURL.path)[.size] as? Int) ?? 0
+        #expect(fileSize > 1000)
+        
+        try? FileManager.default.removeItem(at: tempURL)
+    }
+
+    @Test func testMarkdownFormatHeadings() {
+        // 1. Empty text heading 1 insertion
+        let h1Result = MarkdownFormatService.format(
+            element: .heading(level: 1),
+            fullText: "",
+            selectedRange: NSRange(location: 0, length: 0)
+        )
+        #expect(h1Result.replacementText == "# Heading 1\n")
+        #expect(h1Result.newSelectedRange.length == 9) // "Heading 1"
+        
+        // 2. Selection heading 2
+        let text = "Introduction to Neural Networks"
+        let h2Result = MarkdownFormatService.format(
+            element: .heading(level: 2),
+            fullText: text,
+            selectedRange: NSRange(location: 0, length: (text as NSString).length)
+        )
+        #expect(h2Result.replacementText == "## Introduction to Neural Networks")
+        
+        // 3. Existing heading level change
+        let existingH1 = "# Old Title\n"
+        let h3Result = MarkdownFormatService.format(
+            element: .heading(level: 3),
+            fullText: existingH1,
+            selectedRange: NSRange(location: 2, length: 0)
+        )
+        #expect(h3Result.replacementText == "### Old Title\n")
+    }
+
+    @Test func testMarkdownFormatEmphasis() {
+        // Bold selection
+        let boldRes = MarkdownFormatService.format(
+            element: .bold,
+            fullText: "highlighted",
+            selectedRange: NSRange(location: 0, length: 11)
+        )
+        #expect(boldRes.replacementText == "**highlighted**")
+        
+        // Italic empty
+        let italicRes = MarkdownFormatService.format(
+            element: .italic,
+            fullText: "",
+            selectedRange: NSRange(location: 0, length: 0)
+        )
+        #expect(italicRes.replacementText == "*Italic text*")
+        
+        // Bold & Italic
+        let biRes = MarkdownFormatService.format(
+            element: .boldItalic,
+            fullText: "strong",
+            selectedRange: NSRange(location: 0, length: 6)
+        )
+        #expect(biRes.replacementText == "***strong***")
+        
+        // Strikethrough
+        let strikeRes = MarkdownFormatService.format(
+            element: .strikethrough,
+            fullText: "deprecated",
+            selectedRange: NSRange(location: 0, length: 10)
+        )
+        #expect(strikeRes.replacementText == "~~deprecated~~")
+    }
+
+    @Test func testMarkdownFormatListsAndBlockquote() {
+        let multiLine = "Alpha\nBeta\nGamma"
+        
+        // Unordered list
+        let ulRes = MarkdownFormatService.format(
+            element: .unorderedList,
+            fullText: multiLine,
+            selectedRange: NSRange(location: 0, length: (multiLine as NSString).length)
+        )
+        #expect(ulRes.replacementText == "- Alpha\n- Beta\n- Gamma")
+        
+        // Ordered list
+        let olRes = MarkdownFormatService.format(
+            element: .orderedList,
+            fullText: multiLine,
+            selectedRange: NSRange(location: 0, length: (multiLine as NSString).length)
+        )
+        #expect(olRes.replacementText == "1. Alpha\n2. Beta\n3. Gamma")
+        
+        // Task list
+        let taskRes = MarkdownFormatService.format(
+            element: .taskList,
+            fullText: multiLine,
+            selectedRange: NSRange(location: 0, length: (multiLine as NSString).length)
+        )
+        #expect(taskRes.replacementText == "- [ ] Alpha\n- [ ] Beta\n- [ ] Gamma")
+        
+        // Blockquote
+        let bqRes = MarkdownFormatService.format(
+            element: .blockquote,
+            fullText: multiLine,
+            selectedRange: NSRange(location: 0, length: (multiLine as NSString).length)
+        )
+        #expect(bqRes.replacementText == "> Alpha\n> Beta\n> Gamma")
+    }
+
+    @Test func testMarkdownFormatCodeLinkHorizontalRuleAndEscapes() {
+        // Inline code
+        let inlineRes = MarkdownFormatService.format(
+            element: .inlineCode,
+            fullText: "var foo = 42",
+            selectedRange: NSRange(location: 0, length: 12)
+        )
+        #expect(inlineRes.replacementText == "`var foo = 42`")
+        
+        // Code block
+        let codeBlockRes = MarkdownFormatService.format(
+            element: .codeBlock,
+            fullText: "print(123)",
+            selectedRange: NSRange(location: 0, length: 10)
+        )
+        #expect(codeBlockRes.replacementText.contains("```\nprint(123)\n```"))
+        
+        // Horizontal rule
+        let hrRes = MarkdownFormatService.format(
+            element: .horizontalRule,
+            fullText: "",
+            selectedRange: NSRange(location: 0, length: 0)
+        )
+        #expect(hrRes.replacementText == "\n\n---\n\n")
+        
+        // Link
+        let linkRes = MarkdownFormatService.format(
+            element: .link,
+            fullText: "Swift Docs",
+            selectedRange: NSRange(location: 0, length: 10)
+        )
+        #expect(linkRes.replacementText == "[Swift Docs](https://example.com)")
+        
+        // Image
+        let imgRes = MarkdownFormatService.format(
+            element: .image,
+            fullText: "Logo",
+            selectedRange: NSRange(location: 0, length: 4)
+        )
+        #expect(imgRes.replacementText == "![Logo](https://example.com/image.png)")
+        
+        // Escaping characters
+        let escapeRes = MarkdownFormatService.format(
+            element: .escapingCharacters,
+            fullText: "*asterisks* and #hashtags",
+            selectedRange: NSRange(location: 0, length: 25)
+        )
+        #expect(escapeRes.replacementText == "\\*asterisks\\* and \\#hashtags")
+        
+        // HTML
+        let htmlRes = MarkdownFormatService.format(
+            element: .html,
+            fullText: "Styled text",
+            selectedRange: NSRange(location: 0, length: 11)
+        )
+        #expect(htmlRes.replacementText.contains("<div class=\"note\">"))
+        #expect(htmlRes.replacementText.contains("Styled text"))
+    }
+    
+    @Test func testHierarchicalBulletIndentLevels() {
+        let markdown = """
+        - Root item
+          - Level 1 (2 spaces)
+            - Level 2 (4 spaces)
+              - Level 3 (6 spaces)
+        \t- Tab item (4 spaces equivalent)
+        """
+        
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 5)
+        
+        if case .listItem(let ordered, _, let text, let indent) = doc.blocks[0] {
+            #expect(!ordered)
+            #expect(text == "Root item")
+            #expect(indent == 0)
+        } else {
+            Issue.record("Expected listItem at index 0")
+        }
+        
+        if case .listItem(_, _, let text, let indent) = doc.blocks[1] {
+            #expect(text == "Level 1 (2 spaces)")
+            #expect(indent == 1)
+        } else {
+            Issue.record("Expected listItem at index 1")
+        }
+        
+        if case .listItem(_, _, let text, let indent) = doc.blocks[2] {
+            #expect(text == "Level 2 (4 spaces)")
+            #expect(indent == 2)
+        } else {
+            Issue.record("Expected listItem at index 2")
+        }
+        
+        if case .listItem(_, _, let text, let indent) = doc.blocks[3] {
+            #expect(text == "Level 3 (6 spaces)")
+            #expect(indent == 3)
+        } else {
+            Issue.record("Expected listItem at index 3")
+        }
+        
+        if case .listItem(_, _, let text, let indent) = doc.blocks[4] {
+            #expect(text == "Tab item (4 spaces equivalent)")
+            #expect(indent == 2)
+        } else {
+            Issue.record("Expected listItem at index 4")
+        }
+    }
+    
+    @Test func testHeadingParsingAndHTMLRendering() {
+        let markdown = """
+        # Main Title
+        ## Subtitle Section
+        ### Deep Topic
+        - Level 0 bullet
+          - Level 1 bullet
+        """
+        
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 5)
+        
+        if case .h1(let text) = doc.blocks[0] {
+            #expect(text == "Main Title")
+        } else {
+            Issue.record("Expected h1 at index 0")
+        }
+        
+        if case .h2(let text) = doc.blocks[1] {
+            #expect(text == "Subtitle Section")
+        } else {
+            Issue.record("Expected h2 at index 1")
+        }
+        
+        let html = MarkdownHTMLRenderer.renderBodyHTML(blocks: doc.blocks, footnotes: [])
+        #expect(html.contains("<h1 id=\"main-title\">Main Title</h1>"))
+        #expect(html.contains("<h2 id=\"subtitle-section\">Subtitle Section</h2>"))
+        #expect(html.contains("list-bullet\">•</span>"))
+        #expect(html.contains("list-bullet\">◦</span>"))
+    }
+    
+    @Test func testSetextHeadingsAndTildeCodeBlocks() {
+        let markdown = """
+        Setext Primary
+        ===
+        
+        Setext Secondary
+        ---
+        
+        ~~~swift
+        let val = 42
+        ~~~
+        """
+        
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 3)
+        
+        if case .h1(let text) = doc.blocks[0] {
+            #expect(text == "Setext Primary")
+        } else {
+            Issue.record("Expected Setext h1")
+        }
+        
+        if case .h2(let text) = doc.blocks[1] {
+            #expect(text == "Setext Secondary")
+        } else {
+            Issue.record("Expected Setext h2")
+        }
+        
+        if case .codeBlock(let lang, let code) = doc.blocks[2] {
+            #expect(lang == "swift")
+            #expect(code.contains("let val = 42"))
+        } else {
+            Issue.record("Expected tilde code block")
+        }
+    }
+    
+    @Test func testHeadingCustomIDs() {
+        let markdown = "### My Advanced Section {#custom-anchor}"
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 1)
+        
+        let (title, id) = MarkdownPreviewView.parseHeadingTextAndID("My Advanced Section {#custom-anchor}")
+        #expect(title == "My Advanced Section")
+        #expect(id == "custom-anchor")
+        
+        let html = MarkdownHTMLRenderer.renderBodyHTML(blocks: doc.blocks, footnotes: [])
+        #expect(html.contains("<h3 id=\"custom-anchor\">My Advanced Section</h3>"))
+    }
+    
+    @Test func testCollapsibleDetailsAndSummary() {
+        let markdown = """
+        <details>
+        <summary>More Info</summary>
+        This is hidden content.
+        </details>
+        """
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 1)
+        
+        if case .collapsible(let summary, let content) = doc.blocks[0] {
+            #expect(summary == "More Info")
+            #expect(content.contains("This is hidden content."))
+        } else {
+            Issue.record("Expected collapsible block")
+        }
+        
+        let html = MarkdownHTMLRenderer.renderBodyHTML(blocks: doc.blocks, footnotes: [])
+        #expect(html.contains("<details class=\"markdown-details\">"))
+        #expect(html.contains("<summary class=\"markdown-summary\">More Info</summary>"))
+        #expect(html.contains("This is hidden content."))
+    }
+    
+    @Test func testDefinitionLists() {
+        let markdown = """
+        Apple
+        : A sweet, edible fruit
+        : Produced by an apple tree
+        """
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 1)
+        
+        if case .definitionList(let term, let defs) = doc.blocks[0] {
+            #expect(term == "Apple")
+            #expect(defs.count == 2)
+            #expect(defs[0] == "A sweet, edible fruit")
+            #expect(defs[1] == "Produced by an apple tree")
+        } else {
+            Issue.record("Expected definition list block")
+        }
+        
+        let html = MarkdownHTMLRenderer.renderBodyHTML(blocks: doc.blocks, footnotes: [])
+        #expect(html.contains("<dl class=\"markdown-dl\">"))
+        #expect(html.contains("<dt class=\"markdown-dt\">Apple</dt>"))
+        #expect(html.contains("<dd class=\"markdown-dd\">A sweet, edible fruit</dd>"))
+    }
+    
+    @Test func testHTMLEntitiesAndEmojiShortcodes() {
+        let text = "Copyright &copy; 2026. Pipe in table: &#124;. Emoji: :tada: and :rocket:!"
+        let decoded = MarkdownPreviewView.decodeHTMLEntities(text)
+        #expect(decoded.contains("Copyright © 2026"))
+        #expect(decoded.contains("Pipe in table: |"))
+        
+        let withEmoji = MarkdownPreviewView.replaceEmojiShortcodes(decoded)
+        #expect(withEmoji.contains("🎉"))
+        #expect(withEmoji.contains("🚀"))
+    }
+    
+    @Test func testHTMLTagPreservationAndExtendedInlineFormatting() {
+        let input = "Check <u>underlined</u>, <kbd>Ctrl</kbd> + <kbd>C</kbd>, <font color=\"red\">colored</font>, and ==highlighted== text with H~2~O and X^2^. Visit https://example.com"
+        let html = MarkdownHTMLRenderer.renderInline(input)
+        
+        #expect(html.contains("<u>underlined</u>"))
+        #expect(html.contains("<kbd>Ctrl</kbd>"))
+        #expect(html.contains("<font color=\"red\">colored</font>"))
+        #expect(html.contains("<mark>highlighted</mark>"))
+        #expect(html.contains("<sub>2</sub>"))
+        #expect(html.contains("<sup>2</sup>"))
+        #expect(html.contains("<a href=\"https://example.com\" class=\"markdown-link\">https://example.com</a>"))
+    }
+    
+    @Test func testMarkdownCommentsIgnored() {
+        let markdown = """
+        # Real Content
+        <!-- HTML comment -->
+        [comment]: # (Markdown hack comment 1)
+        [//]: # (Markdown hack comment 2)
+        Paragraph text
+        """
+        let doc = MarkdownPreviewView.parseDocument(markdown)
+        #expect(doc.blocks.count == 2)
+        if case .h1(let text) = doc.blocks[0] {
+            #expect(text == "Real Content")
+        }
+        if case .paragraph(let text) = doc.blocks[1] {
+            #expect(text == "Paragraph text")
+        }
+    }
 }
+
 
 
 

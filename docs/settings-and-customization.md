@@ -45,6 +45,7 @@ graph TD
 ## The 7 Configuration Panes
 
 ### 1. General Settings
+
 - **New Note Title Format**:
   - Presets: `Untitled`, `Date (YYYY-MM-DD)`, `Daily Journal`.
   - **Custom…**: Revealing a text field with a live evaluated preview badge (`Preview: Note - 2026-09-18.md`) and clickable token pills (`{date}`, `{time}`, `{year}`, `{month}`, `{day}`).
@@ -58,8 +59,12 @@ graph TD
 ---
 
 ### 2. Appearance
+
 - **App Color Scheme**: Force `System`, `Dark`, or `Light` appearance mode.
 - **Accent Color**: System default or customized highlight palette.
+- **macOS App Icon Theme Tracking**:
+  - Engineered with Apple Icon Composer (`brain-md.icon`), compiling native `NSAppearanceNameAqua` and `NSAppearanceNameDarkAqua` icon stacks.
+  - Automatically switches the macOS Dock and App Switcher icon to match system Light and Dark mode without manual intervention or static overrides.
 - **Mermaid Theme Mode**:
   - `Adaptive`: Automatically toggles between GitHub Dark and Light based on macOS system appearance.
   - `GitHub Dark`: Always forces high-contrast dark diagram styling.
@@ -68,6 +73,7 @@ graph TD
 ---
 
 ### 3. Editor & Markdown
+
 - **Default View Mode**: Choose default layout when launching (`Split`, `Editor Only`, or `Preview Only`).
 - **Font Size**: Continuous slider from `11pt` to `24pt` with live editor preview.
 - **Font Family**: Select between `System`, `Monospaced`, `Rounded`, or `Serif`.
@@ -77,6 +83,7 @@ graph TD
 ---
 
 ### 4. MCP Server
+
 - **Server Status Indicator**: Real-time status display showing active port with live green pulsating beacon.
 - **Restart Server Button**: Instantly reboot the HTTP/SSE listener if port conflicts arise.
 - **Preferred Port Field**: Customize local listening port (default: `8765`).
@@ -86,6 +93,7 @@ graph TD
 ---
 
 ### 5. Vault & Storage
+
 - **Active Vault Path**: Displays the full POSIX filesystem location of your active notes folder.
 - **Change Location...**: Native macOS open panel dialog to switch or create a different vault directory.
 - **Reveal in Finder**: Opens the vault root in Finder with one click.
@@ -95,6 +103,7 @@ graph TD
 ---
 
 ### 6. Advanced
+
 - **Clear Memory Caches**: Flushes in-memory AST and syntax highlighting token caches.
 - **Diagnostic Log Level**: Configure activity logger verbosity (`Verbose`, `Info`, `Errors Only`).
 - **Reset All Preferences**: Restores factory defaults across all `@AppStorage` keys.
@@ -102,6 +111,7 @@ graph TD
 ---
 
 ### 7. About
+
 - **App Identity**: High-resolution `brain.head.profile` icon with blue-to-purple gradient.
 - **Version & Build**: Version 1.0 (Build 1).
 - **Technology Stack**: Native Swift 6, AppKit, SwiftUI, MCP 1.0 Protocol.
@@ -112,6 +122,7 @@ graph TD
 ## Window Styling & Native Margins
 
 The settings window is engineered to match macOS System Settings standards via `SettingsWindowConfigurator`:
+
 - **Unified Toolbar**: Uses `.windowToolbarStyle(.unified(showsTitle: true))` to ensure generous titlebar height.
 - **Traffic Light Margins**: Traffic light buttons (close, minimize, zoom) are aligned with standard native margins (at least 20pt from window edges).
 - **Permanent Non-Collapsible Sidebar**: The underlying `NSSplitView` items have `canCollapse = false` and `columnVisibility = .constant(.all)`, ensuring the sidebar cannot be accidentally hidden.
