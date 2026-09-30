@@ -1,0 +1,53 @@
+{
+  "fill" : {
+    "solid" : "display-p3:0.97229,0.93930,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:1.00000,0.23281,0.89111,1.00000",
+              "display-p3:0.96783,0.44335,0.13330,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.7746217836257311,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.29845219298245623,
+                "y" : 0.9468692028985513
+              }
+            }
+          },
+          "image-name" : "brain.head.profile 3.svg",
+          "name" : "brain.head.profile 3",
+          "position" : {
+            "scale" : 30,
+            "translation-in-points" : [
+              0,
+              1.1189999999999145
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
