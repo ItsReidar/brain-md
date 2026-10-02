@@ -90,7 +90,7 @@ else
         --title "$DISPLAY_NAME $version" \
         --notes "Install with Homebrew: \`brew install --cask itsreidar/tap/$CASK_NAME\`, or download the DMG below.
 
-$DISPLAY_NAME is signed but not notarized by Apple: on first launch, open System Settings > Privacy & Security and click **Open Anyway**.
+$DISPLAY_NAME is signed but not notarized by Apple, so macOS blocks its first launch. Either open System Settings > Privacy & Security and click **Open Anyway**, or run \`xattr -dr com.apple.quarantine /Applications/brain-md.app\` in Terminal.
 
 SHA-256: \`$sha256\`"
 fi

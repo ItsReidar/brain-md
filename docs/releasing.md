@@ -14,7 +14,7 @@ Brain.md is released as a DMG on [GitHub Releases](https://github.com/ItsReidar/
 | | This setup | Paid Developer ID + notarization |
 |---|---|---|
 | Signature | Ad hoc (or your self-signed certificate) with the hardened runtime | Developer ID Application certificate |
-| First launch of a downloaded copy | Blocked once; the user clicks **Open Anyway** | Opens normally |
+| First launch of each downloaded version | Blocked; the user clicks **Open Anyway** or clears the quarantine flag | Opens normally |
 | Official `homebrew/cask` | Not accepted (casks must pass Gatekeeper since 2026-09-01) | Accepted |
 | Personal tap | Works | Works |
 
@@ -82,7 +82,18 @@ This reuses the DMG already published for the version, checks it against `dist/b
 brew install --cask itsreidar/tap/brain-md
 ```
 
-Or download the DMG from the [latest release](https://github.com/ItsReidar/brain-md/releases/latest) and drag Brain.md into Applications. Both routes require macOS 26 (Tahoe) or later and the one-time **Open Anyway** approval described above. `brew upgrade --cask brain-md` picks up new versions, and `brew uninstall --zap --cask brain-md` also removes app preferences and caches. It never removes your notes vault.
+Or download the DMG from the [latest release](https://github.com/ItsReidar/brain-md/releases/latest) and drag Brain.md into Applications. Both routes require macOS 26 (Tahoe) or later. `brew upgrade --cask brain-md` picks up new versions, and `brew uninstall --zap --cask brain-md` also removes app preferences and caches. It never removes your notes vault.
+
+Every download, including each upgrade, is quarantined, so the first launch of each version must be allowed in one of two ways:
+
+- **Open Anyway**, as described above.
+- **Terminal**: remove the quarantine flag. `sudo` isn't needed, because Homebrew and drag-to-install leave the app owned by the user:
+
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/brain-md.app
+  ```
+
+  This removes only the quarantine flag; the signature stays intact. `xattr -cr` works as well, but it also clears every other extended attribute on the bundle.
 
 ## GitHub Actions (disabled)
 

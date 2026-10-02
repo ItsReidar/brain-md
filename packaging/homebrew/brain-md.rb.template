@@ -29,8 +29,12 @@ cask "brain-md" do
 
   caveats <<~EOS
     Brain.md is not notarized by Apple, so macOS blocks its first launch.
-    To allow it: open Brain.md once, then go to
-      System Settings > Privacy & Security
-    and click "Open Anyway" next to the message about Brain.md.
+    Allow it in one of these ways (and again after each upgrade):
+
+      - Open Brain.md once, then go to System Settings > Privacy & Security
+        and click "Open Anyway" next to the message about Brain.md.
+
+      - Or remove the download quarantine flag in Terminal (no sudo needed):
+          xattr -dr com.apple.quarantine "#{appdir}/brain-md.app"
   EOS
 end

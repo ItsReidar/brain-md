@@ -117,7 +117,13 @@ brew install --cask itsreidar/tap/brain-md
 
 Or download the DMG from the [latest release](https://github.com/ItsReidar/brain-md/releases/latest) and drag Brain.md into Applications. Requires macOS 26 (Tahoe) or later.
 
-Brain.md is signed but not notarized by Apple, so macOS blocks the first launch. Open the app once, then go to **System Settings > Privacy & Security** and click **Open Anyway**. Maintainers: see [Releasing](docs/releasing.md).
+Brain.md is signed but not notarized by Apple, so macOS blocks the first launch (and the first launch after each upgrade). Either open the app once, then go to **System Settings > Privacy & Security** and click **Open Anyway**, or remove the download quarantine flag in Terminal (no `sudo` needed):
+
+```bash
+xattr -dr com.apple.quarantine /Applications/brain-md.app
+```
+
+Maintainers: see [Releasing](docs/releasing.md).
 
 ### Prerequisites
 
