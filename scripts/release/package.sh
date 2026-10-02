@@ -116,7 +116,7 @@ hdiutil verify -quiet "$dmg" || die "DMG verification failed"
 # 4. Checksum and cask.
 sha256="$(shasum -a 256 "$dmg" | awk '{print $1}')"
 (cd "$DIST_DIR" && shasum -a 256 "$(basename "$dmg")" >"$(basename "$dmg").sha256")
-sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$sha256/g" "$CASK_TEMPLATE" >"$cask"
+render_cask "$version" "$sha256" "$cask"
 
 log "Done"
 cat >&2 <<EOF

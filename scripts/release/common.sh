@@ -35,6 +35,11 @@ validate_version() {
 
 dmg_name() { printf '%s-%s.dmg' "$CASK_NAME" "$1"; }
 
+# render_cask VERSION SHA256 OUTPUT — fills the cask template.
+render_cask() {
+    sed -e "s/@VERSION@/$1/g" -e "s/@SHA256@/$2/g" "$CASK_TEMPLATE" >"$3"
+}
+
 git_is_dirty() {
     [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)" ]]
 }

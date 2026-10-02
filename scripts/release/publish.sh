@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Publishes artifacts built by package.sh: uploads the DMG to the GitHub release v<version>
-# (creating the release and tag at HEAD if needed) and commits the cask to the Homebrew tap.
+# (creating the release and tag at HEAD if needed), then renders the cask from the template
+# and commits it to the Homebrew tap.
 #
 # Usage:
-#   scripts/release/publish.sh [--version 1.2.3] [--tap-dir PATH] [--skip-tap] [--yes]
+#   scripts/release/publish.sh [--version 1.2.3] [--tap-dir PATH] [--skip-tap | --skip-release] [--yes]
 #
 #   --tap-dir / TAP_DIR  Local clone of ItsReidar/homebrew-tap. Defaults to the clone Homebrew
 #                        made for `brew tap itsreidar/tap`, if present.
 #   --skip-tap           Only publish the GitHub release.
+#   --skip-release       Only update the cask in the tap (e.g. after editing the cask template),
+#                        reusing the DMG already published for this version.
 #   --yes                Don't ask for confirmation (for CI).
 #
 # Requires the GitHub CLI, authenticated: brew install gh && gh auth login
@@ -21,6 +24,7 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 version=""
 tap_dir="${TAP_DIR:-}"
 skip_tap=false
+skip_release=false
 assume_yes=false
 
 while [[ $# -gt 0 ]]; do
@@ -28,11 +32,14 @@ while [[ $# -gt 0 ]]; do
         --version) version="${2:?--version needs a value}"; shift 2 ;;
         --tap-dir) tap_dir="${2:?--tap-dir needs a value}"; shift 2 ;;
         --skip-tap) skip_tap=true; shift ;;
+        --skip-release) skip_release=true; shift ;;
         --yes) assume_yes=true; shift ;;
         -h|--help) usage ;;
         *) warn "unknown argument: $1"; usage 1 ;;
     esac
 done
+
+$skip_tap && $skip_release && die "--skip-tap and --skip-release together leave nothing to do"
 
 confirm() {
     $assume_yes && return 0
@@ -52,21 +59,27 @@ tag="v$version"
 dmg="$DIST_DIR/$(dmg_name "$version")"
 checksum_file="$dmg.sha256"
 cask="$DIST_DIR/$CASK_NAME.rb"
-for artifact in "$dmg" "$checksum_file" "$cask"; do
+for artifact in "$dmg" "$checksum_file"; do
     [[ -f "$artifact" ]] || die "missing ${artifact#"$REPO_ROOT"/} — run scripts/release/package.sh --version $version first"
 done
-grep -Fq "version \"$version\"" "$cask" || die "dist/$CASK_NAME.rb was built for a different version"
 sha256="$(awk '{print $1}' "$checksum_file")"
 [[ "$(shasum -a 256 "$dmg" | awk '{print $1}')" == "$sha256" ]] || die "DMG does not match its .sha256 file"
+# Always render from the committed template, so template edits reach the tap without a rebuild
+# (rebuilding would produce a DMG with a different checksum than the one already published).
+render_cask "$version" "$sha256" "$cask"
 
 # The tag must point at a commit that contains exactly what was built and that GitHub knows about.
-git_is_dirty && die "working tree has uncommitted changes; commit them and rebuild before publishing"
+git_is_dirty && die "working tree has uncommitted changes; commit and push them before publishing"
 commit="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 gh api "repos/$GITHUB_REPO/commits/$commit" --silent 2>/dev/null \
     || die "commit ${commit:0:12} is not on GitHub yet — push it first"
 
 # 1. GitHub release.
-if gh release view "$tag" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+if $skip_release; then
+    gh release view "$tag" --repo "$GITHUB_REPO" >/dev/null 2>&1 \
+        || die "release $tag does not exist yet — publish it without --skip-release first"
+    log "Skipping release upload (--skip-release); reusing the published $(basename "$dmg")"
+elif gh release view "$tag" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
     confirm "Release $tag exists. Replace its $(basename "$dmg") asset?" || die "aborted"
     gh release upload "$tag" "$dmg" "$checksum_file" --repo "$GITHUB_REPO" --clobber
 else
@@ -99,17 +112,19 @@ fi
 [[ -n "$tap_dir" && -d "$tap_dir/.git" ]] \
     || die "no tap clone found — pass --tap-dir PATH to a clone of $TAP_REPO (or --skip-tap)"
 
-mkdir -p "$tap_dir/Casks"
-cp "$cask" "$tap_dir/Casks/$CASK_NAME.rb"
-if git -C "$tap_dir" diff --quiet -- "Casks/$CASK_NAME.rb" \
-        && git -C "$tap_dir" ls-files --error-unmatch "Casks/$CASK_NAME.rb" >/dev/null 2>&1; then
-    log "Tap already has $CASK_NAME $version"
-    exit 0
+tap_cask="$tap_dir/Casks/$CASK_NAME.rb"
+commit_message="chore($CASK_NAME): update cask to $version"
+if git -C "$tap_dir" ls-files --error-unmatch "Casks/$CASK_NAME.rb" >/dev/null 2>&1; then
+    cmp -s "$cask" "$tap_cask" && { log "Tap already has this $CASK_NAME $version cask"; exit 0; }
+    grep -Fq "version \"$version\"" "$tap_cask" && commit_message="chore($CASK_NAME): refresh cask for $version"
 fi
-git -C "$tap_dir" --no-pager diff --stat -- "Casks/$CASK_NAME.rb" || true
-confirm "Commit and push $CASK_NAME $version to $TAP_REPO?" || die "aborted (the cask is copied but not committed in $tap_dir)"
+mkdir -p "$tap_dir/Casks"
+cp "$cask" "$tap_cask"
+git -C "$tap_dir" --no-pager diff -- "Casks/$CASK_NAME.rb" || true
+confirm "Commit and push this cask to $TAP_REPO ($commit_message)?" \
+    || die "aborted (the cask is copied but not committed in $tap_dir)"
 git -C "$tap_dir" add "Casks/$CASK_NAME.rb"
-git -C "$tap_dir" commit --quiet -m "chore($CASK_NAME): update cask to $version"
+git -C "$tap_dir" commit --quiet -m "$commit_message"
 git -C "$tap_dir" push --quiet
 
 log "Published $DISPLAY_NAME $version"

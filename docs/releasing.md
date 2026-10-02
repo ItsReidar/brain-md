@@ -66,6 +66,16 @@ Back up the certificate and its private key (File → Export Items… as `.p12`,
    scripts/release/publish.sh
    ```
 
+### Updating only the cask
+
+`publish.sh` renders the cask from `packaging/homebrew/brain-md.rb.template` every time. To ship a cask-only change (caveats, `zap` paths, description) for the current version, commit and push the template change, then run:
+
+```bash
+scripts/release/publish.sh --skip-release
+```
+
+This reuses the DMG already published for the version, checks it against `dist/brain-md-<version>.dmg.sha256`, and pushes only the updated cask to the tap. Don't re-run `package.sh` first: DMG builds aren't byte-for-byte reproducible, so a rebuild would no longer match the published checksum.
+
 ## Installing (for users)
 
 ```bash
