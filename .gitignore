@@ -26,12 +26,14 @@ Icon
 .agent
 .agents
 .claude
+.gemini
 
 # ==========================================
 # Xcode & Swift Build Artifacts
 # ==========================================
 build/
 DerivedData/
+dist/
 *.moved-aside
 *.hmap
 *.ipa

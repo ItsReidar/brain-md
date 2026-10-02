@@ -109,6 +109,16 @@ graph TB
 
 ## 🚀 Getting Started
 
+### Installing a Release
+
+```bash
+brew install --cask itsreidar/tap/brain-md
+```
+
+Or download the DMG from the [latest release](https://github.com/ItsReidar/brain-md/releases/latest) and drag Brain.md into Applications. Requires macOS 26 (Tahoe) or later.
+
+Brain.md is signed but not notarized by Apple, so macOS blocks the first launch. Open the app once, then go to **System Settings > Privacy & Security** and click **Open Anyway**. Maintainers: see [Releasing](docs/releasing.md).
+
 ### Prerequisites
 
 - macOS 14.0 (Sonoma) or macOS 15+ (Sequoia)
@@ -217,6 +227,7 @@ Explore the comprehensive technical guides in the [`docs/`](docs/) directory:
 - [**Model Context Protocol (MCP)**](docs/mcp-server.md): Protocol specifications, SSE transports, tool schemas, and AI agent configuration.
 - [**Settings & Customization**](docs/settings-and-customization.md): macOS Ventura-style settings architecture, token formatting, and custom Markdown templates.
 - [**Development & Testing**](docs/development-and-testing.md): Building, testing, benchmarking, and contributing to `brain.md`.
+- [**Releasing**](docs/releasing.md): Packaging, signing without a paid developer account, DMG and Homebrew cask distribution.
 
 ---
 
