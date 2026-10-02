@@ -19,6 +19,8 @@ This document covers the local development workflow, project structure, automate
 brain-md/
 ├── README.md                      # Public project landing page
 ├── LICENSE                        # GNU General Public License v3.0 (GPLv3)
+├── assets/                        # Public media, branding, and app icon
+│   └── app-icon.png               # High-resolution macOS app icon (256x256 RGBA)
 ├── docs/                          # Comprehensive technical guides
 │   ├── architecture.md            # Concurrency & system design
 │   ├── vault-management.md        # File storage & background watcher
@@ -37,13 +39,18 @@ brain-md/
 │   │   ├── VaultManager.swift     # File CRUD, selection, and monitor
 │   │   ├── VaultManaging.swift    # Core protocol contract
 │   │   ├── NoteTemplateEngine.swift # Title format & Markdown template engine
-│   │   └── SyntaxHighlighter.swift # Custom regex syntax tokenizer
+│   │   ├── SyntaxHighlighter.swift # Custom regex syntax tokenizer
+│   │   ├── NoteGraphService.swift # Graph link extraction & 3D force simulation
+│   │   └── ScrollSyncCoordinator.swift # Bidirectional scroll synchronizer
 │   ├── Views/                     # SwiftUI views & UI components
 │   │   ├── SidebarView.swift      # File tree navigation & drag-and-drop
-│   │   ├── EditorSplitView.swift  # Dual-pane editor & live preview
+│   │   ├── EditorSplitView.swift  # Dual-pane editor & live preview with SplitDivider
 │   │   ├── MarkdownEditorView.swift # Native AppKit text editing wrapper
 │   │   ├── MarkdownPreviewView.swift# Rich formatted markdown renderer
 │   │   ├── MermaidDiagramView.swift # Offline WKWebView diagram runner
+│   │   ├── BrainGraphModalView.swift # 3D knowledge graph modal
+│   │   ├── Graph3DSceneView.swift # SceneKit 3D brain network view
+│   │   ├── QuickSwitcherModalView.swift # Spotlight-style note switcher (⌘O)
 │   │   ├── MCPServerModalView.swift # Server inspector & agent setup
 │   │   └── SettingsView.swift     # macOS System Settings window
 │   ├── MCP/                       # Model Context Protocol implementation
@@ -80,7 +87,7 @@ xcodebuild -project brain-md.xcodeproj -scheme brain-md -destination 'platform=m
 
 ## Automated Test Suite
 
-`brain-md` uses Swift's modern `package:Testing` (`@Test`) framework with 15 comprehensive unit test suites:
+`brain-md` uses Swift's modern `package:Testing` (`@Test`) framework with comprehensive unit test coverage:
 
 ```bash
 xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdTests
@@ -93,7 +100,9 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `testVaultCRUDAndSearch()` | File creation, UTF-8 reading, writing, appending, deletion, and full-text keyword search. |
 | `testPathTraversalProtection()` | Attempts to pass `../../` escape sequences and verifies `BrainError.pathTraversalDetected` is thrown. |
 | `testAnyCodableSubscriptsAndLiterals()` | Type erasure, dictionary indexing, and serialization for dynamic JSON-RPC parameters. |
-| `testMCPServerProtocol()` | Proper dispatch of all 8 MCP tools (`list_notes`, `read_note`, `search_notes`, etc.). |
+| `testMCPServerProtocol()` | Proper dispatch of core MCP tools (`list_notes`, `read_note`, `search_notes`, etc.). |
+| `testMCPGetTagsTool()` | Global tag collection (`#tag` scanning across all vault notes) with count and note list verification. |
+| `testMCPGetBacklinksTool()` | Bidirectional wikilink resolver returning all referencing notes for a target note. |
 | `testMCPSingleLineJSONResponse()` | Enforces newline-delimited, single-line JSON formatting for SSE and Stdio clients. |
 | `testSyntaxHighlighter()` | Tokenization of code blocks, headers, emphasis, lists, and inline links. |
 | `testGFMBlockParsing()` | GFM callouts (`[!NOTE]`, `[!TIP]`), table syntax, and task lists. |
@@ -101,10 +110,31 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `testNewNoteAutoSwitchingAndUniqueNaming()` | Note collision prevention (`Untitled.md`, `Untitled 1.md`) and automatic selection switching. |
 | `testDragAndDropNoteMoving()` | Moving notes between directories while preserving user selection. |
 | `testFolderMoveAndRenamePreservesSelection()` | Recursive directory rename/move behavior and path preservation. |
-| `testSettingsDefaultsAndAppStorage()` | Validation of default preferences across all 7 settings tabs. |
+| `testSplitDividerRatioClampingAndWidths()` | Proportion clamping (0.20–0.80) and panel width calculations across drag interactions. |
+| `testSettingsDefaultsAndAppStorage()` | Validation of default preferences across all settings tabs. |
 | `testNoteTemplateEngineTitlePresets()` | Presets (`untitled`, `date`, `journal`, `custom`), token parsing (`{date}`, `{time}`, `{year}`), and filename sanitization. |
 | `testNoteTemplateEngineContentPresets()` | Content templates (`heading`, `dateHeading`, `journal`, `meeting`, `blank`, `custom`) and dynamic token substitution (`{{title}}`, `{{date}}`, `{{time}}`). |
 | `testVaultCreateNoteFromTemplate()` | End-to-end integration creating notes on disk with active templates. |
+| `testScrollProgressCalculation()` | Proportional scroll calculation across mid-range, boundaries, rubber-band overscroll, and short content. |
+| `testTargetOffsetCalculation()` | Precise target coordinate mapping and clamping for peer scroll views. |
+| `testCoordinatorSyncToggleAndRegistration()` | Observer lifecycle, listener registration/unregistration, and sync toggling. |
+| `testReentrantSafeBidirectionalSync()` | Synchronous re-entrancy isolation preventing echo feedback loops and enabling lag-free bidirectional tracking. |
+| `testRegistrationIdempotency()` | Ensures repeated view-tree registrations are safely deduplicated. |
+| `testBottomOverscrollClamping()` | Prevents overscroll rubber-banding from overflowing peer view bounds. |
+| `testEffectiveContentHeightForNSTextView()` | Queries TextKit layout manager `usedRect` rather than stale/bloated `bounds.height`. |
+| `testSyncScrollWithBloatedNSTextViewDoesNotScrollIntoVoid()` | Verifies editor text stays pinned within valid bounds without scrolling into empty void. |
+| `testSwiftUIScrollViewFlippedness()` | Validates coordinate flip conventions and layout metrics for SwiftUI `ScrollView` hosts. |
+| `testSimulatedScrollDownAndUp()` | Simulates full down-and-up scroll cycles ensuring follower tracks smoothly in both directions. |
+| `testRealViewsScrollSyncBidirectional()` | Integration test with live `MarkdownNSTextView` and `MarkdownPreviewView` in an `NSWindow`. |
+| `testEditorDocumentViewStartsAtClipOrigin()` | Regression: the editor's text view frame origin stays at zero (text laid out before attachment used to push it to y ≈ -8000). |
+| `testSplitHierarchyAutoRegistersBothPanes()` | The real split hierarchy registers editor and preview with `ScrollSyncCoordinator.shared` without manual wiring. |
+| `testNotificationDrivenSync()` | End-to-end sync in both directions through live-scroll and bounds notifications only. |
+| `testPreviewElasticOverscrollNeverPushesEditorIntoVoid()` | Elastic overscroll past either end of the preview pins the editor to its text bounds. |
+| `testFollowerBoundsChangeIgnoredWhileOtherPaneDrives()` | Bounds changes on the follower are ignored while the other pane owns a live scroll. |
+| `testLayoutChangeDoesNotDriveEditor()` | Layout-driven preview bounds changes (re-render while typing) never move the editor. |
+| `testUnregisterOnlyMatchingScrollView()` | Identity-checked unregistration survives SwiftUI building replacements before dismantling. |
+| `testScrollViewFinderRegistersAndReleasesPreview()` | `ScrollViewFinder` registers on window attach and unregisters on dismantle. |
+| `testMetricsIgnoreDocumentFrameOrigin()` / `testMetricsNonFlippedDocument()` / `testMetricsHonorContentInsets()` / `testMetricsShortDocument()` | `ScrollMetrics` geometry: frame-origin independence, `isFlipped` handling, content insets, and non-scrollable documents. |
 
 ---
 

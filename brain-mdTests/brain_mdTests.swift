@@ -1703,6 +1703,117 @@ struct brain_mdTests {
             #expect(text == "Paragraph text")
         }
     }
+    
+    // MARK: - New MCP & UI Tests
+    
+    @Test func testMCPGetTagsTool() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("vault_tags_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        let vault = VaultManager(customVaultURL: tempDir)
+        let note1 = """
+        ---
+        tags: [swift, macos]
+        ---
+        # Note 1
+        Some text with #inline-tag
+        """
+        let note2 = """
+        ---
+        tags: [swift, mcp]
+        ---
+        # Note 2
+        """
+        try vault.createFile(relativePath: "Note1.md", content: note1)
+        try vault.createFile(relativePath: "Note2.md", content: note2)
+        
+        let server = MCPServer(vault: vault)
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        
+        // 1. Query all tags
+        let reqAll = JSONRPCRequest(id: .int(10), method: "tools/call", params: [
+            "name": .string("get_tags"),
+            "arguments": .dictionary([:])
+        ])
+        let reqData = try encoder.encode(reqAll)
+        let respData = await server.handleRequest(data: reqData)
+        #expect(respData != nil)
+        let resp = try decoder.decode(JSONRPCResponse.self, from: respData!)
+        let contentText = resp.result?["content"]?.arrayValue?.first?["text"]?.stringValue ?? ""
+        #expect(contentText.contains("swift"))
+        #expect(contentText.contains("macos"))
+        #expect(contentText.contains("mcp"))
+        #expect(contentText.contains("inline-tag"))
+        
+        // 2. Query specific tag
+        let reqSpecific = JSONRPCRequest(id: .int(11), method: "tools/call", params: [
+            "name": .string("get_tags"),
+            "arguments": .dictionary(["tag": .string("macos")])
+        ])
+        let specData = try encoder.encode(reqSpecific)
+        let specRespData = await server.handleRequest(data: specData)
+        let specResp = try decoder.decode(JSONRPCResponse.self, from: specRespData!)
+        let specText = specResp.result?["content"]?.arrayValue?.first?["text"]?.stringValue ?? ""
+        #expect(specText.contains("Note1.md"))
+        #expect(!specText.contains("Note2.md"))
+    }
+    
+    @Test func testMCPGetBacklinksTool() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("vault_links_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        let vault = VaultManager(customVaultURL: tempDir)
+        let targetContent = "# Target Note\nThis note is linked by others."
+        let sourceContent = "# Source Note\nLinking to [[Target Note]] and [target](Target%20Note.md)."
+        
+        try vault.createFile(relativePath: "Target Note.md", content: targetContent)
+        try vault.createFile(relativePath: "Source Note.md", content: sourceContent)
+        
+        let server = MCPServer(vault: vault)
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        
+        // 1. Get backlinks for Target Note
+        let reqTarget = JSONRPCRequest(id: .int(20), method: "tools/call", params: [
+            "name": .string("get_backlinks"),
+            "arguments": .dictionary(["path": .string("Target Note.md")])
+        ])
+        let targetData = try encoder.encode(reqTarget)
+        let targetRespData = await server.handleRequest(data: targetData)
+        #expect(targetRespData != nil)
+        let targetResp = try decoder.decode(JSONRPCResponse.self, from: targetRespData!)
+        let targetText = targetResp.result?["content"]?.arrayValue?.first?["text"]?.stringValue ?? ""
+        #expect(targetText.contains("Source Note.md"))
+        
+        // 2. Get outgoing links for Source Note
+        let reqSource = JSONRPCRequest(id: .int(21), method: "tools/call", params: [
+            "name": .string("get_backlinks"),
+            "arguments": .dictionary(["path": .string("Source Note.md")])
+        ])
+        let sourceData = try encoder.encode(reqSource)
+        let sourceRespData = await server.handleRequest(data: sourceData)
+        let sourceResp = try decoder.decode(JSONRPCResponse.self, from: sourceRespData!)
+        let sourceText = sourceResp.result?["content"]?.arrayValue?.first?["text"]?.stringValue ?? ""
+        #expect(sourceText.contains("Target Note.md"))
+    }
+    
+    @Test func testSplitDividerRatioClampingAndWidths() {
+        #expect(SplitDivider.clampRatio(0.10) == 0.20)
+        #expect(SplitDivider.clampRatio(0.95) == 0.80)
+        #expect(SplitDivider.clampRatio(0.50) == 0.50)
+        #expect(SplitDivider.clampRatio(0.35) == 0.35)
+        
+        let widths = SplitDivider.calculateWidths(totalWidth: 1008, dividerWidth: 8, ratio: 0.5)
+        #expect(widths.editorWidth == 500)
+        #expect(widths.previewWidth == 500)
+        
+        let widthsAsymmetric = SplitDivider.calculateWidths(totalWidth: 1008, dividerWidth: 8, ratio: 0.6)
+        #expect(widthsAsymmetric.editorWidth == 600)
+        #expect(widthsAsymmetric.previewWidth == 400)
+    }
 }
 
 

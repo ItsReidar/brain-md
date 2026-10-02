@@ -25,6 +25,32 @@ stateDiagram-v2
 - **Editor-Only (`⌘2`)**: Full-width focused writing environment optimized for typing and distraction-free editing.
 - **Preview-Only (`⌘3`)**: Full-width presentation and reading mode, ideal for reviewing formatted documents and diagrams.
 
+### Synchronized Scrolling & Viewport Stability
+
+`brain-md` features intelligent, proportional scroll synchronization and viewport stability controls:
+
+- **Bidirectional Synchronized Scrolling (`ScrollSyncCoordinator`)**: In Split View, the editor and live preview scroll in proportional lockstep ($0.0 \dots 1.0$) across different document heights. Features a synchronous re-entrancy lock, live-scroll driver ownership (`willStartLiveScroll` / `didEndLiveScroll`), a user-intent gate against layout-driven echoes, and inset- and flip-aware overscroll clamping, so elastic rubber-band scrolling never oscillates, cancels AppKit bounce physics, or pushes the peer pane past its content.
+- **1-Click Toolbar Toggle**: Toggle scroll synchronization on or off directly from the editor toolbar in Split View (`link` / `link.badge.plus`) or via **Settings > Editor & Markdown > Workspace Layout**.
+- **Jitter-Free Bottom Editing**: The editor enforces contiguous text layout (`allowsNonContiguousLayout = false`), eliminating viewport jump glitches when typing near the bottom of long documents.
+- **Bottom Overscroll (Scroll Beyond Last Line)**: A 200 pt bottom content inset and inflated cursor visibility rect (40 pt vertical padding) ensure active typing lines never stick to the bottom window border.
+
+### Interactive Draggable Split Divider (`SplitDivider`)
+
+The dual-pane Split View features an interactive, high-precision draggable split divider:
+
+- **Proportional Dragging**: Drag the divider left or right to adjust the proportion between the Markdown editor and live preview. The proportion is constrained between 20% and 80% to ensure both panes always maintain comfortable reading and editing widths.
+- **Snap-to-Center (Double-Click)**: Double-clicking the divider pill handle instantly snaps the layout back to a 50/50 balance with smooth spring animation.
+- **Persistent Layout**: The split ratio is saved in `@AppStorage("editor_split_ratio")` and can also be adjusted or reset from **Settings > Editor & Markdown > Workspace Layout**.
+- **Native Cursor Affordance**: Hovering over the divider displays the macOS native `NSCursor.resizeLeftRight` cursor and highlights the handle.
+
+### Spotlight Quick Switcher (`QuickSwitcherModalView` - `⌘O`)
+
+Pressing `⌘O` (or clicking the magnifying glass toolbar button) summons the Spotlight-style Quick Switcher:
+
+- **Real-Time Note Search**: Fast substring and fuzzy title/path matching across all notes in the vault.
+- **Keyboard-Driven Workflow**: Navigate results using `↑` and `↓` arrow keys, press `Return` to jump immediately to the note, or press `Escape` to dismiss.
+- **Folder Badges**: Displays directory location tags alongside note titles to differentiate identically named notes across subfolders.
+
 ---
 
 ## Real-Time Syntax Highlighting
@@ -472,3 +498,34 @@ flowchart LR
 - **Theme-Conscious Vector Styling**: Preserves your active syntax highlighting theme with `@media print` rules, `-webkit-print-color-adjust: exact`, and clean print margins.
 - **Page Break Isolation**: Automated page break management ensures codeblocks, GFM callouts, tables, and blockquotes do not split mid-element across pages.
 - **Interactive Feedback**: Instant confirmation via the floating status capsule notification upon completion.
+
+---
+
+## Split-View Synchronized Scrolling (`ScrollSyncCoordinator`)
+
+In Split View mode, `brain-md` provides proportional, bidirectional synchronized scrolling between the AppKit native editor (`MarkdownNSTextView`) and the rendered SwiftUI preview (`MarkdownPreviewView`):
+
+```mermaid
+flowchart LR
+    Editor["Editor (MarkdownNSTextView)"] <-->|Proportional Sync| Coord["ScrollSyncCoordinator (@MainActor)"]
+    Coord <-->|Proportional Sync| Preview["Preview (MarkdownPreviewView)"]
+```
+
+### Architecture and Resiliency
+
+1. **Synchronous Lock (`isSyncingScroll`)**:
+   - Observers use `queue: nil`, so `NSView.boundsDidChangeNotification` is delivered synchronously on the main thread (asserted with `MainActor.assumeIsolated`). The echo fired inside the follower's `contentView.scroll(to:)` arrives while `isSyncingScroll == true` and exits without driving a reciprocal sync.
+2. **Live-Scroll Driver (`activeDriver`)**:
+   - The pane that posts `NSScrollView.willStartLiveScrollNotification` (trackpad gesture, momentum, scroller drag) owns synchronization until `didEndLiveScrollNotification`. Bounds changes on the other pane are ignored meanwhile, so follower momentum or re-layout never fights AppKit's elastic bounce.
+3. **User-Intent Gate**:
+   - Without a live driver, a bounds change only drives the peer when `NSApp.currentEvent` is a wheel or mouse event over that pane, or a key press while it holds focus. Layout-driven bounds changes (preview re-render while typing, SwiftUI re-layout) never move the other pane.
+   - Proportional mapping is idempotent, so any deferred echo round-trips to the same position and falls below the 0.5pt `minimumScrollDelta`, terminating ping-pong.
+4. **Normalized Geometry (`ScrollMetrics`)**:
+   - Offsets are measured from the top of the document relative to the document view's frame (never assuming a zero frame origin), honor `isFlipped`, and include `contentInsets` (`minOffset = -insets.top`, `maxOffset = contentHeight - visibleHeight + insets.bottom`).
+   - `effectiveContentHeight(for:)` uses the TextKit `usedRect` plus container insets for the editor, capped by the frame AppKit scrolls within.
+   - Targets are strictly clamped (`max(minOffset, min(targetY, maxOffset))`), so elastic overscroll in the source (negative or past-the-end offsets) maps to the target's exact top or bottom and never into empty space.
+5. **Document Frame Invariant (`MacMarkdownEditorView`)**:
+   - The text view is attached to its scroll view *before* text is inserted. Laying out text while the clip view is still unflipped makes `NSLayoutManager` grow the text view upward, leaving its frame origin far below zero; `adjustFrameToFitContent()` also resets any non-zero origin.
+6. **Lifecycle-Safe Registration**:
+   - The editor registers in `makeNSView`; the preview's `ScrollViewFinder` resolves its `NSScrollView` synchronously when it joins a window. Both unregister in `dismantleNSView` through identity-checked `unregisterEditor(_:)` / `unregisterPreview(_:)`, so switching view modes never leaves a stale pane registered or drops a freshly built one.
+

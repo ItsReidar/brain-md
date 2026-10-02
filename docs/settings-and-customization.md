@@ -69,12 +69,17 @@ graph TD
   - `Adaptive`: Automatically toggles between GitHub Dark and Light based on macOS system appearance.
   - `GitHub Dark`: Always forces high-contrast dark diagram styling.
   - `GitHub Light`: Always forces crisp light diagram styling.
+- **Live Theme Preview Card**:
+  - Displays the active theme name, theme family, dark/light classification, and background hex pill.
+  - Horizontal ANSI 16-color palette bar with indexed swatches.
+  - Real-time syntax highlighting code preview formatted in an Apple HIG rounded card with generous 14pt margins matching standard settings rows.
 
 ---
 
 ### 3. Editor & Markdown
 
 - **Default View Mode**: Choose default layout when launching (`Split`, `Editor Only`, or `Preview Only`).
+- **Workspace Layout & Split Proportion**: Configure the editor-to-preview split ratio slider (`20%` to `80%`, stored in `@AppStorage("editor_split_ratio")`), with a 1-click **Reset to 50/50** button. Also adjustable by dragging the center split divider directly in the editor.
 - **Font Size**: Continuous slider from `11pt` to `24pt` with live editor preview.
 - **Font Family**: Select between `System`, `Monospaced`, `Rounded`, or `Serif`.
 - **Word Counter**: Toggle the live floating status badge in the bottom toolbar.

@@ -18,6 +18,8 @@ graph TD
         ContentView["ContentView"]
         Sidebar["SidebarView"]
         Editor["EditorSplitView"]
+        SplitDivider["SplitDivider (Interactive Drag / Ratio)"]
+        QuickSwitcher["QuickSwitcherModalView (⌘O Spotlight)"]
         GraphModal["BrainGraphModalView (3D Brain Graph)"]
         Scene3D["Graph3DSceneView (SceneKit / Metal)"]
         Settings["SettingsView"]
@@ -30,9 +32,10 @@ graph TD
         GraphService["NoteGraphService (Link & 3D Force Simulation)"]
         Monitor["VaultFileMonitor (FSEvents / DispatchSource)"]
         Template["NoteTemplateEngine"]
+        ScrollSync["ScrollSyncCoordinator (Bidirectional Scroll Sync)"]
     end
 
-    subgraph MCP ["Model Context Protocol (MCP) Layer"]
+    subgraph MCP ["Model Context Protocol (MCP) Layer (10 Native Tools)"]
         MCPServer["MCPServer (MCPServing)"]
         HTTPServer["MCPHTTPServer (HTTP / Server-Sent Events)"]
         StdioServer["MCPStdioServer (Standard I/O)"]
@@ -48,11 +51,15 @@ graph TD
     App --> Settings
     ContentView --> Sidebar
     ContentView --> Editor
+    ContentView --> QuickSwitcher
     ContentView --> GraphModal
     GraphModal --> Scene3D
     GraphModal --> GraphService
+    Editor --> SplitDivider
+    Editor --> ScrollSync
     Editor --> Highlighter
     Editor --> Mermaid
+    QuickSwitcher --> VM
     Settings --> Template
 
     %% Service connections
@@ -68,7 +75,7 @@ graph TD
     %% MCP connections
     HTTPServer -->|Routes JSON-RPC| MCPServer
     StdioServer -->|Routes JSON-RPC| MCPServer
-    MCPServer -->|Translates tools to CRUD| VM
+    MCPServer -->|Translates 10 tools to Vault Ops| VM
 ```
 
 ---

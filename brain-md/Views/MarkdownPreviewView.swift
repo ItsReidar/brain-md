@@ -119,6 +119,12 @@ public struct MarkdownPreviewView: View {
             .frame(maxWidth: previewContentWidth >= 2000 ? .infinity : CGFloat(max(300, previewContentWidth)), alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
             .textSelection(.enabled)
+            .background(
+                ScrollViewFinder(
+                    onFound: { ScrollSyncCoordinator.shared.registerPreview($0) },
+                    onLost: { ScrollSyncCoordinator.shared.unregisterPreview($0) }
+                )
+            )
         }
         .background(Color(NSColor.textBackgroundColor))
     }
@@ -2746,5 +2752,72 @@ public struct MarkdownWebView: NSViewRepresentable {
         }
     }
 }
+
+// MARK: - ScrollView Finder for Split View Scroll Synchronization
+
+/// Reports the `NSScrollView` backing the enclosing SwiftUI `ScrollView`.
+///
+/// Resolution happens synchronously when the probe view joins a window (and again on every
+/// update), so registration never depends on a deferred main-queue hop that may run before
+/// SwiftUI has inserted the view. `onFound` may be called repeatedly and must be idempotent.
+public struct ScrollViewFinder: NSViewRepresentable {
+    var onFound: (NSScrollView) -> Void
+    var onLost: ((NSScrollView) -> Void)?
+
+    public init(onFound: @escaping (NSScrollView) -> Void, onLost: ((NSScrollView) -> Void)? = nil) {
+        self.onFound = onFound
+        self.onLost = onLost
+    }
+
+    public func makeNSView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.onFound = onFound
+        view.onLost = onLost
+        return view
+    }
+
+    public func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.onFound = onFound
+        nsView.onLost = onLost
+        nsView.resolve()
+    }
+
+    public static func dismantleNSView(_ nsView: ProbeView, coordinator: ()) {
+        nsView.invalidate()
+    }
+
+    public final class ProbeView: NSView {
+        var onFound: ((NSScrollView) -> Void)?
+        var onLost: ((NSScrollView) -> Void)?
+        private weak var resolvedScrollView: NSScrollView?
+
+        public override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            resolve()
+        }
+
+        public override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            resolve()
+        }
+
+        func resolve() {
+            guard window != nil, let scrollView = enclosingScrollView else { return }
+            if let previous = resolvedScrollView, previous !== scrollView {
+                onLost?(previous)
+            }
+            resolvedScrollView = scrollView
+            onFound?(scrollView)
+        }
+
+        func invalidate() {
+            if let scrollView = resolvedScrollView {
+                onLost?(scrollView)
+            }
+            resolvedScrollView = nil
+        }
+    }
+}
+
 
 

@@ -666,8 +666,8 @@ public struct AppearanceSettingsPane: View {
 
       // Live Theme Preview Card
       SettingsCard(title: "Theme Preview: \(activeTheme.displayName)") {
-        VStack(alignment: .leading, spacing: 12) {
-          HStack {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
               Text(activeTheme.displayName)
                 .font(.system(size: 13, weight: .bold))
@@ -697,20 +697,31 @@ public struct AppearanceSettingsPane: View {
           }
 
           // Palette Swatches
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-              ForEach(Array(activeTheme.palette.enumerated()), id: \.offset) { idx, hex in
-                RoundedRectangle(cornerRadius: 3)
-                  .fill(Color(hex: hex) ?? .clear)
-                  .frame(width: 20, height: 16)
-                  .overlay(
-                    RoundedRectangle(cornerRadius: 3)
-                      .stroke(Color.black.opacity(0.1), lineWidth: 0.5)
-                  )
+          VStack(alignment: .leading, spacing: 6) {
+            Text("ANSI Palette (16 Colors)")
+              .font(.system(size: 10, weight: .medium))
+              .foregroundColor(.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: 5) {
+                ForEach(Array(activeTheme.palette.enumerated()), id: \.offset) { idx, hex in
+                  VStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: 4)
+                      .fill(Color(hex: hex) ?? .clear)
+                      .frame(width: 22, height: 18)
+                      .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                          .stroke(Color.black.opacity(0.15), lineWidth: 0.5)
+                      )
+                    Text("\(idx)")
+                      .font(.system(size: 8, design: .monospaced))
+                      .foregroundColor(.secondary)
+                  }
                   .help("ANSI Color \(idx): \(hex)")
+                }
               }
+              .padding(.vertical, 2)
             }
-            .padding(.vertical, 2)
           }
 
           // Mini Syntax Preview
@@ -743,15 +754,16 @@ public struct AppearanceSettingsPane: View {
             Text("}")
           }
           .font(.system(size: 11, design: .monospaced))
-          .padding(10)
+          .padding(12)
           .frame(maxWidth: .infinity, alignment: .leading)
           .background(syntaxTheme.background)
-          .clipShape(RoundedRectangle(cornerRadius: 6))
+          .clipShape(RoundedRectangle(cornerRadius: 8))
           .overlay(
-            RoundedRectangle(cornerRadius: 6)
-              .stroke(syntaxTheme.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8)
+              .stroke(syntaxTheme.border.opacity(0.5), lineWidth: 1)
           )
         }
+        .padding(14)
       }
 
       SettingsCard(title: "Diagrams & Visuals") {
@@ -779,6 +791,8 @@ public struct EditorSettingsPane: View {
   @AppStorage("editor_font_size") private var fontSize: Double = 14.0
   @AppStorage("editor_font_design") private var fontDesign: String = "system"
   @AppStorage("editor_show_word_count") private var showWordCount: Bool = true
+  @AppStorage("editor_sync_scroll") private var syncPreviewScroll: Bool = true
+  @AppStorage("editor_split_ratio") private var splitRatio: Double = 0.5
   @AppStorage("syntax_theme_override") private var syntaxTheme: String = "auto"
 
   public var body: some View {
@@ -794,6 +808,34 @@ public struct EditorSettingsPane: View {
             Text("Preview Only").tag("preview")
           }
           .frame(width: 210)
+        }
+
+        Divider()
+
+        SettingsRow(
+          title: "Split View Proportion",
+          subtitle: "Editor width: \(Int(splitRatio * 100))% / Preview: \(Int((1.0 - splitRatio) * 100))%"
+        ) {
+          HStack(spacing: 8) {
+            Slider(value: $splitRatio, in: 0.20...0.80, step: 0.05)
+              .frame(width: 110)
+            Button("Reset") {
+              withAnimation {
+                splitRatio = 0.5
+              }
+            }
+            .font(.system(size: 11))
+          }
+        }
+
+        Divider()
+
+        SettingsRow(
+          title: "Synchronize Preview Scrolling",
+          subtitle: "Scroll the live preview in lockstep with the Markdown editor in Split View"
+        ) {
+          Toggle("", isOn: $syncPreviewScroll)
+            .toggleStyle(.switch)
         }
 
         Divider()

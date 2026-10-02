@@ -59,6 +59,8 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
         
         let theme = MarkdownNSTheme(theme: currentTheme)
         scrollView.backgroundColor = theme.background
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsetsZero
         
         let textView = MarkdownNSTextView()
         textView.wantsLayer = true
@@ -81,10 +83,16 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
         let baseFont = makeBaseFont(size: CGFloat(fontSize), design: fontDesign)
         textView.font = baseFont
         textView.textContainerInset = NSSize(width: 16, height: 16)
+        textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
+        textView.minSize = NSSize(width: 0.0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
+        
+        // Guarantee contiguous layout to prevent viewport jump on attribute edits
+        textView.layoutManager?.allowsNonContiguousLayout = false
         
         // Disable automatic dash/quote/text substitutions to preserve Markdown syntax like ---
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -92,12 +100,21 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.typingAttributes[NSAttributedString.Key.ligature] = 0
-        
+
+        // Attach before inserting text: the clip view is not yet flipped while it adopts its
+        // document view, and laying out existing text at that moment makes NSLayoutManager
+        // grow the text view upward, leaving its frame origin thousands of points below zero.
+        scrollView.documentView = textView
         textView.string = text
         context.coordinator.applyHighlighting(to: textView, theme: currentTheme, fontSize: fontSize, fontDesign: fontDesign)
-        
-        scrollView.documentView = textView
+        textView.adjustFrameToFitContent()
+
+        ScrollSyncCoordinator.shared.registerEditor(scrollView)
         return scrollView
+    }
+
+    public static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        ScrollSyncCoordinator.shared.unregisterEditor(scrollView)
     }
     
     public func updateNSView(_ scrollView: NSScrollView, context: Context) {
@@ -125,6 +142,7 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
                 textView.setSelectedRange(first)
             }
             context.coordinator.applyHighlighting(to: textView, theme: currentTheme, fontSize: fontSize, fontDesign: fontDesign)
+            textView.adjustFrameToFitContent()
             context.coordinator.isUpdating = false
         } else {
             // Re-highlight if theme or font configuration changed
@@ -132,6 +150,7 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
                context.coordinator.lastFontSize != fontSize ||
                context.coordinator.lastFontDesign != fontDesign {
                 context.coordinator.applyHighlighting(to: textView, theme: currentTheme, fontSize: fontSize, fontDesign: fontDesign)
+                textView.adjustFrameToFitContent()
             }
         }
     }
@@ -224,6 +243,9 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
             let baseFont = parent.makeBaseFont(size: CGFloat(fontSize), design: fontDesign)
             
             let selectedRange = textView.selectedRange()
+            let clipView = textView.enclosingScrollView?.contentView
+            let savedOrigin = clipView?.bounds.origin
+            
             textView.undoManager?.disableUndoRegistration()
             storage.beginEditing()
             MarkdownSyntaxHighlighter.highlight(textStorage: storage, theme: nsTheme, baseFont: baseFont)
@@ -232,6 +254,15 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
             
             if selectedRange.location + selectedRange.length <= (storage.string as NSString).length {
                 textView.setSelectedRange(selectedRange)
+            }
+            
+            if let clipView = clipView, let origin = savedOrigin {
+                if textView.window?.firstResponder == textView {
+                    textView.scrollRangeToVisible(selectedRange)
+                } else {
+                    clipView.scroll(to: origin)
+                    textView.enclosingScrollView?.reflectScrolledClipView(clipView)
+                }
             }
         }
     }
@@ -247,6 +278,32 @@ final class MarkdownNSTextView: NSTextView {
         if let observer = formatObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+    }
+    
+    /// Dynamically resizes the NSTextView's frame height to match the text layout.
+    /// In AppKit, NSTextView with isVerticallyResizable only grows; it never shrinks
+    /// when shorter documents are loaded, causing bloated scroll ranges and blank voids.
+    func adjustFrameToFitContent() {
+        guard let layoutManager = self.layoutManager,
+              let textContainer = self.textContainer,
+              let scrollView = self.enclosingScrollView else { return }
+        // A document view must sit at its clip view's origin; anything else shifts every
+        // scroll offset (and the sync coordinator's notion of "top").
+        if frame.origin != .zero {
+            setFrameOrigin(.zero)
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let minHeight = scrollView.contentSize.height
+        let targetHeight = max(minHeight, ceil(usedRect.height + textContainerInset.height * 2))
+        if abs(self.frame.height - targetHeight) > 1.0 {
+            self.setFrameSize(NSSize(width: self.frame.width, height: targetHeight))
+        }
+    }
+    
+    override func didChangeText() {
+        super.didChangeText()
+        adjustFrameToFitContent()
     }
     
     override func viewDidMoveToWindow() {
@@ -610,6 +667,26 @@ final class MarkdownNSTextView: NSTextView {
                trimmed.range(of: #"^[-*+]\s+\[[ xX]\]"#, options: .regularExpression) != nil
     }
     
+    // MARK: - Viewport Padding for Cursor Visibility
+    
+    override func scrollRangeToVisible(_ range: NSRange) {
+        guard let layoutManager = self.layoutManager, let textContainer = self.textContainer else {
+            super.scrollRangeToVisible(range)
+            return
+        }
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        rect.origin.x += textContainerInset.width
+        rect.origin.y += textContainerInset.height
+        
+        // Add comfortable vertical padding (40pt) so the cursor never hugs the bottom or top window edge
+        let padding: CGFloat = 40.0
+        rect.origin.y = max(0, rect.origin.y - padding / 2)
+        rect.size.height += padding
+        
+        scrollToVisible(rect)
+    }
+    
     // MARK: - Smart List Continuation on Enter
     
     override func insertNewline(_ sender: Any?) {
@@ -631,6 +708,7 @@ final class MarkdownNSTextView: NSTextView {
                             replaceCharacters(in: lineRange, with: "\n")
                             didChangeText()
                             setSelectedRange(NSRange(location: lineRange.location, length: 0))
+                            scrollRangeToVisible(selectedRange())
                             return
                         }
                     } else {
@@ -642,6 +720,7 @@ final class MarkdownNSTextView: NSTextView {
                             didChangeText()
                             let newPos = lineRange.location + (outdentedSpaces as NSString).length + 6
                             setSelectedRange(NSRange(location: newPos, length: 0))
+                            scrollRangeToVisible(selectedRange())
                             return
                         }
                     }
@@ -651,6 +730,7 @@ final class MarkdownNSTextView: NSTextView {
                         replaceCharacters(in: sel, with: continuation)
                         didChangeText()
                         setSelectedRange(NSRange(location: sel.location + (continuation as NSString).length, length: 0))
+                        scrollRangeToVisible(selectedRange())
                         return
                     }
                 }
@@ -666,6 +746,7 @@ final class MarkdownNSTextView: NSTextView {
                             replaceCharacters(in: lineRange, with: "\n")
                             didChangeText()
                             setSelectedRange(NSRange(location: lineRange.location, length: 0))
+                            scrollRangeToVisible(selectedRange())
                             return
                         }
                     } else {
@@ -677,6 +758,7 @@ final class MarkdownNSTextView: NSTextView {
                             didChangeText()
                             let newPos = lineRange.location + (outdentedSpaces as NSString).length + (bullet as NSString).length
                             setSelectedRange(NSRange(location: newPos, length: 0))
+                            scrollRangeToVisible(selectedRange())
                             return
                         }
                     }
@@ -686,6 +768,7 @@ final class MarkdownNSTextView: NSTextView {
                         replaceCharacters(in: sel, with: continuation)
                         didChangeText()
                         setSelectedRange(NSRange(location: sel.location + (continuation as NSString).length, length: 0))
+                        scrollRangeToVisible(selectedRange())
                         return
                     }
                 }
@@ -703,6 +786,7 @@ final class MarkdownNSTextView: NSTextView {
                             replaceCharacters(in: lineRange, with: "\n")
                             didChangeText()
                             setSelectedRange(NSRange(location: lineRange.location, length: 0))
+                            scrollRangeToVisible(selectedRange())
                             return
                         }
                     } else {
@@ -714,6 +798,7 @@ final class MarkdownNSTextView: NSTextView {
                             didChangeText()
                             let newPos = lineRange.location + (outdentedSpaces as NSString).length + "\(num). ".count
                             setSelectedRange(NSRange(location: newPos, length: 0))
+                            scrollRangeToVisible(selectedRange())
                             return
                         }
                     }
@@ -723,6 +808,7 @@ final class MarkdownNSTextView: NSTextView {
                         replaceCharacters(in: sel, with: continuation)
                         didChangeText()
                         setSelectedRange(NSRange(location: sel.location + (continuation as NSString).length, length: 0))
+                        scrollRangeToVisible(selectedRange())
                         return
                     }
                 }
@@ -730,5 +816,6 @@ final class MarkdownNSTextView: NSTextView {
         }
         
         super.insertNewline(sender)
+        scrollRangeToVisible(selectedRange())
     }
 }

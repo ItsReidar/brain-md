@@ -26,6 +26,11 @@ public enum ViewMode: String, CaseIterable, Identifiable {
 public struct EditorSplitView: View {
     @ObservedObject var vault: VaultManager
     @State private var viewMode: ViewMode = .split
+    @AppStorage("editor_sync_scroll") private var syncPreviewScroll: Bool = true
+    @AppStorage("editor_split_ratio") private var splitRatio: Double = 0.5
+    @ObservedObject private var scrollSync = ScrollSyncCoordinator.shared
+    
+    @State private var isDraggingSplit = false
     
     // Bubble / Toast state
     @State private var showingBubble = false
@@ -49,6 +54,13 @@ public struct EditorSplitView: View {
                     GeometryReader { geo in
                         switch viewMode {
                         case .split:
+                            let totalWidth = geo.size.width
+                            let dividerWidth: CGFloat = 8
+                            let availableWidth = max(0, totalWidth - dividerWidth)
+                            let clampedRatio = SplitDivider.clampRatio(splitRatio)
+                            let editorWidth = max(200, availableWidth * CGFloat(clampedRatio))
+                            let previewWidth = max(200, availableWidth - editorWidth)
+                            
                             HStack(spacing: 0) {
                                 MarkdownEditorView(
                                     text: Binding(
@@ -63,14 +75,27 @@ public struct EditorSplitView: View {
                                         showBubble(message: "Note saved")
                                     }
                                 )
-                                .frame(width: max(200, (geo.size.width - 1) / 2))
+                                .frame(width: editorWidth)
                                 
-                                Divider()
+                                SplitDivider(
+                                    isDragging: $isDraggingSplit,
+                                    onDrag: { delta in
+                                        let currentPx = availableWidth * CGFloat(clampedRatio)
+                                        let newPx = currentPx + delta
+                                        let newRatio = Double(newPx / max(1, availableWidth))
+                                        splitRatio = SplitDivider.clampRatio(newRatio)
+                                    },
+                                    onDoubleClick: {
+                                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                            splitRatio = 0.5
+                                        }
+                                    }
+                                )
                                 
                                 MarkdownPreviewView(markdown: vault.editorContent, onTagSelected: { tag in
                                     vault.selectedTag = tag
                                 })
-                                    .frame(width: max(200, (geo.size.width - 1) / 2))
+                                .frame(width: previewWidth)
                             }
                         case .editor:
                             MarkdownEditorView(
@@ -131,6 +156,21 @@ public struct EditorSplitView: View {
             if let item = vault.selectedItem, !item.isDirectory {
                 exportPreviewAsPDF(item: item)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SetViewModeSplit"))) { _ in
+            viewMode = .split
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SetViewModeEditor"))) { _ in
+            viewMode = .editor
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SetViewModePreview"))) { _ in
+            viewMode = .preview
+        }
+        .onAppear {
+            scrollSync.isSyncEnabled = syncPreviewScroll
+        }
+        .onChange(of: syncPreviewScroll) { _, newValue in
+            scrollSync.isSyncEnabled = newValue
         }
     }
     
@@ -279,6 +319,27 @@ public struct EditorSplitView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(width: 170)
+            
+            // Sync Scroll Toggle (Active in Split View)
+            if viewMode == .split {
+                Button(action: {
+                    syncPreviewScroll.toggle()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: syncPreviewScroll ? "link" : "link.badge.plus")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("Sync Scroll")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(syncPreviewScroll ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.06))
+                    .foregroundColor(syncPreviewScroll ? .accentColor : .secondary)
+                    .cornerRadius(5)
+                }
+                .buttonStyle(.plain)
+                .help(syncPreviewScroll ? "Disable Synchronized Scrolling" : "Enable Synchronized Scrolling")
+            }
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
@@ -505,5 +566,80 @@ private struct ToolbarIconButton: View {
         .buttonStyle(.plain)
         .help(helpText)
         .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Interactive Draggable Split Divider
+
+public struct SplitDivider: View {
+    @Binding var isDragging: Bool
+    var onDrag: (CGFloat) -> Void
+    var onDoubleClick: () -> Void
+    
+    @State private var isHovered = false
+    
+    public init(
+        isDragging: Binding<Bool>,
+        onDrag: @escaping (CGFloat) -> Void,
+        onDoubleClick: @escaping () -> Void
+    ) {
+        self._isDragging = isDragging
+        self.onDrag = onDrag
+        self.onDoubleClick = onDoubleClick
+    }
+    
+    public var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color(NSColor.separatorColor))
+                .frame(width: 1)
+            
+            // Visual drag handle pill
+            Capsule()
+                .fill(isDragging ? Color.accentColor : (isHovered ? Color.secondary.opacity(0.7) : Color.clear))
+                .frame(width: 3, height: 28)
+                .animation(.easeInOut(duration: 0.15), value: isHovered)
+                .animation(.easeInOut(duration: 0.15), value: isDragging)
+        }
+        .frame(width: 8)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    isDragging = true
+                    onDrag(value.translation.width)
+                }
+                .onEnded { _ in
+                    isDragging = false
+                }
+        )
+        .simultaneousGesture(
+            TapGesture(count: 2)
+                .onEnded {
+                    onDoubleClick()
+                }
+        )
+        .help("Drag to resize editor & preview, double-click to center (50/50)")
+    }
+    
+    public static func clampRatio(_ ratio: Double, minRatio: Double = 0.20, maxRatio: Double = 0.80) -> Double {
+        min(max(ratio, minRatio), maxRatio)
+    }
+    
+    public static func calculateWidths(totalWidth: CGFloat, dividerWidth: CGFloat = 8, ratio: Double, minWidth: CGFloat = 200) -> (editorWidth: CGFloat, previewWidth: CGFloat) {
+        let available = max(0, totalWidth - dividerWidth)
+        let clamped = clampRatio(ratio)
+        let edW = max(minWidth, available * CGFloat(clamped))
+        let prW = max(minWidth, available - edW)
+        return (edW, prW)
     }
 }

@@ -89,7 +89,7 @@ sequenceDiagram
 
 ## Complete MCP Tool Reference
 
-`brain-md` exposes 8 native tools:
+`brain-md` exposes 10 native tools:
 
 ### 1. `list_notes`
 Lists all Markdown notes and directories in the vault.
@@ -249,6 +249,44 @@ Renames a note or moves it to a new subdirectory within the vault.
       "arguments": {
         "sourcePath": "Drafts/Spec.md",
         "destinationPath": "Archived/Spec.md"
+      }
+    }
+  }
+  ```
+
+### 9. `get_tags`
+Lists all tags across notes in the vault, with occurrence count and associated matching note paths.
+- **Arguments**:
+  - `tag` *(string, optional)*: Specific tag to query (with or without `#`). Omit to list all tags.
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "tools/call",
+    "params": {
+      "name": "get_tags",
+      "arguments": {
+        "tag": "swift"
+      }
+    }
+  }
+  ```
+
+### 10. `get_backlinks`
+Resolves incoming backlinks, outgoing links (wikilinks `[[Note]]` and Markdown links `[text](Note.md)`), and tags for a specific note.
+- **Arguments**:
+  - `path` *(string, required)*: Relative path to the target note.
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 10,
+    "method": "tools/call",
+    "params": {
+      "name": "get_backlinks",
+      "arguments": {
+        "path": "Welcome to Brain-md.md"
       }
     }
   }

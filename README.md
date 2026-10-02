@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/app-icon.png" width="128" height="128" alt="brain.md App Icon" />
+</p>
+
 # brain.md 🧠
 
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-black?style=flat-square&logo=apple)](https://apple.com)
@@ -15,9 +19,10 @@
 
 - **⚡ Blazing Fast & Lightweight (120 FPS)**: 100% native Swift 6, SwiftUI, and AppKit. Layer-backed Core Animation rendering (`wantsLayer = true`), debounced live preview synchronization, and coalesced background syntax passes ensure silky smooth 120 FPS ProMotion typing responsiveness (<1ms keystroke latency) even on large notes. Instant startup, ~1.2 MB binary, zero electron or web bloat.
 - **🧠 3D Visual Brain Graph**: Native Metal-accelerated 3D graph (Apple SceneKit) showing notes as velvety matte spheres clustered around folder hubs, linked via prominent 3D synaptic cylinders (`SCNCylinder` with glowing emissive materials for crystal-clear visibility), wikilinks (`[[Note]]`), markdown links, and `#tag` clusters. Features fluid organic floating and breathing animations, rotational elastic inertia, zero-allocation 120 FPS dynamic line tracking, single-click 3D trackball spin, cursor-anchored zoom, dynamic front-facing badge labels, live search filtering, and click-to-inspect popover with instant jump-to-editor navigation (`⌥⌘G`).
+- **🔍 Spotlight Quick Switcher (`⌘O`)**: Instant keyboard-driven note navigation modal with fuzzy matching, real-time query filtering, folder location tags, and arrow-key navigation for lightning-fast jumps between notes.
 - **📂 Local-First Markdown Vault**: Plain-text `.md` files stored directly on your disk in human-readable hierarchies. Fully interoperable with Obsidian, VS Code, Logseq, and Git.
-- **🤖 Built-in Model Context Protocol (MCP) Server**: Built-in HTTP/SSE and Stdio servers expose 8 native tools (`list_notes`, `read_note`, `create_note`, `update_note`, `delete_note`, `search_notes`, `get_vault_stats`, `move_note`) directly to AI assistants.
-- **🎨 Rich Markdown Editor & Live Preview**: Real-time syntax highlighting, Split/Editor/Preview viewing modes, generous typographic heading spacing (H1–H6), and GitHub Flavored Markdown (GFM) callouts (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), task lists, tables, and strikethroughs.
+- **🤖 Built-in Model Context Protocol (MCP) Server**: Built-in HTTP/SSE and Stdio servers expose 10 native tools (`list_notes`, `read_note`, `create_note`, `update_note`, `delete_note`, `search_notes`, `get_vault_stats`, `move_note`, `get_tags`, `get_backlinks`) directly to AI assistants.
+- **🎨 Rich Markdown Editor & Interactive Split View**: Real-time syntax highlighting, Split/Editor/Preview viewing modes, interactive draggable and proportional split divider with double-click snap-to-center (50/50) and `@AppStorage` persistence, lag-free bidirectional synchronized scrolling with synchronous re-entrancy protection and 1-click toolbar toggle, exact last-line content boundary alignment (neither pane scrolls into blank voids), generous typographic heading spacing (H1–H6), and GitHub Flavored Markdown (GFM) callouts (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), task lists, tables, and strikethroughs.
 - **🌐 Full HTML Tag Support & Markdown Hacks**: Native support for inline and block HTML tags and character entities across both live preview and vector PDF/HTML export: `<details>` / `<summary>` collapsible accordions, `<mark>` text highlights, `<kbd>` keyboard badges, `<ins>`/`<u>` underlines, `<sub>` subscript (`H~2~O`), `<sup>` superscript (`X^2^`), `<center>`, `<figure>`/`<figcaption>`, `<font color="...">`, `<span style="...">`, and standard HTML entities (`&nbsp;`, `&copy;`, `&mdash;`, `&#124;`, etc.).
 - **📘 Complete Markdown Guide & GitHub Standards**: Strict adherence to GitHub Flavored Markdown (GFM) and Markdown Guide standards (Basic, Extended, and Hacks): Setext headings (`===` / `---`), `~~~` tilde code blocks, custom heading IDs (`{#custom-id}`), definition lists (`Term\n: Definition`), text highlights (`==highlight==`), emoji shortcodes (`:tada:`, `:rocket:`, etc.), bare URL autolinking, and markdown comments (`[comment]: # (...)`).
 - **✍️ Precision Editor & VS Code-Style List Indentation**: Font ligatures disabled and macOS auto-substitutions suppressed (`---` never turns into em-dashes). Full code-editor grade auto-pairing, triple backtick expansion, selection wrapping, and VS Code-style list editing: hierarchical indentation (`24pt` per level) with progressive bullet glyphs (Level 0: solid disc `•`, Level 1: hollow circle `◦`, Level 2: solid square `▪`, Level 3+: hollow square `▫`), smart multi-level continuation on Return, progressive outdenting on empty items, and `Tab` / `Shift-Tab` indent/outdent shortcuts.
@@ -164,20 +169,22 @@ graph TB
    }
    ```
 
-5. Restart Claude Desktop. You will now see the `brain.md` hammer icon with 8 available tools!
+5. Restart Claude Desktop. You will now see the `brain.md` hammer icon with 10 available tools!
 
 ### Available MCP Tools
 
 | Tool Name         | Description                                                 | Key Arguments                                           |
 | :---------------- | :---------------------------------------------------------- | :------------------------------------------------------ |
-| `list_notes`      | Lists notes and directory trees within the vault            | `path` *(optional)*                                     |
+| `list_notes`      | Lists notes and directory trees within the vault            | `folder` *(optional)*                                   |
 | `read_note`       | Reads the raw Markdown content of a specific note           | `path` *(required)*                                     |
 | `create_note`     | Creates a new Markdown note in the vault                    | `path` *(required)*, `content` *(required)*             |
 | `update_note`     | Appends or overwrites content in an existing note           | `path`, `content`, `mode` (`"overwrite"` or `"append"`) |
 | `delete_note`     | Permanently deletes a note from the vault                   | `path` *(required)*                                     |
 | `search_notes`    | Fast full-text and title search across all notes            | `query` *(required)*                                    |
 | `get_vault_stats` | Retrieves note counts, word count stats, and recent actions | *None*                                                  |
-| `move_note`       | Renames or moves notes into different subdirectories        | `sourcePath`, `destinationPath`                         |
+| `move_note`       | Renames or moves notes into different subdirectories        | `sourcePath`, `targetFolder`                            |
+| `get_tags`        | Lists all tags across notes with counts and note paths      | `tag` *(optional filter)*                               |
+| `get_backlinks`   | Resolves incoming backlinks, outgoing links, and note tags  | `path` *(required)*                                     |
 
 For full payload specifications, schema examples, and curl tests, see [MCP Server Documentation](docs/mcp-server.md).
 
@@ -185,15 +192,18 @@ For full payload specifications, schema examples, and curl tests, see [MCP Serve
 
 ## ⌨️ Keyboard Shortcuts
 
-| Shortcut | Action                                                   |
-| :------- | :------------------------------------------------------- |
-| `⌘N`     | Create a new note using active title & content templates |
-| `⌘S`     | Save current note to disk immediately                    |
-| `⌘F`     | Focus vault search bar                                   |
-| `⌘,`     | Open macOS System Settings window                        |
-| `⌘1`     | Switch to Split View (Editor + Live Preview)             |
-| `⌘2`     | Switch to Editor-Only View                               |
-| `⌘3`     | Switch to Preview-Only View                              |
+| Shortcut    | Action                                                   |
+| :---------- | :------------------------------------------------------- |
+| `⌘N`        | Create a new note using active title & content templates |
+| `⌘O`        | Spotlight Quick Switcher (open/jump to note)             |
+| `⌘S`        | Save current note to disk immediately                    |
+| `⌘P`        | Export live preview as paginated vector PDF              |
+| `⌘F`        | Focus vault search bar                                   |
+| `⌥⌘G`       | Open 3D Visual Brain Graph modal                         |
+| `⌘,`        | Open macOS System Settings window                        |
+| `⌘⌃1` / `⌘1`| Switch to Split View (Editor + Live Preview)             |
+| `⌘⌃2` / `⌘2`| Switch to Editor-Only View                               |
+| `⌘⌃3` / `⌘3`| Switch to Preview-Only View                              |
 
 ---
 

@@ -16,6 +16,8 @@ public enum MCPToolName: String, CaseIterable, Sendable {
     case searchNotes = "search_notes"
     case getVaultStats = "get_vault_stats"
     case moveNote = "move_note"
+    case getTags = "get_tags"
+    case getBacklinks = "get_backlinks"
 }
 
 // MARK: - MCPServing Protocol
@@ -292,6 +294,33 @@ public final class MCPServer: MCPServing {
                     ]),
                     "required": AnyCodableValue.array([AnyCodableValue.string("sourcePath")])
                 ])
+            ),
+            MCPTool(
+                name: MCPToolName.getTags.rawValue,
+                description: "List all tags in the vault with their occurrence count and matching note paths.",
+                inputSchema: AnyCodableValue.dictionary([
+                    "type": AnyCodableValue.string("object"),
+                    "properties": AnyCodableValue.dictionary([
+                        "tag": AnyCodableValue.dictionary([
+                            "type": AnyCodableValue.string("string"),
+                            "description": AnyCodableValue.string("Optional specific tag to query (with or without #)")
+                        ])
+                    ])
+                ])
+            ),
+            MCPTool(
+                name: MCPToolName.getBacklinks.rawValue,
+                description: "Get incoming backlinks, outgoing links (wikilinks and markdown links), and tags for a note.",
+                inputSchema: AnyCodableValue.dictionary([
+                    "type": AnyCodableValue.string("object"),
+                    "properties": AnyCodableValue.dictionary([
+                        "path": AnyCodableValue.dictionary([
+                            "type": AnyCodableValue.string("string"),
+                            "description": AnyCodableValue.string("Relative path to the note (e.g., 'Welcome to Brain-md.md')")
+                        ])
+                    ]),
+                    "required": AnyCodableValue.array([AnyCodableValue.string("path")])
+                ])
             )
         ]
     }
@@ -322,6 +351,10 @@ public final class MCPServer: MCPServing {
             return handleGetStats()
         case .moveNote:
             return handleMoveNote(args: arguments)
+        case .getTags:
+            return handleGetTags(args: arguments)
+        case .getBacklinks:
+            return handleGetBacklinks(args: arguments)
         }
     }
     
@@ -458,6 +491,113 @@ public final class MCPServer: MCPServing {
         } catch {
             return MCPToolResult(text: "Move failed: \(error.localizedDescription)", isError: true)
         }
+    }
+    
+    private func handleGetTags(args: [String: AnyCodableValue]) -> MCPToolResult {
+        let requestedTag = args["tag"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+        let allPaths = vault.getAllNotePaths()
+        
+        var tagToNotes: [String: Set<String>] = [:]
+        for path in allPaths {
+            guard let content = try? vault.readFile(relativePath: path) else { continue }
+            let tags = extractTags(from: content)
+            for t in tags {
+                tagToNotes[t, default: []].insert(path)
+            }
+        }
+        
+        if let specific = requestedTag, !specific.isEmpty {
+            let matchingNotes = Array(tagToNotes[specific] ?? []).sorted()
+            let item = TagListingItem(tag: specific, count: matchingNotes.count, notes: matchingNotes)
+            if let json = try? encoder.encode(item), let str = String(data: json, encoding: .utf8) {
+                return MCPToolResult(text: str)
+            }
+            return MCPToolResult(text: "{}")
+        }
+        
+        let sortedTags = tagToNotes.keys.sorted()
+        let items: [TagListingItem] = sortedTags.map { tag in
+            let notes = Array(tagToNotes[tag] ?? []).sorted()
+            return TagListingItem(tag: tag, count: notes.count, notes: notes)
+        }
+        
+        if let json = try? encoder.encode(items), let str = String(data: json, encoding: .utf8) {
+            return MCPToolResult(text: str)
+        }
+        return MCPToolResult(text: "[]")
+    }
+    
+    private func handleGetBacklinks(args: [String: AnyCodableValue]) -> MCPToolResult {
+        guard let path = args["path"]?.stringValue else {
+            return MCPToolResult(text: BrainError.invalidToolArgument(tool: "get_backlinks", argument: "path").localizedDescription, isError: true)
+        }
+        
+        guard let targetContent = try? vault.readFile(relativePath: path) else {
+            return MCPToolResult(text: BrainError.fileNotFound(path: path).localizedDescription, isError: true)
+        }
+        
+        let allPaths = vault.getAllNotePaths()
+        let graphService = NoteGraphService.shared
+        
+        // 1. Outgoing links from this note
+        let wikilinks = graphService.extractWikilinks(from: targetContent)
+        let mdLinks = graphService.extractMarkdownLinks(from: targetContent)
+        var resolvedOutgoing: Set<String> = []
+        for rawLink in (wikilinks + mdLinks) {
+            if let resolved = graphService.resolveLinkTarget(rawLink, fromSourcePath: path, allNotePaths: allPaths) {
+                resolvedOutgoing.insert(resolved)
+            }
+        }
+        
+        // 2. Incoming backlinks from other notes
+        var incomingBacklinks: Set<String> = []
+        for otherPath in allPaths {
+            guard otherPath != path, let otherContent = try? vault.readFile(relativePath: otherPath) else { continue }
+            let otherWikilinks = graphService.extractWikilinks(from: otherContent)
+            let otherMdLinks = graphService.extractMarkdownLinks(from: otherContent)
+            for rawLink in (otherWikilinks + otherMdLinks) {
+                if let resolved = graphService.resolveLinkTarget(rawLink, fromSourcePath: otherPath, allNotePaths: allPaths),
+                   resolved == path {
+                    incomingBacklinks.insert(otherPath)
+                    break
+                }
+            }
+        }
+        
+        let tags = extractTags(from: targetContent)
+        
+        let linksItem = NoteLinksItem(
+            path: path,
+            outgoingLinks: Array(resolvedOutgoing).sorted(),
+            backlinks: Array(incomingBacklinks).sorted(),
+            tags: tags.sorted()
+        )
+        
+        if let json = try? encoder.encode(linksItem), let str = String(data: json, encoding: .utf8) {
+            return MCPToolResult(text: str)
+        }
+        return MCPToolResult(text: "{}")
+    }
+    
+    private func extractTags(from content: String) -> [String] {
+        let (fm, _) = FrontmatterParser.parse(content)
+        var tags = Set(fm?.tags ?? [])
+        
+        let pattern = #"(?:^|\s)#([a-zA-Z0-9_\-\/]+)"#
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            let nsString = content as NSString
+            let matches = regex.matches(in: content, range: NSRange(location: 0, length: nsString.length))
+            for match in matches {
+                if match.numberOfRanges > 1 {
+                    let rawTag = nsString.substring(with: match.range(at: 1))
+                    let clean = FrontmatterParser.cleanTag(rawTag)
+                    if !clean.isEmpty {
+                        tags.insert(clean)
+                    }
+                }
+            }
+        }
+        return Array(tags).sorted()
     }
     
     // MARK: - Resources

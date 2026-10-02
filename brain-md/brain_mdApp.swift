@@ -45,6 +45,11 @@ struct brain_mdApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
                 
+                Button("Quick Open Note...") {
+                    NotificationCenter.default.post(name: NSNotification.Name("OpenQuickSwitcher"), object: nil)
+                }
+                .keyboardShortcut("o", modifiers: .command)
+                
                 Button("Save Note") {
                     VaultManager.shared.saveCurrentNote()
                 }
@@ -56,6 +61,23 @@ struct brain_mdApp: App {
                     NotificationCenter.default.post(name: NSNotification.Name("ExportCurrentNoteAsPDF"), object: nil)
                 }
                 .keyboardShortcut("p", modifiers: .command)
+            }
+            
+            CommandMenu("View") {
+                Button("Split View") {
+                    NotificationCenter.default.post(name: NSNotification.Name("SetViewModeSplit"), object: nil)
+                }
+                .keyboardShortcut("1", modifiers: [.command, .control])
+                
+                Button("Editor Only") {
+                    NotificationCenter.default.post(name: NSNotification.Name("SetViewModeEditor"), object: nil)
+                }
+                .keyboardShortcut("2", modifiers: [.command, .control])
+                
+                Button("Preview Only") {
+                    NotificationCenter.default.post(name: NSNotification.Name("SetViewModePreview"), object: nil)
+                }
+                .keyboardShortcut("3", modifiers: [.command, .control])
             }
             
             CommandMenu("Format") {

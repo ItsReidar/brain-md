@@ -230,14 +230,9 @@ public struct MCPServerModalView: View {
     // MARK: - Tab 3: Tools
     
     private var toolsTab: some View {
-        List {
-            toolRow(name: "list_notes", desc: "Lists all markdown notes with relative paths and file metadata.")
-            toolRow(name: "read_note", desc: "Reads the full content of a specified note.")
-            toolRow(name: "create_note", desc: "Creates a new markdown note in the vault with given content.")
-            toolRow(name: "update_note", desc: "Updates or appends content to an existing note.")
-            toolRow(name: "delete_note", desc: "Deletes a note from the vault.")
-            toolRow(name: "search_notes", desc: "Searches all notes for keywords or regex patterns.")
-            toolRow(name: "get_vault_stats", desc: "Returns note count, word count, and vault metadata.")
+        let tools = MCPServer.shared.getAvailableTools()
+        return List(tools, id: \.name) { tool in
+            toolRow(name: tool.name, desc: tool.description)
         }
     }
     

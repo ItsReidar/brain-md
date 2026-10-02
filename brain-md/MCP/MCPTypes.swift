@@ -295,3 +295,30 @@ public struct VaultStatsItem: Codable, Sendable {
         self.recentNotes = recentNotes
     }
 }
+
+public struct TagListingItem: Codable, Sendable {
+    public let tag: String
+    public let count: Int
+    public let notes: [String]
+    
+    public init(tag: String, count: Int, notes: [String]) {
+        self.tag = tag
+        self.count = count
+        self.notes = notes
+    }
+}
+
+public struct NoteLinksItem: Codable, Sendable {
+    public let path: String
+    public let outgoingLinks: [String]
+    public let backlinks: [String]
+    public let tags: [String]
+    
+    public init(path: String, outgoingLinks: [String], backlinks: [String], tags: [String]) {
+        self.path = path
+        self.outgoingLinks = outgoingLinks
+        self.backlinks = backlinks
+        self.tags = tags
+    }
+}
+

@@ -11,6 +11,7 @@ struct ContentView: View {
     @StateObject private var themeManager = ThemeManager.shared
     @State private var showingMCPModal = false
     @State private var showingGraphModal = false
+    @State private var showingQuickSwitcher = false
     @State private var newNoteTitle = ""
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
@@ -27,6 +28,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingGraphModal) {
             BrainGraphModalView(vault: vault)
+        }
+        .sheet(isPresented: $showingQuickSwitcher) {
+            QuickSwitcherModalView(vault: vault)
         }
         .alert("New Note", isPresented: $vault.showingNewNotePrompt) {
             TextField("Note title (e.g. Ideas.md)", text: $newNoteTitle)
@@ -66,6 +70,12 @@ struct ContentView: View {
                 .help("3D Brain Graph (⌥⌘G)")
                 .keyboardShortcut("g", modifiers: [.option, .command])
                 
+                Button(action: { showingQuickSwitcher = true }) {
+                    Image(systemName: "magnifyingglass")
+                }
+                .help("Quick Open Note... (⌘O)")
+                .keyboardShortcut("o", modifiers: .command)
+                
                 Button(action: {
                     vault.promptNewNote()
                 }) {
@@ -74,6 +84,9 @@ struct ContentView: View {
                 .help("New Note (⌘N)")
                 .keyboardShortcut("n", modifiers: .command)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenQuickSwitcher"))) { _ in
+            showingQuickSwitcher = true
         }
         .onAppear {
             if !httpServer.isRunning {
@@ -85,6 +98,8 @@ struct ContentView: View {
     }
 }
 
-#Preview {
-    ContentView()
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
 }
