@@ -23,10 +23,10 @@ Icon
 # ==========================================
 # AI Generated Code
 # ==========================================
-.agent
-.agents
-.claude
-.gemini
+.agent/
+.agents/
+.claude/
+.gemini/
 
 # ==========================================
 # Xcode & Swift Build Artifacts
