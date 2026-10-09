@@ -391,13 +391,40 @@ public struct EditorSplitView: View {
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
-                // Model Status (uniform 28x28 spinner when downloading)
+                // Model Status & Download Bar / Trigger
                 if modelManager.state.status == .downloading {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.75)
-                        .frame(width: 28, height: 28)
-                        .help("Downloading Gemma 4 E4B weights (\(Int(modelManager.state.progress * 100))%)...")
+                    HStack(spacing: 6) {
+                        ProgressView(value: modelManager.state.progress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 70)
+                        Text("\(Int(modelManager.state.progress * 100))%")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(.accentColor)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(5)
+                    .help("Downloading Gemma 4 E4B weights...")
+                } else if modelManager.state.status == .notDownloaded {
+                    Button(action: {
+                        modelManager.startDownload()
+                        showBubble(message: "Downloading Gemma 4 E4B model (~2.4 GB)...")
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Get Gemma 4")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(5)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Download Gemma 4 E4B On-Device AI (~2.4 GB)")
                 }
 
                 // Local AI Meeting Transcription & Screen Capture
@@ -426,16 +453,14 @@ public struct EditorSplitView: View {
                     }
                 } label: {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .regular))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(modelManager.state.status == .ready ? .purple : .secondary)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(modelManager.state.status == .ready ? Color.purple.opacity(0.12) : Color.clear)
-                        )
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(modelManager.state.status == .ready ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
+                        .cornerRadius(5)
                 }
                 .menuStyle(.borderlessButton)
-                .frame(width: 28, height: 28)
                 .help(modelManager.state.status == .ready ? "Local Gemma 4 AI Assistant" : "Gemma 4 model download required")
 
                 // Export as PDF Button
@@ -669,40 +694,40 @@ public struct EditorSplitView: View {
             return
         }
         guard modelManager.state.status == .ready else {
-            modelManager.startDownload()
-            showBubble(message: "Gemma 4 not installed. Starting download...")
+            showBubble(message: "Please download Gemma 4 in Settings (⌘,) → Local AI")
             return
         }
         showBubble(message: "Processing with local Gemma 4 E4B...")
-        let label: String
-        switch mode {
-        case .rewrite: label = "Polish & Rewrite"
-        case .summarizeMeeting: label = "Meeting Summary"
-        case .extractActionItems: label = "Action Items"
-        case .explainDiagram: label = "Diagram Explanation"
+        Task {
+            let request = RewriteRequest(mode: mode, sourceText: vault.editorContent)
+            let result = await LocalAIProcessingService.shared.process(request: request)
+            await MainActor.run {
+                vault.editorContent += result
+                vault.hasUnsavedChanges = true
+                showBubble(message: "Done!")
+            }
         }
-        vault.editorContent += "\n\n## ✨ Local AI (\(label))\n- Synthesized locally with Gemma 4 E4B."
-        vault.hasUnsavedChanges = true
     }
 
     private func explainScreenDiagram() {
         guard modelManager.state.status == .ready else {
-            modelManager.startDownload()
-            showBubble(message: "Gemma 4 not installed. Starting download...")
+            showBubble(message: "Please download Gemma 4 in Settings (⌘,) → Local AI")
             return
         }
         showBubble(message: "Capturing screen diagram via ScreenCaptureKit...")
         Task {
             let service = VisualCaptureService(configuration: ScreenCaptureConfiguration(captureScreenFrames: true))
             if let frame = await service.captureScreenFrame() {
+                let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent, visualFrames: [frame])
+                let result = await LocalAIProcessingService.shared.process(request: request)
                 await MainActor.run {
-                    vault.editorContent += "\n\n> 📊 **Captured Diagram**: \(frame.diagramDescription ?? "Display frame") (\(frame.pngDataLength) bytes)\n"
+                    vault.editorContent += result
                     vault.hasUnsavedChanges = true
-                    showBubble(message: "Diagram added to note")
+                    showBubble(message: "Diagram explanation added to note")
                 }
             } else {
                 await MainActor.run {
-                    showBubble(message: "Screen capture completed")
+                    showBubble(message: "Screen capture permission required")
                 }
             }
         }
