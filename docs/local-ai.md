@@ -1,6 +1,6 @@
 # On-Device AI & Meetings
 
-brain-md runs Google's **Gemma 4 E4B** on your Mac with [MLX](https://github.com/ml-explore/mlx-swift) for summaries, action items, rewriting and screen explanations, and uses Apple's on-device **SpeechAnalyzer** to transcribe meetings. Notes, audio and screenshots never leave the Mac; the only network traffic is the one-time model download from Hugging Face (and Apple's speech model download per language).
+brain-md runs Google's **Gemma 4 E4B** on your Mac with [MLX](https://github.com/ml-explore/mlx-swift) for summaries, action items, rewriting, screen explanations and free-form chat, and uses Apple's on-device **SpeechAnalyzer** to transcribe meetings. Notes, audio and screenshots never leave the Mac; the only network traffic is the one-time model download from Hugging Face (and Apple's speech model download per language).
 
 ```mermaid
 flowchart LR
@@ -28,10 +28,24 @@ flowchart LR
 | Polish & Rewrite | ✨ menu | Fixes grammar and structure, keeping facts, links, code and front matter |
 | Explain Screen | ✨ menu | Captures the display under the pointer (without brain-md's windows) and explains the slide or diagram |
 | Record a meeting | 🎙 toolbar button | Live transcript lines labelled **Them** / **Me** with timestamps; minutes from Gemma when you stop |
+| Gemma Chat | ✨ menu › Chat with Gemma…, or View › Gemma Chat (⇧⌘J) | A conversation in its own window, optionally about the open note |
 
 Gemma's output always opens in a **review sheet** first. Nothing is written to a note until you choose Insert Below or Replace Note (which asks for confirmation). Meeting transcript lines are the exception: they are written to the open note as they're finalized, and switching notes stops the recording.
 
-Answers are in the note's language. Notes longer than about 8,000 tokens (32,000 characters) are truncated with a visible marker.
+Answers are in the note's language (in chat: the language you write in). Notes longer than about 8,000 tokens (32,000 characters) are truncated with a visible marker.
+
+## Gemma Chat
+
+A separate window for asking Gemma anything, without the preset actions.
+
+- **Include current note** (on by default) sends the open note with your message. It's sent once and again only after you edit it, so follow-up questions stay fast.
+- Each answer has **Copy** and **Insert into Note**, which appends it to the note that's open at that moment.
+- **Stop** (⌘.) ends an answer early; **New Chat** clears the conversation.
+- The conversation lives in memory only: it isn't saved and is gone when you quit. When the model unloads after five idle minutes, the next message reloads it and replays the last 20 exchanges so Gemma still remembers the conversation.
+
+## Languages
+
+Meetings are transcribed with Apple's **SpeechTranscriber**, the long-form model built for meetings, when it supports the language (English, French, German, Spanish and others). Languages it doesn't cover fall back to **DictationTranscriber**, which supports more, including **Dutch** (`nl_BE` and `nl_NL`). The Transcription Language picker lists every language either engine supports. A requested region the engines don't have maps to the language's main region (English in Belgium → `en_US`).
 
 ## Setup
 
@@ -67,11 +81,13 @@ Speech recognition permission is not requested: SpeechAnalyzer transcribes on-de
 | `Services/AI/LocalModelManager.swift` | Download, verify, load and unload the model |
 | `Services/AI/HubAdapters.swift` | Bridges swift-huggingface and swift-transformers to mlx-swift-lm (replaces the MLXHuggingFace macros) |
 | `Services/AI/GemmaService.swift` | Prompts and streaming generation, idle unload |
+| `Services/AI/GemmaChat.swift` | Chat state, note context, session rebuild from history |
 | `Services/AI/VisualCaptureService.swift` | Full-resolution screenshot of the display under the pointer |
 | `Services/AI/AudioCaptureService.swift` | ScreenCaptureKit system audio + microphone, levels |
-| `Services/AI/MeetingTranscriber.swift` | One SpeechAnalyzer per source, format conversion, language assets |
+| `Services/AI/MeetingTranscriber.swift` | Engine and locale choice, one SpeechAnalyzer per source, format conversion, language assets |
 | `Services/AI/MeetingRecorder.swift` | Recording session: capture → transcript lines → minutes |
 | `Views/AIResultSheet.swift` | Review sheet |
+| `Views/GemmaChatView.swift` | Gemma Chat window |
 | `Views/MeetingLiveOverlay.swift` | Live levels and partial transcript while recording |
 
 ## Testing
@@ -86,6 +102,6 @@ TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1 xcodebuild test -project brain-md.xcodep
 TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1 xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdTests
 ```
 
-The model tests need the model downloaded (enable on-device AI in the app first). The speech test synthesizes a sentence with `say` and checks the transcript.
+The model tests need the model downloaded (enable on-device AI in the app first); one checks that chat remembers the conversation after the model reloads. The speech tests synthesize sentences with `say` (Samantha in English; Ellen and Xander in Dutch, which need those voices installed) and check the transcripts, including a Dutch meeting with both sources at once. The first Dutch run downloads Apple's speech model.
 
 Not automated, because they need macOS permission prompts: a real screen capture and a real call recording.

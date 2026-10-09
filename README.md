@@ -34,7 +34,7 @@
 - **📊 Offline Mermaid Diagrams**: Interactive diagrams (flowcharts, sequence, class, state, git graphs) rendered completely offline via bundled `mermaid.min.js` with adaptive dark/light themes.
 - **🎨 112 Custom Themes (terminalcolors.com)**: Comprehensive catalog of 80 dark and 32 light themes across 36 iconic theme families (Catppuccin, Tokyo Night, Dracula, Gruvbox, Nord, Rosé Pine, GitHub, Ayu, Solarized, Zenbones, etc.). Powers real-time syntax highlighting, custom editor canvas styling, and live color swatch previews in Settings.
 - **⚙️ Modern macOS System Settings**: Native Ventura/Sonoma/Sequoia-style settings menu with custom note title formats (with dynamic tokens like `{date}`, `{time}`, `{year}`), customizable Markdown content templates, and configurable attachment folders.
-- **🎙️ On-Device AI & Meeting Assistant (Gemma 4 E4B)**: Optional Gemma 4 E4B (6.8 GB download) running on your Mac with MLX: summaries, action items, rewriting and screen explanations, always reviewed in a sheet before they touch a note. Records meetings and transcribes system audio ("Them") and your microphone ("Me") on-device with Apple's SpeechAnalyzer, then drafts the minutes. Nothing leaves your Mac. See [On-Device AI & Meetings](docs/local-ai.md).
+- **🎙️ On-Device AI & Meeting Assistant (Gemma 4 E4B)**: Optional Gemma 4 E4B (6.8 GB download) running on your Mac with MLX: summaries, action items, rewriting and screen explanations, always reviewed in a sheet before they touch a note, plus a free-form **Gemma Chat** window (⇧⌘J) that can use the open note as context. Records meetings and transcribes system audio ("Them") and your microphone ("Me") on-device with Apple's SpeechAnalyzer, then drafts the minutes, in English, Dutch and the other languages Apple's on-device speech models support. Nothing leaves your Mac. See [On-Device AI & Meetings](docs/local-ai.md).
 - **🔄 Live File Synchronization**: Automatic background file system watcher (`FSEvents` / `DispatchSource`) detects changes made by external editors in real time.
 - **🔒 Secure & Private**: Offline-by-default, path traversal protection, and optional MCP read-only guard.
 
@@ -235,7 +235,7 @@ Explore the comprehensive technical guides in the [`docs/`](docs/) directory:
 - [**Model Context Protocol (MCP)**](docs/mcp-server.md): Protocol specifications, SSE transports, tool schemas, and AI agent configuration.
 - [**Settings & Customization**](docs/settings-and-customization.md): macOS Ventura-style settings architecture, token formatting, and custom Markdown templates.
 - [**Development & Testing**](docs/development-and-testing.md): Building, testing, benchmarking, and contributing to `brain.md`.
-- [**On-Device AI & Meetings**](docs/local-ai.md): Gemma 4 with MLX, review sheet, meeting transcription, permissions and model details.
+- [**On-Device AI & Meetings**](docs/local-ai.md): Gemma 4 with MLX, review sheet, Gemma Chat, meeting transcription and languages, permissions and model details.
 - [**Releasing**](docs/releasing.md): Packaging, signing without a paid developer account, DMG and Homebrew cask distribution.
 
 ---

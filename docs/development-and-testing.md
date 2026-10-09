@@ -45,6 +45,7 @@ brain-md/
 │   │   └── AI/                    # On-device AI & meetings (see local-ai.md)
 │   │       ├── LocalModelManager.swift # Gemma 4 download, verify, load/unload
 │   │       ├── GemmaService.swift # Prompts & streaming generation
+│   │       ├── GemmaChat.swift    # Free-form chat state & history replay
 │   │       ├── VisualCaptureService.swift # Screenshots for Explain Screen
 │   │       ├── AudioCaptureService.swift # System audio + microphone capture
 │   │       ├── MeetingTranscriber.swift # SpeechAnalyzer per audio source
@@ -60,6 +61,7 @@ brain-md/
 │   │   ├── QuickSwitcherModalView.swift # Spotlight-style note switcher (⌘O)
 │   │   ├── MCPServerModalView.swift # Server inspector & agent setup
 │   │   ├── AIResultSheet.swift    # Review sheet for Gemma output
+│   │   ├── GemmaChatView.swift    # "Gemma Chat" window
 │   │   ├── MeetingLiveOverlay.swift # Live levels & partial transcript
 │   │   └── SettingsView.swift     # macOS System Settings window
 │   ├── MCP/                       # Model Context Protocol implementation
@@ -145,9 +147,9 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `testScrollViewFinderRegistersAndReleasesPreview()` | `ScrollViewFinder` registers on window attach and unregisters on dismantle. |
 | `testMetricsIgnoreDocumentFrameOrigin()` / `testMetricsNonFlippedDocument()` / `testMetricsHonorContentInsets()` / `testMetricsShortDocument()` | `ScrollMetrics` geometry: frame-origin independence, `isFlipped` handling, content insets, and non-scrollable documents. |
 | `LocalModelManagerTests` | Snapshot completeness (every indexed weight file), legacy placeholder cleanup, disk size of symlinked blobs, memory check, and loading without a download. |
-| `GemmaServiceTests` | Prompt wording per mode, empty-note and disabled errors, speaker labels, truncation marker. |
+| `GemmaServiceTests` | Prompt wording per mode, empty-note and disabled errors (without loading the model), speaker labels, truncation marker. Chat: note attached only when new or changed, history replay of complete exchanges, failed turns, blank messages. |
 | `VisualCaptureServiceTests` | AppKit → ScreenCaptureKit coordinates (including a display above the main one) and the disabled setting. |
-| `MeetingTranscriptionTests` | Sample-buffer conversion, level meter mapping, transcript line format, transcription language default. |
+| `MeetingTranscriptionTests` | Sample-buffer conversion, level meter mapping, transcript line format, transcription language default, locale matching (`nl_BE`, `nl` → `nl_NL`, `en_BE` → `en_US`). |
 | Opt-in real-model and speech tests | Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1` or `TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1`; see [On-Device AI & Meetings](local-ai.md#testing). |
 
 ---
