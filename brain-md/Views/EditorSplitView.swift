@@ -391,40 +391,13 @@ public struct EditorSplitView: View {
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
-                // Model Status & Download Bar / Trigger
+                // Model Status (uniform 28x28 spinner when downloading)
                 if modelManager.state.status == .downloading {
-                    HStack(spacing: 6) {
-                        ProgressView(value: modelManager.state.progress)
-                            .progressViewStyle(.linear)
-                            .frame(width: 70)
-                        Text("\(Int(modelManager.state.progress * 100))%")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(.accentColor)
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.primary.opacity(0.06))
-                    .cornerRadius(5)
-                    .help("Downloading Gemma 4 E4B weights...")
-                } else if modelManager.state.status == .notDownloaded {
-                    Button(action: {
-                        modelManager.startDownload()
-                        showBubble(message: "Downloading Gemma 4 E4B model (~2.4 GB)...")
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.down.circle")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("Get Gemma 4")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.12))
-                        .foregroundColor(.accentColor)
-                        .cornerRadius(5)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Download Gemma 4 E4B On-Device AI (~2.4 GB)")
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.75)
+                        .frame(width: 28, height: 28)
+                        .help("Downloading Gemma 4 E4B weights (\(Int(modelManager.state.progress * 100))%)...")
                 }
 
                 // Local AI Meeting Transcription & Screen Capture
@@ -453,14 +426,16 @@ public struct EditorSplitView: View {
                     }
                 } label: {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundColor(modelManager.state.status == .ready ? .purple : .secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(modelManager.state.status == .ready ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
-                        .cornerRadius(5)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(modelManager.state.status == .ready ? Color.purple.opacity(0.12) : Color.clear)
+                        )
                 }
                 .menuStyle(.borderlessButton)
+                .frame(width: 28, height: 28)
                 .help(modelManager.state.status == .ready ? "Local Gemma 4 AI Assistant" : "Gemma 4 model download required")
 
                 // Export as PDF Button
