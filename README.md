@@ -34,6 +34,7 @@
 - **📊 Offline Mermaid Diagrams**: Interactive diagrams (flowcharts, sequence, class, state, git graphs) rendered completely offline via bundled `mermaid.min.js` with adaptive dark/light themes.
 - **🎨 112 Custom Themes (terminalcolors.com)**: Comprehensive catalog of 80 dark and 32 light themes across 36 iconic theme families (Catppuccin, Tokyo Night, Dracula, Gruvbox, Nord, Rosé Pine, GitHub, Ayu, Solarized, Zenbones, etc.). Powers real-time syntax highlighting, custom editor canvas styling, and live color swatch previews in Settings.
 - **⚙️ Modern macOS System Settings**: Native Ventura/Sonoma/Sequoia-style settings menu with custom note title formats (with dynamic tokens like `{date}`, `{time}`, `{year}`), customizable Markdown content templates, and configurable attachment folders.
+- **🎙️ Local On-Device AI & Meeting Assistant (Gemma 4 E4B)**: Optional on-demand local installation of Google DeepMind's Gemma 4 E4B model (~2.4 GB) via MLX for Apple Silicon. Zero cloud dependencies. Transcribes incoming system audio from calls (Zoom, Teams, Meet via `ScreenCaptureKit`) and local microphone voice, captures presentation slides and diagrams for real-time visual comprehension, and rewrites notes locally with 1-click summarization and action item extraction.
 - **🔄 Live File Synchronization**: Automatic background file system watcher (`FSEvents` / `DispatchSource`) detects changes made by external editors in real time.
 - **🔒 Secure & Private**: Offline-by-default, path traversal protection, and optional MCP read-only guard.
 

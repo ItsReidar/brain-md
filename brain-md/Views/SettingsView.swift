@@ -16,6 +16,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable {
   case general = "General"
   case appearance = "Appearance"
   case editor = "Editor & Markdown"
+  case localAI = "Local AI & Voice"
   case mcpServer = "MCP Server"
   case vault = "Vault & Storage"
   case advanced = "Advanced"
@@ -28,6 +29,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable {
     case .general: return "gearshape.fill"
     case .appearance: return "paintpalette.fill"
     case .editor: return "doc.text.fill"
+    case .localAI: return "waveform.and.mic"
     case .mcpServer: return "network"
     case .vault: return "folder.fill"
     case .advanced: return "slider.horizontal.3"
@@ -40,6 +42,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable {
     case .general: return Color(hex: "#8e8e93") ?? .gray
     case .appearance: return Color(hex: "#007aff") ?? .blue
     case .editor: return Color(hex: "#34c759") ?? .green
+    case .localAI: return Color(hex: "#ff2d55") ?? .pink
     case .mcpServer: return Color(hex: "#af52de") ?? .purple
     case .vault: return Color(hex: "#ff9500") ?? .orange
     case .advanced: return Color(hex: "#30b0c7") ?? .teal
@@ -252,6 +255,8 @@ public struct SettingsView: View {
             AppearanceSettingsPane()
           case .editor:
             EditorSettingsPane()
+          case .localAI:
+            LocalAISettingsPane()
           case .mcpServer:
             MCPServerSettingsPane()
           case .vault:
@@ -1311,3 +1316,77 @@ public struct AboutSettingsPane: View {
     }
   }
 }
+
+// MARK: - 8. Local AI & Voice Settings Pane
+
+public struct LocalAISettingsPane: View {
+  @ObservedObject var modelManager = LocalModelManager.shared
+  @AppStorage("ai_capture_system_audio") private var captureSystemAudio: Bool = true
+  @AppStorage("ai_capture_microphone") private var captureMicrophone: Bool = true
+  @AppStorage("ai_capture_screen_diagrams") private var captureScreenDiagrams: Bool = true
+
+  public init() {}
+
+  public var body: some View {
+    VStack(spacing: 16) {
+      SettingsCard(
+        title: "On-Device Gemma 4 E4B Model",
+        footer: "Runs Google DeepMind's Gemma 4 E4B locally via MLX on Apple Silicon. Zero network latency; private."
+      ) {
+        SettingsRow(
+          title: "Gemma 4 E4B On-Device Model",
+          subtitle: modelManager.state.status == .ready ? "Installed (~2.4 GB). Ready for transcription & rewriting." : "Download Gemma 4 E4B weights on-demand"
+        ) {
+          if modelManager.state.status == .downloading {
+            HStack(spacing: 8) {
+              ProgressView(value: modelManager.state.progress)
+                .frame(width: 90)
+              Text("\(Int(modelManager.state.progress * 100))%")
+                .font(.caption.monospacedDigit())
+            }
+          } else if modelManager.state.status == .ready {
+            Button("Remove Model", role: .destructive) {
+              modelManager.removeModelCache()
+            }
+          } else {
+            Button("Download (~2.4 GB)") {
+              modelManager.startDownload()
+            }
+            .buttonStyle(.borderedProminent)
+          }
+        }
+      }
+
+      SettingsCard(title: "Meeting & Voice Transcription") {
+        SettingsRow(
+          title: "Capture Incoming System Audio",
+          subtitle: "Uses ScreenCaptureKit to transcribe remote participants in calls"
+        ) {
+          Toggle("", isOn: $captureSystemAudio)
+            .toggleStyle(.switch)
+        }
+
+        Divider()
+
+        SettingsRow(
+          title: "Capture Microphone Audio",
+          subtitle: "Transcribes local microphone voice in meeting rooms"
+        ) {
+          Toggle("", isOn: $captureMicrophone)
+            .toggleStyle(.switch)
+        }
+
+        Divider()
+
+        SettingsRow(
+          title: "Visual Diagram Comprehension",
+          subtitle: "Captures presentation slides and diagrams for notes"
+        ) {
+          Toggle("", isOn: $captureScreenDiagrams)
+            .toggleStyle(.switch)
+        }
+      }
+    }
+  }
+}
+

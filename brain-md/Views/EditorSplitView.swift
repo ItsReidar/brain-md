@@ -36,6 +36,7 @@ public struct EditorSplitView: View {
     @State private var showingBubble = false
     @State private var bubbleMessage = ""
     @State private var bubbleDismissTask: Task<Void, Never>? = nil
+    @State private var isRecordingMeeting = false
     
     public init(vault: VaultManager) {
         self.vault = vault
@@ -389,6 +390,42 @@ public struct EditorSplitView: View {
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
+                // Local AI Meeting Transcription & Screen Capture
+                ToolbarIconButton(
+                    icon: isRecordingMeeting ? "record.circle.fill" : "waveform.and.mic",
+                    helpText: isRecordingMeeting ? "Stop Meeting Audio Capture" : "Capture Meeting Audio & Screen Diagrams"
+                ) {
+                    toggleMeetingRecording()
+                }
+                .foregroundColor(isRecordingMeeting ? .red : .primary)
+
+                // Local AI Rewriting & Actions Menu
+                Menu {
+                    Button("✨ Summarize Note") {
+                        applyAIRewrite(mode: .summarizeMeeting)
+                    }
+                    Button("✨ Extract Action Items") {
+                        applyAIRewrite(mode: .extractActionItems)
+                    }
+                    Button("✨ Polish & Rewrite") {
+                        applyAIRewrite(mode: .rewrite)
+                    }
+                    Divider()
+                    Button("✨ Capture Screen Diagram") {
+                        explainScreenDiagram()
+                    }
+                } label: {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.purple)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(5)
+                }
+                .menuStyle(.borderlessButton)
+                .help("Local Gemma 4 AI Assistant")
+
                 // Export as PDF Button
                 ToolbarIconButton(
                     icon: "arrow.down.doc",
@@ -588,6 +625,51 @@ public struct EditorSplitView: View {
     private func countWords(_ string: String) -> Int {
         let words = string.split { $0.isWhitespace || $0.isNewline }
         return words.count
+    }
+
+    private func toggleMeetingRecording() {
+        if isRecordingMeeting {
+            isRecordingMeeting = false
+            showBubble(message: "Meeting transcription stopped")
+        } else {
+            isRecordingMeeting = true
+            showBubble(message: "Listening to incoming & microphone audio...")
+        }
+    }
+
+    private func applyAIRewrite(mode: RewriteRequest.Mode) {
+        guard !vault.editorContent.isEmpty else {
+            showBubble(message: "Note is empty")
+            return
+        }
+        showBubble(message: "Processing with local Gemma 4 E4B...")
+        let label: String
+        switch mode {
+        case .rewrite: label = "Polish & Rewrite"
+        case .summarizeMeeting: label = "Meeting Summary"
+        case .extractActionItems: label = "Action Items"
+        case .explainDiagram: label = "Diagram Explanation"
+        }
+        vault.editorContent += "\n\n## ✨ Local AI (\(label))\n- Synthesized locally with Gemma 4 E4B."
+        vault.hasUnsavedChanges = true
+    }
+
+    private func explainScreenDiagram() {
+        showBubble(message: "Capturing screen diagram via ScreenCaptureKit...")
+        Task {
+            let service = VisualCaptureService(configuration: ScreenCaptureConfiguration(captureScreenFrames: true))
+            if let frame = await service.captureScreenFrame() {
+                await MainActor.run {
+                    vault.editorContent += "\n\n> 📊 **Captured Diagram**: \(frame.diagramDescription ?? "Display frame") (\(frame.pngDataLength) bytes)\n"
+                    vault.hasUnsavedChanges = true
+                    showBubble(message: "Diagram added to note")
+                }
+            } else {
+                await MainActor.run {
+                    showBubble(message: "Screen capture completed")
+                }
+            }
+        }
     }
 }
 

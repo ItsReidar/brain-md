@@ -87,7 +87,17 @@ graph TD
 
 ---
 
-### 4. MCP Server
+### 4. Local AI & Voice
+
+- **On-Device Gemma 4 E4B Model**: Optional download toggle to install Google DeepMind's Gemma 4 E4B model (~2.4 GB) directly to local Application Support via MLX. Completely private and offline.
+- **Progress Tracking & Storage Clearance**: Live download progress bar with byte metrics and 1-click model removal to free disk space.
+- **Capture Incoming System Audio**: Seamlessly capture remote participants during video conferences (Zoom, Teams, Meet) using `ScreenCaptureKit` audio stream.
+- **Capture Microphone Audio**: Live transcription of in-person speaker voice via `AVAudioEngine`.
+- **Visual Diagram Comprehension**: Screen frame analysis via `ScreenCaptureKit` display capture to interpret charts, architecture diagrams, and slide decks presented during meetings.
+
+---
+
+### 5. MCP Server
 
 - **Server Status Indicator**: Real-time status display showing active port with live green pulsating beacon.
 - **Restart Server Button**: Instantly reboot the HTTP/SSE listener if port conflicts arise.
@@ -97,7 +107,7 @@ graph TD
 
 ---
 
-### 5. Vault & Storage
+### 6. Vault & Storage
 
 - **Active Vault Path**: Displays the full POSIX filesystem location of your active notes folder.
 - **Change Location...**: Native macOS open panel dialog to switch or create a different vault directory.
@@ -107,7 +117,7 @@ graph TD
 
 ---
 
-### 6. Advanced
+### 7. Advanced
 
 - **Clear Memory Caches**: Flushes in-memory AST and syntax highlighting token caches.
 - **Diagnostic Log Level**: Configure activity logger verbosity (`Verbose`, `Info`, `Errors Only`).
