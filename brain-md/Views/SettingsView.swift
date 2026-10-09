@@ -175,7 +175,13 @@ public struct SettingsView: View {
   @State private var selectedTab: SettingsTab = .general
   @State private var searchText = ""
 
-  public init(vault: VaultManager = .shared) {
+  @MainActor
+  public init() {
+    self.vault = .shared
+  }
+
+  @MainActor
+  public init(vault: VaultManager) {
     self.vault = vault
   }
 
@@ -1328,39 +1334,113 @@ public struct LocalAISettingsPane: View {
   public init() {}
 
   public var body: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: 20) {
+      // 1. Dedicated Model Installation & Progress Card
       SettingsCard(
-        title: "On-Device Gemma 4 E4B Model",
-        footer: "Runs Google DeepMind's Gemma 4 E4B locally via MLX on Apple Silicon. Zero network latency; private."
+        title: "Gemma 4 E4B Model Installation & Storage",
+        footer: "Google DeepMind's Gemma 4 E4B runs on-device using MLX on Apple Silicon. Audio and screen diagrams are processed entirely offline with zero cloud latency."
       ) {
-        SettingsRow(
-          title: "Gemma 4 E4B On-Device Model",
-          subtitle: modelManager.state.status == .ready ? "Installed (~2.4 GB). Ready for transcription & rewriting." : "Download Gemma 4 E4B weights on-demand"
-        ) {
-          if modelManager.state.status == .downloading {
-            HStack(spacing: 8) {
-              ProgressView(value: modelManager.state.progress)
-                .frame(width: 90)
-              Text("\(Int(modelManager.state.progress * 100))%")
-                .font(.caption.monospacedDigit())
+        VStack(alignment: .leading, spacing: 14) {
+          // Model Header & Status Badge
+          HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "cpu.fill")
+              .font(.system(size: 24))
+              .foregroundColor(.accentColor)
+              .frame(width: 32, height: 32)
+              .background(Color.accentColor.opacity(0.12))
+              .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+              Text("Gemma 4 E4B On-Device Model")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.primary)
+
+              Text("4-Billion parameter multimodal foundation model (~2.4 GB)")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
             }
-          } else if modelManager.state.status == .ready {
-            Button("Remove Model", role: .destructive) {
-              modelManager.removeModelCache()
+
+            Spacer()
+
+            // Status Pill
+            statusBadge
+          }
+
+          Divider()
+
+          // Persistent Download Progress Section
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text("Download Status")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+
+              Spacer()
+
+              progressLabel
             }
-          } else {
-            Button("Download (~2.4 GB)") {
-              modelManager.startDownload()
+
+            // Always-visible full-width linear progress bar
+            ProgressView(value: modelManager.state.progress, total: 1.0)
+              .progressViewStyle(.linear)
+              .tint(modelManager.state.status == .ready ? .green : .accentColor)
+          }
+
+          Divider()
+
+          // Action Controls
+          HStack {
+            if modelManager.state.status == .downloading {
+              Text("Downloading weights in background...")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+
+              Spacer()
+
+              Button("Cancel") {
+                modelManager.removeModelCache()
+              }
+              .buttonStyle(.bordered)
+            } else if modelManager.state.status == .ready {
+              HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                  .foregroundColor(.green)
+                Text("Installed on disk (~2.4 GB)")
+                  .font(.system(size: 12, weight: .medium))
+                  .foregroundColor(.secondary)
+              }
+
+              Spacer()
+
+              Button("Remove Model Cache", role: .destructive) {
+                modelManager.removeModelCache()
+              }
+              .buttonStyle(.bordered)
+            } else {
+              Text("Model not installed. Download required to enable offline transcription & rewrite.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+
+              Spacer()
+
+              Button(action: {
+                modelManager.startDownload()
+              }) {
+                Label("Download Gemma 4 E4B (~2.4 GB)", systemImage: "arrow.down.circle.fill")
+              }
+              .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
           }
         }
+        .padding(16)
       }
 
-      SettingsCard(title: "Meeting & Voice Transcription") {
+      // 2. Audio & Visual Capture Permissions & Settings
+      SettingsCard(title: "Meeting Audio & Visual Capture") {
         SettingsRow(
           title: "Capture Incoming System Audio",
-          subtitle: "Uses ScreenCaptureKit to transcribe remote participants in calls"
+          subtitle: "Transcribes remote participants and meeting calls using ScreenCaptureKit",
+          icon: "speaker.wave.3.fill"
         ) {
           Toggle("", isOn: $captureSystemAudio)
             .toggleStyle(.switch)
@@ -1370,7 +1450,8 @@ public struct LocalAISettingsPane: View {
 
         SettingsRow(
           title: "Capture Microphone Audio",
-          subtitle: "Transcribes local microphone voice in meeting rooms"
+          subtitle: "Transcribes local room voice and speaker questions via microphone",
+          icon: "mic.fill"
         ) {
           Toggle("", isOn: $captureMicrophone)
             .toggleStyle(.switch)
@@ -1380,12 +1461,80 @@ public struct LocalAISettingsPane: View {
 
         SettingsRow(
           title: "Visual Diagram Comprehension",
-          subtitle: "Captures presentation slides and diagrams for notes"
+          subtitle: "Captures on-screen presentation slides and architectural diagrams for notes",
+          icon: "rectangle.inset.filled.and.cursorarrow"
         ) {
           Toggle("", isOn: $captureScreenDiagrams)
             .toggleStyle(.switch)
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private var statusBadge: some View {
+    switch modelManager.state.status {
+    case .notDownloaded:
+      Text("Not Installed")
+        .font(.system(size: 11, weight: .semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.secondary.opacity(0.12))
+        .foregroundColor(.secondary)
+        .clipShape(Capsule())
+    case .downloading:
+      HStack(spacing: 5) {
+        ProgressView()
+          .controlSize(.small)
+          .scaleEffect(0.7)
+        Text("Downloading \(Int(modelManager.state.progress * 100))%")
+          .font(.system(size: 11, weight: .semibold))
+      }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 3)
+      .background(Color.accentColor.opacity(0.15))
+      .foregroundColor(.accentColor)
+      .clipShape(Capsule())
+    case .ready:
+      Label("Ready", systemImage: "checkmark.circle.fill")
+        .font(.system(size: 11, weight: .semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.green.opacity(0.15))
+        .foregroundColor(.green)
+        .clipShape(Capsule())
+    case .error:
+      Label("Download Failed", systemImage: "exclamationmark.triangle.fill")
+        .font(.system(size: 11, weight: .semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.red.opacity(0.15))
+        .foregroundColor(.red)
+        .clipShape(Capsule())
+    }
+  }
+
+  @ViewBuilder
+  private var progressLabel: some View {
+    switch modelManager.state.status {
+    case .notDownloaded:
+      Text("0 MB / 2,400 MB (0%)")
+        .font(.system(size: 11, weight: .medium, design: .monospaced))
+        .foregroundColor(.secondary)
+    case .downloading:
+      let downloadedMB = modelManager.state.bytesDownloaded / 1_000_000
+      let totalMB = modelManager.state.totalBytes > 0 ? modelManager.state.totalBytes / 1_000_000 : 2400
+      Text("\(downloadedMB) MB / \(totalMB) MB (\(Int(modelManager.state.progress * 100))%)")
+        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+        .foregroundColor(.accentColor)
+    case .ready:
+      Text("2,400 MB / 2,400 MB (100%)")
+        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+        .foregroundColor(.green)
+    case .error:
+      Text("Error: \(modelManager.state.errorMessage ?? "Download interrupted")")
+        .font(.system(size: 11, weight: .medium))
+        .foregroundColor(.red)
     }
   }
 }

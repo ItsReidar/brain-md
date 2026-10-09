@@ -20,13 +20,13 @@ public final class LocalModelManager: ObservableObject {
 
     public init(modelIdentifier: String = "gemma-4-e4b") {
         self.state = ModelDownloadState(modelIdentifier: modelIdentifier)
-        checkExistingModel()
     }
 
     public func checkExistingModel() {
         let weight = modelDirectory.appendingPathComponent("model.bin")
         if FileManager.default.fileExists(atPath: weight.path) {
             state.status = .ready; state.progress = 1.0; state.localPath = weight.path
+            state.bytesDownloaded = 2_400_000_000; state.totalBytes = 2_400_000_000
         }
     }
 
@@ -39,7 +39,7 @@ public final class LocalModelManager: ObservableObject {
         Task { @MainActor in
             let total: Int64 = 2_400_000_000
             for step in 1...10 {
-                try? await Task.sleep(nanoseconds: 200_000_000)
+                try? await Task.sleep(nanoseconds: 250_000_000)
                 guard self.state.status == .downloading else { return }
                 let downloaded = Int64(Double(total) * (Double(step) / 10.0))
                 self.updateProgress(bytesDownloaded: downloaded, totalBytes: total)
@@ -62,6 +62,7 @@ public final class LocalModelManager: ObservableObject {
     public func completeDownload(localPath: String) {
         state.status = .ready
         state.progress = 1.0
+        state.bytesDownloaded = state.totalBytes > 0 ? state.totalBytes : 2_400_000_000
         state.localPath = localPath
         state.errorMessage = nil
     }
