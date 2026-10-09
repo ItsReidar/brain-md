@@ -69,6 +69,23 @@ struct GemmaServiceTests {
         #expect(!service.isGenerating)
     }
 
+    /// Regression: an empty note must fail before the model is loaded.
+    @Test func emptyNoteFailsWithoutLoadingTheModel() async throws {
+        let key = LocalModelManager.enabledDefaultsKey
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { if let saved { UserDefaults.standard.set(saved, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) } }
+        UserDefaults.standard.set(true, forKey: key)
+
+        let manager = LocalModelManager(
+            modelsDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let service = GemmaService(modelManager: manager)
+        await #expect(throws: GemmaServiceError.emptyInput) {
+            for try await _ in service.stream(RewriteRequest(mode: .rewrite, sourceText: "  ")) {}
+        }
+        #expect(!manager.isLoaded)
+        #expect(!service.isGenerating)
+    }
+
     /// Opt-in: sends the app icon through the image path. Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1 …`.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["BRAINMD_MODEL_INTEGRATION"] == "1"))
     func realModelExplainsAnImage() async throws {

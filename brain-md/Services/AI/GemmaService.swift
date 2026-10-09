@@ -47,28 +47,43 @@ public final class GemmaService: ObservableObject {
 
     /// Streams Gemma's answer for `request`. Cancelling the consuming task stops generation.
     public func stream(_ request: RewriteRequest, image: CGImage? = nil) -> AsyncThrowingStream<String, Error> {
+        // Validate before `generate` so an empty note never loads the 6.8 GB model.
+        let prompt: String
+        do {
+            prompt = try Self.prompt(for: request)
+        } catch {
+            return AsyncThrowingStream { $0.finish(throwing: error) }
+        }
+        return generate { container in
+            // No pre-resize: ChatSession's 512×512 default would shrink screenshots before
+            // Gemma's own processor sizes them to its token budget, blurring slide text.
+            let session = ChatSession(
+                container,
+                instructions: Self.instructions,
+                generateParameters: GenerateParameters(maxTokens: 2048, temperature: 0.3),
+                processing: UserInput.Processing())
+            let images: [UserInput.Image] = image.map { [.ciImage(CIImage(cgImage: $0))] } ?? []
+            return session.streamResponse(to: prompt, images: images)
+        }
+    }
+
+    /// Loads the model if needed, runs `makeStream` with it and forwards the output. Keeps
+    /// `isGenerating` and the idle-unload timer correct for every caller (note actions and chat).
+    func generate(
+        _ makeStream: @escaping (ModelContainer) throws -> AsyncThrowingStream<String, Error>
+    ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task { @MainActor in
                 do {
                     guard self.isEnabled else { throw GemmaServiceError.disabled }
-                    let prompt = try Self.prompt(for: request)
                     self.idleUnloadTask?.cancel()
                     self.isGenerating = true
                     defer {
                         self.isGenerating = false
                         self.scheduleIdleUnload()
                     }
-
                     let container = try await self.modelManager.loadModel()
-                    // No pre-resize: ChatSession's 512×512 default would shrink screenshots before
-                    // Gemma's own processor sizes them to its token budget, blurring slide text.
-                    let session = ChatSession(
-                        container,
-                        instructions: Self.instructions,
-                        generateParameters: GenerateParameters(maxTokens: 2048, temperature: 0.3),
-                        processing: UserInput.Processing())
-                    let images: [UserInput.Image] = image.map { [.ciImage(CIImage(cgImage: $0))] } ?? []
-                    for try await chunk in session.streamResponse(to: prompt, images: images) {
+                    for try await chunk in try makeStream(container) {
                         continuation.yield(chunk)
                     }
                     continuation.finish()

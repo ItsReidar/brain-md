@@ -45,6 +45,7 @@ public struct EditorSplitView: View {
     @State private var aiRequest: AIResultRequest?
     @AppStorage("ai_capture_screen_diagrams") private var isScreenExplanationEnabled = true
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     
     public init(vault: VaultManager) {
         self.vault = vault
@@ -461,6 +462,8 @@ public struct EditorSplitView: View {
                             Divider()
                             Button("Explain Screen") { explainScreen() }
                         }
+                        Divider()
+                        Button("Chat with Gemma…") { openWindow(id: GemmaChatView.windowID) }
                     } else {
                         Button("Set Up On-Device AI…") { openSettings() }
                     }
