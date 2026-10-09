@@ -77,7 +77,10 @@ struct GemmaChatView: View {
             .frame(maxWidth: .infinity)
         }
         .frame(maxHeight: .infinity)
-        .defaultScrollAnchor(.bottom)
+        // A short chat reads from the top; once it overflows, the view follows the newest text.
+        .defaultScrollAnchor(.top, for: .alignment)
+        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(.bottom, for: .sizeChanges)
     }
 
     private var emptyState: some View {
@@ -389,19 +392,18 @@ private struct MessageActionButton: View {
     }
 }
 
-/// Gemma's mark: sparkles on a violet disc, the colour the app uses for on-device AI.
+/// Gemma's mark in the chat: the app's own icon, as macOS renders it for the Dock.
 private struct GemmaAvatar: View {
     let size: CGFloat
 
     var body: some View {
-        Image(systemName: "sparkles")
-            .font(.system(size: size * 0.48, weight: .semibold))
-            .foregroundStyle(.white)
+        // macOS icons leave a transparent margin around the artwork; scale up so the visible
+        // shape fills `size` and lines up with the text beside it.
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size * 1.22, height: size * 1.22)
             .frame(width: size, height: size)
-            .background(
-                Circle().fill(LinearGradient(
-                    colors: [Color(red: 0.55, green: 0.36, blue: 0.96), Color(red: 0.43, green: 0.24, blue: 0.85)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing)))
             .accessibilityHidden(true)
     }
 }
