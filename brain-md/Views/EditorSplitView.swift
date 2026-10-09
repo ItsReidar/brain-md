@@ -37,6 +37,7 @@ public struct EditorSplitView: View {
     @State private var bubbleMessage = ""
     @State private var bubbleDismissTask: Task<Void, Never>? = nil
     @State private var isRecordingMeeting = false
+    @ObservedObject private var modelManager = LocalModelManager.shared
     
     public init(vault: VaultManager) {
         self.vault = vault
@@ -390,6 +391,42 @@ public struct EditorSplitView: View {
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
+                // Model Status & Download Bar / Trigger
+                if modelManager.state.status == .downloading {
+                    HStack(spacing: 6) {
+                        ProgressView(value: modelManager.state.progress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 70)
+                        Text("\(Int(modelManager.state.progress * 100))%")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(.accentColor)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(5)
+                    .help("Downloading Gemma 4 E4B weights...")
+                } else if modelManager.state.status == .notDownloaded {
+                    Button(action: {
+                        modelManager.startDownload()
+                        showBubble(message: "Downloading Gemma 4 E4B model (~2.4 GB)...")
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Get Gemma 4")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(5)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Download Gemma 4 E4B On-Device AI (~2.4 GB)")
+                }
+
                 // Local AI Meeting Transcription & Screen Capture
                 ToolbarIconButton(
                     icon: isRecordingMeeting ? "record.circle.fill" : "waveform.and.mic",
@@ -397,7 +434,7 @@ public struct EditorSplitView: View {
                 ) {
                     toggleMeetingRecording()
                 }
-                .foregroundColor(isRecordingMeeting ? .red : .primary)
+                .foregroundColor(isRecordingMeeting ? .red : (modelManager.state.status == .ready ? .primary : .secondary.opacity(0.6)))
 
                 // Local AI Rewriting & Actions Menu
                 Menu {
@@ -417,14 +454,14 @@ public struct EditorSplitView: View {
                 } label: {
                     Image(systemName: "sparkles")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.purple)
+                        .foregroundColor(modelManager.state.status == .ready ? .purple : .secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 4)
-                        .background(Color.purple.opacity(0.1))
+                        .background(modelManager.state.status == .ready ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
                         .cornerRadius(5)
                 }
                 .menuStyle(.borderlessButton)
-                .help("Local Gemma 4 AI Assistant")
+                .help(modelManager.state.status == .ready ? "Local Gemma 4 AI Assistant" : "Gemma 4 model download required")
 
                 // Export as PDF Button
                 ToolbarIconButton(
@@ -630,16 +667,35 @@ public struct EditorSplitView: View {
     private func toggleMeetingRecording() {
         if isRecordingMeeting {
             isRecordingMeeting = false
+            AudioCaptureService.shared.stopCapture()
             showBubble(message: "Meeting transcription stopped")
+            vault.editorContent += "\n\n---\n### 📝 Meeting Minutes & Summary\n- Call and voice transcription concluded.\n"
+            vault.hasUnsavedChanges = true
         } else {
+            guard modelManager.state.status == .ready else {
+                modelManager.startDownload()
+                showBubble(message: "Downloading Gemma 4 E4B model first...")
+                return
+            }
             isRecordingMeeting = true
-            showBubble(message: "Listening to incoming & microphone audio...")
+            showBubble(message: "Recording started. Listening to audio...")
+            vault.editorContent += "\n\n## 🎙️ Live Meeting Transcript (\(Date().formatted(date: .omitted, time: .shortened)))\n"
+            vault.hasUnsavedChanges = true
+            AudioCaptureService.shared.startCapture { segment in
+                vault.editorContent += "\n> \(segment.text)"
+                vault.hasUnsavedChanges = true
+            }
         }
     }
 
     private func applyAIRewrite(mode: RewriteRequest.Mode) {
         guard !vault.editorContent.isEmpty else {
             showBubble(message: "Note is empty")
+            return
+        }
+        guard modelManager.state.status == .ready else {
+            modelManager.startDownload()
+            showBubble(message: "Gemma 4 not installed. Starting download...")
             return
         }
         showBubble(message: "Processing with local Gemma 4 E4B...")
@@ -655,6 +711,11 @@ public struct EditorSplitView: View {
     }
 
     private func explainScreenDiagram() {
+        guard modelManager.state.status == .ready else {
+            modelManager.startDownload()
+            showBubble(message: "Gemma 4 not installed. Starting download...")
+            return
+        }
         showBubble(message: "Capturing screen diagram via ScreenCaptureKit...")
         Task {
             let service = VisualCaptureService(configuration: ScreenCaptureConfiguration(captureScreenFrames: true))

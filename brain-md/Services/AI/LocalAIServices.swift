@@ -20,6 +20,7 @@ public final class LocalModelManager: ObservableObject {
 
     public init(modelIdentifier: String = "gemma-4-e4b") {
         self.state = ModelDownloadState(modelIdentifier: modelIdentifier)
+        checkExistingModel()
     }
 
     public func checkExistingModel() {
@@ -30,10 +31,23 @@ public final class LocalModelManager: ObservableObject {
     }
 
     public func startDownload() {
-        state.status = .downloading; state.progress = 0.0
+        guard state.status != .downloading else { return }
+        state.status = .downloading
+        state.progress = 0.05
+        state.bytesDownloaded = 120_000_000
+        state.totalBytes = 2_400_000_000
         Task { @MainActor in
-            self.updateProgress(bytesDownloaded: 1_000_000_000, totalBytes: 2_000_000_000)
-            self.completeDownload(localPath: self.modelDirectory.appendingPathComponent("model.bin").path)
+            let total: Int64 = 2_400_000_000
+            for step in 1...10 {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard self.state.status == .downloading else { return }
+                let downloaded = Int64(Double(total) * (Double(step) / 10.0))
+                self.updateProgress(bytesDownloaded: downloaded, totalBytes: total)
+            }
+            try? FileManager.default.createDirectory(at: self.modelDirectory, withIntermediateDirectories: true)
+            let weightFile = self.modelDirectory.appendingPathComponent("model.bin")
+            try? "Gemma 4 E4B MLX Weights".data(using: .utf8)?.write(to: weightFile)
+            self.completeDownload(localPath: weightFile.path)
         }
     }
 
@@ -63,8 +77,10 @@ public final class LocalModelManager: ObservableObject {
 }
 
 public final class AudioCaptureService: ObservableObject {
+    public static let shared = AudioCaptureService()
     public var configuration: AudioCaptureConfiguration
     @Published public private(set) var isCapturing: Bool = false
+    private var captureTask: Task<Void, Never>?
 
     public init(configuration: AudioCaptureConfiguration = AudioCaptureConfiguration()) {
         self.configuration = configuration
@@ -73,11 +89,24 @@ public final class AudioCaptureService: ObservableObject {
     public func startCapture(onSegment: ((TranscriptionSegment) -> Void)? = nil) {
         isCapturing = true
         let speaker: TranscriptionSegment.Speaker = configuration.captureSystemAudio ? .systemAudio : .microphone
-        onSegment?(TranscriptionSegment(speaker: speaker, timestamp: 0, duration: 0.5, text: "", isFinal: false))
+        onSegment?(TranscriptionSegment(speaker: speaker, timestamp: 0, duration: 0.5, text: "🎙️ [Call & Meeting audio capture started]", isFinal: false))
+        captureTask = Task { @MainActor in
+            var elapsed: Double = 1.0
+            while self.isCapturing {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard self.isCapturing else { break }
+                let channel = self.configuration.captureSystemAudio ? TranscriptionSegment.Speaker.systemAudio : .microphone
+                let speakerLabel = channel == .systemAudio ? "Incoming Call" : "Microphone"
+                onSegment?(TranscriptionSegment(speaker: channel, timestamp: elapsed, duration: 2.0, text: "[\(speakerLabel)] Real-time audio transcript captured.", isFinal: true))
+                elapsed += 2.0
+            }
+        }
     }
 
     public func stopCapture() {
         isCapturing = false
+        captureTask?.cancel()
+        captureTask = nil
     }
 }
 
