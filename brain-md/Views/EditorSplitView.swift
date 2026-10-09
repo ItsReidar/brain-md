@@ -40,6 +40,7 @@ public struct EditorSplitView: View {
     @ObservedObject private var modelManager = LocalModelManager.shared
     @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
     @State private var aiRequest: AIResultRequest?
+    @AppStorage("ai_capture_screen_diagrams") private var isScreenExplanationEnabled = true
     @Environment(\.openSettings) private var openSettings
     
     public init(vault: VaultManager) {
@@ -441,6 +442,10 @@ public struct EditorSplitView: View {
                         Button("Summarize Note") { runAI(.summarizeMeeting, title: "Summary") }
                         Button("Extract Action Items") { runAI(.extractActionItems, title: "Action Items") }
                         Button("Polish & Rewrite") { runAI(.rewrite, title: "Polished Note") }
+                        if isScreenExplanationEnabled {
+                            Divider()
+                            Button("Explain Screen") { explainScreen() }
+                        }
                     } else {
                         Button("Set Up On-Device AI…") { openSettings() }
                     }
@@ -697,6 +702,24 @@ public struct EditorSplitView: View {
     private func runAI(_ mode: RewriteRequest.Mode, title: String) {
         let request = RewriteRequest(mode: mode, sourceText: vault.editorContent)
         aiRequest = AIResultRequest(title: title) { GemmaService.shared.stream(request) }
+    }
+
+    /// Captures the screen (without brain-md's windows), then has Gemma explain it in the review sheet.
+    private func explainScreen() {
+        let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
+        showBubble(message: "Capturing your screen…")
+        Task {
+            do {
+                let image = try await VisualCaptureService(
+                    configuration: ScreenCaptureConfiguration(captureScreenFrames: true)
+                ).captureScreen()
+                aiRequest = AIResultRequest(title: "Screen Explanation") {
+                    GemmaService.shared.stream(request, image: image)
+                }
+            } catch {
+                showBubble(message: error.localizedDescription)
+            }
+        }
     }
 }
 

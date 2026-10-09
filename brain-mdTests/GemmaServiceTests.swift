@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import ImageIO
 import Testing
 @testable import brain_md
 
@@ -66,6 +67,29 @@ struct GemmaServiceTests {
         }
         #expect(!manager.isLoaded)
         #expect(!service.isGenerating)
+    }
+
+    /// Opt-in: sends the app icon through the image path. Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1 …`.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["BRAINMD_MODEL_INTEGRATION"] == "1"))
+    func realModelExplainsAnImage() async throws {
+        let key = LocalModelManager.enabledDefaultsKey
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { if let saved { UserDefaults.standard.set(saved, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) } }
+        UserDefaults.standard.set(true, forKey: key)
+
+        let iconURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("assets/app-icon.png")
+        let source = try #require(CGImageSourceCreateWithURL(iconURL as CFURL, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+
+        let service = GemmaService(modelManager: LocalModelManager())
+        var output = ""
+        for try await chunk in service.stream(RewriteRequest(mode: .explainDiagram, sourceText: ""), image: image) {
+            output += chunk
+        }
+        #expect(output.localizedCaseInsensitiveContains("brain"), "\(output)")
+        #expect(output.localizedCaseInsensitiveContains("head"), "\(output)")
     }
 
     /// Opt-in: streams a real answer. Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1 xcodebuild test …`.

@@ -60,10 +60,13 @@ public final class GemmaService: ObservableObject {
                     }
 
                     let container = try await self.modelManager.loadModel()
+                    // No pre-resize: ChatSession's 512×512 default would shrink screenshots before
+                    // Gemma's own processor sizes them to its token budget, blurring slide text.
                     let session = ChatSession(
                         container,
                         instructions: Self.instructions,
-                        generateParameters: GenerateParameters(maxTokens: 2048, temperature: 0.3))
+                        generateParameters: GenerateParameters(maxTokens: 2048, temperature: 0.3),
+                        processing: UserInput.Processing())
                     let images: [UserInput.Image] = image.map { [.ciImage(CIImage(cgImage: $0))] } ?? []
                     for try await chunk in session.streamResponse(to: prompt, images: images) {
                         continuation.yield(chunk)

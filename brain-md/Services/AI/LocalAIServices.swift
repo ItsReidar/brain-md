@@ -5,9 +5,7 @@
 
 import Foundation
 import Combine
-import CoreGraphics
 import AppKit
-import ScreenCaptureKit
 
 // MARK: - Audio Capture Service
 
@@ -46,27 +44,3 @@ public final class AudioCaptureService: ObservableObject {
 }
 
 // MARK: - Visual Capture Service
-
-public final class VisualCaptureService {
-    public var configuration: ScreenCaptureConfiguration
-
-    public init(configuration: ScreenCaptureConfiguration = ScreenCaptureConfiguration()) {
-        self.configuration = configuration
-    }
-
-    public func captureScreenFrame() async -> VisualCaptureFrame? {
-        guard configuration.captureScreenFrames else { return nil }
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard let display = content.displays.first else { return nil }
-            let filter = SCContentFilter(display: display, excludingWindows: [])
-            let config = SCStreamConfiguration()
-            let cgImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-            let rep = NSBitmapImageRep(cgImage: cgImage)
-            let data = rep.representation(using: .png, properties: [:]) ?? Data()
-            return VisualCaptureFrame(id: UUID(), timestamp: Date().timeIntervalSince1970, pngDataLength: data.count, diagramDescription: "Main display frame (\(display.width)x\(display.height))")
-        } catch {
-            return nil
-        }
-    }
-}
