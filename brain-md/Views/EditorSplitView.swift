@@ -460,7 +460,10 @@ public struct EditorSplitView: View {
                         Button("Polish & Rewrite") { runAI(.rewrite, title: "Polished Note") }
                         if isScreenExplanationEnabled {
                             Divider()
-                            Button("Explain Screen") { explainScreen() }
+                            Menu("Explain Screen") {
+                                Button("Screen Under Pointer") { explainScreen() }
+                                Button("Choose Window, App or Display…") { explainChosenContent() }
+                            }
                         }
                         Divider()
                         Button("Chat with Gemma…") { openWindow(id: GemmaChatView.windowID) }
@@ -731,6 +734,25 @@ public struct EditorSplitView: View {
     private func runAI(_ mode: RewriteRequest.Mode, title: String) {
         let request = RewriteRequest(mode: mode, sourceText: vault.editorContent)
         aiRequest = AIResultRequest(title: title) { GemmaService.shared.stream(request) }
+    }
+
+    /// Lets the user pick a window, app or display with the system picker, then has Gemma explain it.
+    private func explainChosenContent() {
+        let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
+        Task {
+            do {
+                guard let capture = try await VisualCaptureService(
+                    configuration: ScreenCaptureConfiguration(captureScreenFrames: true)
+                ).captureChosenContent() else { return }
+                // Choosing a window can bring its app forward; the review sheet lives in brain-md.
+                NSApp.activate()
+                aiRequest = AIResultRequest(title: "Explanation: \(capture.label)") {
+                    GemmaService.shared.stream(request, image: capture.image)
+                }
+            } catch {
+                showBubble(message: error.localizedDescription)
+            }
+        }
     }
 
     /// Captures the screen (without brain-md's windows), then has Gemma explain it in the review sheet.

@@ -7,7 +7,7 @@ flowchart LR
   subgraph Capture
     SYS["System audio (Them)"]
     MIC["Microphone (Me)"]
-    SCR["Screenshot (display under the pointer, brain-md hidden)"]
+    SCR["Screenshot (display under the pointer, or a picked window, app or display)"]
   end
   SYS -->|ScreenCaptureKit| SA1["SpeechAnalyzer"]
   MIC -->|ScreenCaptureKit| SA2["SpeechAnalyzer"]
@@ -26,7 +26,7 @@ flowchart LR
 | Summarize Note | ✨ menu | Meeting-style minutes: summary, decisions, action items, open questions |
 | Extract Action Items | ✨ menu | A Markdown checklist with owners and dates when the note mentions them |
 | Polish & Rewrite | ✨ menu | Fixes grammar and structure, keeping facts, links, code and front matter |
-| Explain Screen | ✨ menu | Captures the display under the pointer (without brain-md's windows) and explains the slide or diagram |
+| Explain Screen | ✨ menu › Explain Screen | **Screen Under Pointer** captures that display (without brain-md's windows). **Choose Window, App or Display…** opens the macOS picker so you can pick exactly what to explain. Gemma then explains the slide or diagram |
 | Record a meeting | 🎙 toolbar button | Live transcript lines labelled **Them** / **Me** with timestamps; minutes from Gemma when you stop |
 | Gemma Chat | ✨ menu › Chat with Gemma…, or View › Gemma Chat (⇧⌘J) | A conversation in its own window, optionally about the open note |
 
@@ -60,8 +60,10 @@ Meetings are transcribed with Apple's **SpeechTranscriber**, the long-form model
 
 | Permission | Needed for | Asked |
 |---|---|---|
-| Screen & System Audio Recording | Explain Screen, system audio in meetings | On first use, by macOS |
+| Screen & System Audio Recording | Explain Screen › Screen Under Pointer, system audio in meetings | On first use, by macOS |
 | Microphone | Your side of a meeting | When recording starts |
+
+Choosing content with the picker needs no Screen Recording permission: picking is the consent. If the permission is already granted, a picked display also leaves out brain-md's own windows.
 
 Speech recognition permission is not requested: SpeechAnalyzer transcribes on-device without it. The usage string is declared as a safeguard.
 
@@ -82,7 +84,7 @@ Speech recognition permission is not requested: SpeechAnalyzer transcribes on-de
 | `Services/AI/HubAdapters.swift` | Bridges swift-huggingface and swift-transformers to mlx-swift-lm (replaces the MLXHuggingFace macros) |
 | `Services/AI/GemmaService.swift` | Prompts and streaming generation, idle unload |
 | `Services/AI/GemmaChat.swift` | Chat state, note context, session rebuild from history |
-| `Services/AI/VisualCaptureService.swift` | Full-resolution screenshot of the display under the pointer |
+| `Services/AI/VisualCaptureService.swift` | Full-resolution screenshot of the display under the pointer, or of a window, app or display chosen in the system picker |
 | `Services/AI/AudioCaptureService.swift` | ScreenCaptureKit system audio + microphone, levels |
 | `Services/AI/MeetingTranscriber.swift` | Engine and locale choice, one SpeechAnalyzer per source, format conversion, language assets |
 | `Services/AI/MeetingRecorder.swift` | Recording session: capture → transcript lines → minutes |
@@ -104,4 +106,4 @@ TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1 xcodebuild test -project brain-md.xcode
 
 The model tests need the model downloaded (enable on-device AI in the app first); one checks that chat remembers the conversation after the model reloads. The speech tests synthesize sentences with `say` (Samantha in English; Ellen and Xander in Dutch, which need those voices installed) and check the transcripts, including a Dutch meeting with both sources at once. The first Dutch run downloads Apple's speech model.
 
-Not automated, because they need macOS permission prompts: a real screen capture and a real call recording.
+Not automated, because they need macOS permission prompts or system UI: a real screen capture, the content picker and a real call recording.
