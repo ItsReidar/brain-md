@@ -38,6 +38,9 @@ public struct EditorSplitView: View {
     @State private var bubbleDismissTask: Task<Void, Never>? = nil
     @State private var isRecordingMeeting = false
     @ObservedObject private var modelManager = LocalModelManager.shared
+    @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
+    @State private var aiRequest: AIResultRequest?
+    @Environment(\.openSettings) private var openSettings
     
     public init(vault: VaultManager) {
         self.vault = vault
@@ -217,6 +220,21 @@ public struct EditorSplitView: View {
         .onAppear {
             scrollSync.isSyncEnabled = syncPreviewScroll
         }
+        .sheet(item: $aiRequest) { request in
+            AIResultSheet(
+                request: request,
+                onInsert: { result in
+                    vault.editorContent += "\n\n" + result + "\n"
+                    vault.hasUnsavedChanges = true
+                    showBubble(message: "Inserted below")
+                },
+                onReplace: { result in
+                    vault.editorContent = result + "\n"
+                    vault.hasUnsavedChanges = true
+                    showBubble(message: "Note replaced")
+                }
+            )
+        }
         .onChange(of: syncPreviewScroll) { _, newValue in
             scrollSync.isSyncEnabled = newValue
         }
@@ -391,7 +409,7 @@ public struct EditorSplitView: View {
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
-                // Model Status & Download Bar / Trigger
+                // Model download progress (started from Settings)
                 if modelManager.state.status == .downloading {
                     HStack(spacing: 6) {
                         ProgressView(value: modelManager.state.progress)
@@ -405,26 +423,7 @@ public struct EditorSplitView: View {
                     .padding(.vertical, 3)
                     .background(Color.primary.opacity(0.06))
                     .cornerRadius(5)
-                    .help("Downloading Gemma 4 E4B weights...")
-                } else if modelManager.state.status == .notDownloaded {
-                    Button(action: {
-                        modelManager.startDownload()
-                        showBubble(message: "Downloading Gemma 4 E4B model (~2.4 GB)...")
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.down.circle")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("Get Gemma 4")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.12))
-                        .foregroundColor(.accentColor)
-                        .cornerRadius(5)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Download Gemma 4 E4B On-Device AI (~2.4 GB)")
+                    .help("Downloading Gemma 4 for on-device AI")
                 }
 
                 // Local AI Meeting Transcription & Screen Capture
@@ -436,32 +435,26 @@ public struct EditorSplitView: View {
                 }
                 .foregroundColor(isRecordingMeeting ? .red : (modelManager.state.status == .ready ? .primary : .secondary.opacity(0.6)))
 
-                // Local AI Rewriting & Actions Menu
+                // On-device AI actions (results open in a review sheet)
                 Menu {
-                    Button("✨ Summarize Note") {
-                        applyAIRewrite(mode: .summarizeMeeting)
-                    }
-                    Button("✨ Extract Action Items") {
-                        applyAIRewrite(mode: .extractActionItems)
-                    }
-                    Button("✨ Polish & Rewrite") {
-                        applyAIRewrite(mode: .rewrite)
-                    }
-                    Divider()
-                    Button("✨ Capture Screen Diagram") {
-                        explainScreenDiagram()
+                    if isAIAvailable {
+                        Button("Summarize Note") { runAI(.summarizeMeeting, title: "Summary") }
+                        Button("Extract Action Items") { runAI(.extractActionItems, title: "Action Items") }
+                        Button("Polish & Rewrite") { runAI(.rewrite, title: "Polished Note") }
+                    } else {
+                        Button("Set Up On-Device AI…") { openSettings() }
                     }
                 } label: {
                     Image(systemName: "sparkles")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(modelManager.state.status == .ready ? .purple : .secondary)
+                        .foregroundColor(isAIAvailable ? .purple : .secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 4)
-                        .background(modelManager.state.status == .ready ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
+                        .background(isAIAvailable ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
                         .cornerRadius(5)
                 }
                 .menuStyle(.borderlessButton)
-                .help(modelManager.state.status == .ready ? "Local Gemma 4 AI Assistant" : "Gemma 4 model download required")
+                .help(isAIAvailable ? "On-device AI (Gemma 4)" : aiUnavailableReason)
 
                 // Export as PDF Button
                 ToolbarIconButton(
@@ -688,49 +681,22 @@ public struct EditorSplitView: View {
         }
     }
 
-    private func applyAIRewrite(mode: RewriteRequest.Mode) {
-        guard !vault.editorContent.isEmpty else {
-            showBubble(message: "Note is empty")
-            return
-        }
-        guard modelManager.state.status == .ready else {
-            showBubble(message: "Please download Gemma 4 in Settings (⌘,) → Local AI")
-            return
-        }
-        showBubble(message: "Processing with local Gemma 4 E4B...")
-        Task {
-            let request = RewriteRequest(mode: mode, sourceText: vault.editorContent)
-            let result = await LocalAIProcessingService.shared.process(request: request)
-            await MainActor.run {
-                vault.editorContent += result
-                vault.hasUnsavedChanges = true
-                showBubble(message: "Done!")
-            }
+    private var isAIAvailable: Bool {
+        isAIEnabled && modelManager.state.status == .ready
+    }
+
+    private var aiUnavailableReason: String {
+        guard isAIEnabled else { return "Turn on on-device AI in Settings" }
+        switch modelManager.state.status {
+        case .downloading: return "Gemma 4 is still downloading (\(Int(modelManager.state.progress * 100))%)"
+        case .error: return "The Gemma 4 download failed. Retry it in Settings"
+        case .notDownloaded, .ready: return "Gemma 4 isn't downloaded yet. Open Settings to download it"
         }
     }
 
-    private func explainScreenDiagram() {
-        guard modelManager.state.status == .ready else {
-            showBubble(message: "Please download Gemma 4 in Settings (⌘,) → Local AI")
-            return
-        }
-        showBubble(message: "Capturing screen diagram via ScreenCaptureKit...")
-        Task {
-            let service = VisualCaptureService(configuration: ScreenCaptureConfiguration(captureScreenFrames: true))
-            if let frame = await service.captureScreenFrame() {
-                let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent, visualFrames: [frame])
-                let result = await LocalAIProcessingService.shared.process(request: request)
-                await MainActor.run {
-                    vault.editorContent += result
-                    vault.hasUnsavedChanges = true
-                    showBubble(message: "Diagram explanation added to note")
-                }
-            } else {
-                await MainActor.run {
-                    showBubble(message: "Screen capture permission required")
-                }
-            }
-        }
+    private func runAI(_ mode: RewriteRequest.Mode, title: String) {
+        let request = RewriteRequest(mode: mode, sourceText: vault.editorContent)
+        aiRequest = AIResultRequest(title: title) { GemmaService.shared.stream(request) }
     }
 }
 
