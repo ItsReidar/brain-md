@@ -191,8 +191,10 @@ public final class LocalModelManager: ObservableObject {
             directory: directory, defaultPrompt: "Describe the image in English", extraEOSTokens: ["<turn|>"])
         let downloader = HubDownloader(client: HubClient(cache: hubCache))
         let task = Task {
-            try await VLMModelFactory.shared.loadContainer(
+            var context = try await VLMModelFactory.shared.load(
                 from: downloader, using: TransformersTokenizerLoader(), configuration: configuration)
+            context.processor = TextMaskDroppingProcessor(base: context.processor)
+            return ModelContainer(context: context)
         }
         loadTask = task
         defer { loadTask = nil }

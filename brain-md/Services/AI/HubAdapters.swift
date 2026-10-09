@@ -9,6 +9,7 @@
 
 import Foundation
 import HuggingFace
+import MLX
 import MLXLMCommon
 import Tokenizers
 
@@ -81,5 +82,25 @@ nonisolated struct TransformersTokenizer: MLXLMCommon.Tokenizer {
         } catch Tokenizers.TokenizerError.missingChatTemplate {
             throw MLXLMCommon.TokenizerError.missingChatTemplate
         }
+    }
+}
+
+/// Lets chat turns reuse the KV cache. mlx-swift-lm 3.32.3's Gemma 4 processor attaches an all-ones
+/// attention mask to every prompt, and `ChatSession` never extends its cache for masked input, so
+/// every turn re-read the whole conversation. Gemma 4 ignores the mask for text-only input, so it's
+/// dropped there; prompts with images, video or audio pass through unchanged.
+nonisolated struct TextMaskDroppingProcessor: UserInputProcessor {
+    let base: any UserInputProcessor
+
+    func prepare(input: UserInput) async throws -> LMInput {
+        let prepared = try await base.prepare(input: input)
+        guard prepared.image == nil, prepared.video == nil, prepared.audio == nil,
+              let mask = prepared.text.mask, Self.masksNothing(mask)
+        else { return prepared }
+        return LMInput(text: .init(tokens: prepared.text.tokens))
+    }
+
+    static func masksNothing(_ mask: MLXArray) -> Bool {
+        mask.size == 0 || mask.all().item(Bool.self)
     }
 }
