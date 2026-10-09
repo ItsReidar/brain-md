@@ -627,13 +627,24 @@ struct brain_mdTests {
         }
     }
 
+    /// Regression: the About pane showed a hardcoded "Version 1.0 (Build 1)".
+    @Test func testAboutPaneShowsTheBundleVersion() {
+        #expect(AboutSettingsPane.versionText(["CFBundleShortVersionString": "1.1", "CFBundleVersion": "412"])
+            == "Version 1.1 (Build 412)")
+        #expect(AboutSettingsPane.versionText(["CFBundleShortVersionString": "1.1"]) == "Version 1.1")
+        #expect(AboutSettingsPane.versionText([:]) == "Version ?")
+        let running = AboutSettingsPane.versionText(Bundle.main.infoDictionary ?? [:])
+        #expect(running.hasPrefix("Version 1.1"), "\(running)")
+    }
+
     @Test func testSettingsDefaultsAndAppStorage() {
-        // 1. Verify all 7 tabs in the settings registry
+        // 1. Verify all 8 tabs in the settings registry
         let tabs = SettingsTab.allCases
-        #expect(tabs.count == 7)
+        #expect(tabs.count == 8)
         #expect(tabs.contains(.general))
         #expect(tabs.contains(.appearance))
         #expect(tabs.contains(.editor))
+        #expect(tabs.contains(.localAI))
         #expect(tabs.contains(.mcpServer))
         #expect(tabs.contains(.vault))
         #expect(tabs.contains(.advanced))

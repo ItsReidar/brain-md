@@ -78,6 +78,10 @@ struct brain_mdApp: App {
                     NotificationCenter.default.post(name: NSNotification.Name("SetViewModePreview"), object: nil)
                 }
                 .keyboardShortcut("3", modifiers: [.command, .control])
+
+                Divider()
+
+                OpenGemmaChatButton()
             }
             
             CommandMenu("Format") {
@@ -200,10 +204,25 @@ struct brain_mdApp: App {
             }
         }
         
+        Window("Gemma Chat", id: GemmaChatView.windowID) {
+            GemmaChatView(chat: .shared, vault: .shared)
+        }
+        .defaultSize(width: 520, height: 640)
+
         Settings {
             SettingsView(vault: VaultManager.shared)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: true))
+    }
+}
+
+/// View › Gemma Chat (⇧⌘J). A view so it can read `openWindow` from the environment.
+private struct OpenGemmaChatButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Gemma Chat") { openWindow(id: GemmaChatView.windowID) }
+            .keyboardShortcut("j", modifiers: [.command, .shift])
     }
 }

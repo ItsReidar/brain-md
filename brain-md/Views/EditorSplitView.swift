@@ -36,6 +36,17 @@ public struct EditorSplitView: View {
     @State private var showingBubble = false
     @State private var bubbleMessage = ""
     @State private var bubbleDismissTask: Task<Void, Never>? = nil
+    @ObservedObject private var meetingRecorder = MeetingRecorder.shared
+    @ObservedObject private var audioCapture = AudioCaptureService.shared
+    @AppStorage("ai_capture_system_audio") private var captureSystemAudio = true
+    @AppStorage("ai_capture_microphone") private var captureMicrophone = true
+    @ObservedObject private var modelManager = LocalModelManager.shared
+    @ObservedObject private var skillLibrary = SkillLibrary.shared
+    @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
+    @State private var aiRequest: AIResultRequest?
+    @AppStorage("ai_capture_screen_diagrams") private var isScreenExplanationEnabled = true
+    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     
     public init(vault: VaultManager) {
         self.vault = vault
@@ -168,6 +179,12 @@ public struct EditorSplitView: View {
             }
             }
             
+            if meetingRecorder.isRecording {
+                MeetingLiveOverlay(recorder: meetingRecorder, capture: audioCapture)
+                    .padding(.bottom, showingBubble ? 72 : 24)
+                    .zIndex(999)
+            }
+
             // Floating Bubble Notification at Bottom Middle
             if showingBubble {
                 HStack(spacing: 8) {
@@ -214,6 +231,27 @@ public struct EditorSplitView: View {
         }
         .onAppear {
             scrollSync.isSyncEnabled = syncPreviewScroll
+        }
+        .onChange(of: vault.selectedItem?.id) { _, _ in
+            if meetingRecorder.isRecording {
+                meetingRecorder.stop()
+                showBubble(message: "Recording stopped: you switched notes")
+            }
+        }
+        .sheet(item: $aiRequest) { request in
+            AIResultSheet(
+                request: request,
+                onInsert: { result in
+                    vault.editorContent += "\n\n" + result + "\n"
+                    vault.hasUnsavedChanges = true
+                    showBubble(message: "Inserted below")
+                },
+                onReplace: { result in
+                    vault.editorContent = result + "\n"
+                    vault.hasUnsavedChanges = true
+                    showBubble(message: "Note replaced")
+                }
+            )
         }
         .onChange(of: syncPreviewScroll) { _, newValue in
             scrollSync.isSyncEnabled = newValue
@@ -389,6 +427,69 @@ public struct EditorSplitView: View {
             
             // Action Buttons in Top Right
             HStack(spacing: 4) {
+                // Model download progress (started from Settings)
+                if modelManager.state.status == .downloading {
+                    HStack(spacing: 6) {
+                        ProgressView(value: modelManager.state.progress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 70)
+                        Text("\(Int(modelManager.state.progress * 100))%")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(.accentColor)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(5)
+                    .help("Downloading Gemma 4 for on-device AI")
+                }
+
+                // Local AI Meeting Transcription & Screen Capture
+                ToolbarIconButton(
+                    icon: meetingRecorder.isRecording ? "record.circle.fill" : "waveform.and.mic",
+                    helpText: meetingRecorder.isRecording ? "Stop Recording the Meeting" : "Record and Transcribe a Meeting"
+                ) {
+                    toggleMeetingRecording()
+                }
+                .foregroundColor(meetingRecorder.isRecording ? .red : .primary)
+
+                // On-device AI actions (results open in a review sheet)
+                Menu {
+                    if isAIAvailable {
+                        let menuSkills = skillLibrary.skills(for: .menu)
+                        ForEach(menuSkills) { skill in
+                            Button { runSkill(skill) } label: {
+                                Label(skill.name, systemImage: skill.icon)
+                            }
+                        }
+                        if menuSkills.isEmpty {
+                            Text("No skills in the ✨ menu yet")
+                        }
+                        if isScreenExplanationEnabled {
+                            Divider()
+                            Menu("Explain Screen") {
+                                Button("Screen Under Pointer") { explainScreen() }
+                                Button("Choose Window, App or Display…") { explainChosenContent() }
+                            }
+                        }
+                        Divider()
+                        Button("Chat with Gemma…") { openWindow(id: GemmaChatView.windowID) }
+                        Button("Manage Skills…") { openSettings() }
+                    } else {
+                        Button("Set Up On-Device AI…") { openSettings() }
+                    }
+                } label: {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(isAIAvailable ? .purple : .secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(isAIAvailable ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
+                        .cornerRadius(5)
+                }
+                .menuStyle(.borderlessButton)
+                .help(isAIAvailable ? "On-device AI (Gemma 4)" : aiUnavailableReason)
+
                 // Export as PDF Button
                 ToolbarIconButton(
                     icon: "arrow.down.doc",
@@ -588,6 +689,96 @@ public struct EditorSplitView: View {
     private func countWords(_ string: String) -> Int {
         let words = string.split { $0.isWhitespace || $0.isNewline }
         return words.count
+    }
+
+    private func toggleMeetingRecording() {
+        if meetingRecorder.isRecording {
+            meetingRecorder.stop()
+            return
+        }
+        let configuration = AudioCaptureConfiguration(
+            captureSystemAudio: captureSystemAudio, captureMicrophone: captureMicrophone,
+            sampleRate: 16_000, channels: 1)
+        let heading = "\n\n## Meeting transcript · \(Date().formatted(date: .abbreviated, time: .shortened))\n"
+        var wroteHeading = false
+        meetingRecorder.start(
+            configuration: configuration,
+            locale: MeetingTranscriber.preferredLocale(),
+            onLine: { line in
+                if !wroteHeading {
+                    vault.editorContent += heading
+                    wroteHeading = true
+                }
+                vault.editorContent += "\n" + line
+                vault.hasUnsavedChanges = true
+            },
+            onFinished: { segments, error in
+                if let error {
+                    showBubble(message: error.localizedDescription)
+                } else if segments.isEmpty {
+                    showBubble(message: "Recording stopped: no speech was recognized")
+                } else if isAIAvailable {
+                    let request = RewriteRequest(mode: .summarizeMeeting, sourceText: "", transcripts: segments)
+                    aiRequest = AIResultRequest(title: "Meeting Minutes") { GemmaService.shared.stream(request) }
+                } else {
+                    showBubble(message: "Transcript saved in the note")
+                }
+            })
+    }
+
+    private var isAIAvailable: Bool {
+        isAIEnabled && modelManager.state.status == .ready
+    }
+
+    private var aiUnavailableReason: String {
+        guard isAIEnabled else { return "Turn on on-device AI in Settings" }
+        switch modelManager.state.status {
+        case .downloading: return "Gemma 4 is still downloading (\(Int(modelManager.state.progress * 100))%)"
+        case .error: return "The Gemma 4 download failed. Retry it in Settings"
+        case .notDownloaded, .ready: return "Gemma 4 isn't downloaded yet. Open Settings to download it"
+        }
+    }
+
+    private func runSkill(_ skill: Skill) {
+        let note = vault.editorContent
+        aiRequest = AIResultRequest(title: skill.name) { GemmaService.shared.stream(skill, noteText: note) }
+    }
+
+    /// Lets the user pick a window, app or display with the system picker, then has Gemma explain it.
+    private func explainChosenContent() {
+        let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
+        Task {
+            do {
+                guard let capture = try await VisualCaptureService(
+                    configuration: ScreenCaptureConfiguration(captureScreenFrames: true)
+                ).captureChosenContent() else { return }
+                // Choosing a window can bring its app forward; the review sheet lives in brain-md.
+                NSApp.activate()
+                aiRequest = AIResultRequest(title: "Explanation: \(capture.label)") {
+                    GemmaService.shared.stream(request, image: capture.image)
+                }
+            } catch {
+                showBubble(message: error.localizedDescription)
+            }
+        }
+    }
+
+    /// Captures the screen (without brain-md's windows), then has Gemma explain it in the review sheet.
+    private func explainScreen() {
+        let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
+        showBubble(message: "Capturing your screen…")
+        Task {
+            do {
+                let image = try await VisualCaptureService(
+                    configuration: ScreenCaptureConfiguration(captureScreenFrames: true)
+                ).captureScreen()
+                aiRequest = AIResultRequest(title: "Screen Explanation") {
+                    GemmaService.shared.stream(request, image: image)
+                }
+            } catch {
+                showBubble(message: error.localizedDescription)
+            }
+        }
     }
 }
 

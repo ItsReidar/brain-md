@@ -11,19 +11,19 @@ The editor interface is built around a versatile split-pane system managed by `E
 ```mermaid
 stateDiagram-v2
     [*] --> SplitMode: Default Launch
-    SplitMode --> EditorOnly: User toggles ⌘2 or clicks Editor icon
-    SplitMode --> PreviewOnly: User toggles ⌘3 or clicks Preview icon
-    EditorOnly --> SplitMode: User toggles ⌘1 or clicks Split icon
-    EditorOnly --> PreviewOnly: User toggles ⌘3
-    PreviewOnly --> SplitMode: User toggles ⌘1
-    PreviewOnly --> EditorOnly: User toggles ⌘2
+    SplitMode --> EditorOnly: User toggles ⌘⌃2 or clicks Editor icon
+    SplitMode --> PreviewOnly: User toggles ⌘⌃3 or clicks Preview icon
+    EditorOnly --> SplitMode: User toggles ⌘⌃1 or clicks Split icon
+    EditorOnly --> PreviewOnly: User toggles ⌘⌃3
+    PreviewOnly --> SplitMode: User toggles ⌘⌃1
+    PreviewOnly --> EditorOnly: User toggles ⌘⌃2
 ```
 
 ### View Modes
 
-- **Split Mode (`⌘1`)**: Dual-pane view with real-time synchronized editor on the left and rich live preview on the right.
-- **Editor-Only (`⌘2`)**: Full-width focused writing environment optimized for typing and distraction-free editing.
-- **Preview-Only (`⌘3`)**: Full-width presentation and reading mode, ideal for reviewing formatted documents and diagrams.
+- **Split Mode (`⌘⌃1`)**: Dual-pane view with real-time synchronized editor on the left and rich live preview on the right.
+- **Editor-Only (`⌘⌃2`)**: Full-width focused writing environment optimized for typing and distraction-free editing.
+- **Preview-Only (`⌘⌃3`)**: Full-width presentation and reading mode, ideal for reviewing formatted documents and diagrams.
 
 ### Synchronized Scrolling & Viewport Stability
 

@@ -126,6 +126,17 @@ To maintain full interoperability with external tools like Obsidian, Git, or VS 
 
 ---
 
+## App Folders
+
+Two vault-root folders are managed by brain-md rather than by you, so the sidebar lists them under an **App Folders** header below your own folders and notes (under **Notes**), and the 3D graph leaves them out:
+
+| Folder | Icon | Holds |
+|---|---|---|
+| `Skills` | ✨ | Gemma skills ([Instructions & Skills](local-ai.md#instructions--skills)) |
+| The attachments folder (default `Attachments`) | 📎 | Pasted and dropped images and files |
+
+The attachments folder counts only when **Settings › Vault › Attachments & Media** names a single folder at the vault root. Saving next to the note (empty), relative to the note (`./…`) or in a nested folder (`Media/Images`) leaves no app folder for attachments. Names match without regard to case, like the macOS file system. Rules live in `Services/VaultAppFolders.swift` (`appFolderNames`, `splitAppFolders`, `knowledgeNotePaths`).
+
 ## Attachment & Image Management
 
 `brain-md` allows you to manage images and media attachments cleanly without cluttering your note folders:

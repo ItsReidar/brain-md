@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "feature": "local-audio-screen-llm",
+  "version": "1.0.0",
+  "description": "Abstract specification for optional on-device Gemma 4 E4B model management, system/mic audio capture, screen frame capture, transcription, and local note rewriting.",
+  "contracts": {
+    "ModelDownloadState": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["notDownloaded", "downloading", "ready", "error"]
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "bytesDownloaded": { "type": "integer" },
+        "totalBytes": { "type": "integer" },
+        "modelIdentifier": { "type": "string" },
+        "localPath": { "type": "string" },
+        "errorMessage": { "type": "string" }
+      },
+      "required": ["status", "progress", "bytesDownloaded", "totalBytes", "modelIdentifier"]
+    },
+    "AudioCaptureConfiguration": {
+      "type": "object",
+      "properties": {
+        "captureSystemAudio": { "type": "boolean" },
+        "captureMicrophone": { "type": "boolean" },
+        "sampleRate": { "type": "number", "default": 16000.0 },
+        "channels": { "type": "integer", "default": 1 }
+      },
+      "required": ["captureSystemAudio", "captureMicrophone"]
+    },
+    "ScreenCaptureConfiguration": {
+      "type": "object",
+      "properties": {
+        "captureScreenFrames": { "type": "boolean" },
+        "frameRate": { "type": "integer", "default": 1 },
+        "captureWindowTitles": { "type": "boolean", "default": true }
+      },
+      "required": ["captureScreenFrames"]
+    },
+    "TranscriptionSegment": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "speaker": {
+          "type": "string",
+          "enum": ["systemAudio", "microphone", "unknown"]
+        },
+        "timestamp": { "type": "number" },
+        "duration": { "type": "number" },
+        "text": { "type": "string" },
+        "isFinal": { "type": "boolean" }
+      },
+      "required": ["id", "speaker", "timestamp", "duration", "text", "isFinal"]
+    },
+    "VisualCaptureFrame": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "timestamp": { "type": "number" },
+        "pngDataLength": { "type": "integer" },
+        "diagramDescription": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "pngDataLength"]
+    },
+    "RewriteRequest": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["rewrite", "summarizeMeeting", "extractActionItems", "explainDiagram"]
+        },
+        "sourceText": { "type": "string" },
+        "transcripts": {
+          "type": "array",
+          "items": { "$ref": "#/contracts/TranscriptionSegment" }
+        },
+        "visualFrames": {
+          "type": "array",
+          "items": { "$ref": "#/contracts/VisualCaptureFrame" }
+        }
+      },
+      "required": ["mode", "sourceText"]
+    }
+  }
+}

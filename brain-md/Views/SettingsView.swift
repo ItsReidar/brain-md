@@ -16,6 +16,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable {
   case general = "General"
   case appearance = "Appearance"
   case editor = "Editor & Markdown"
+  case localAI = "Local AI & Voice"
   case mcpServer = "MCP Server"
   case vault = "Vault & Storage"
   case advanced = "Advanced"
@@ -28,6 +29,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable {
     case .general: return "gearshape.fill"
     case .appearance: return "paintpalette.fill"
     case .editor: return "doc.text.fill"
+    case .localAI: return "waveform.and.mic"
     case .mcpServer: return "network"
     case .vault: return "folder.fill"
     case .advanced: return "slider.horizontal.3"
@@ -40,6 +42,7 @@ public enum SettingsTab: String, CaseIterable, Identifiable {
     case .general: return Color(hex: "#8e8e93") ?? .gray
     case .appearance: return Color(hex: "#007aff") ?? .blue
     case .editor: return Color(hex: "#34c759") ?? .green
+    case .localAI: return Color(hex: "#ff2d55") ?? .pink
     case .mcpServer: return Color(hex: "#af52de") ?? .purple
     case .vault: return Color(hex: "#ff9500") ?? .orange
     case .advanced: return Color(hex: "#30b0c7") ?? .teal
@@ -172,7 +175,13 @@ public struct SettingsView: View {
   @State private var selectedTab: SettingsTab = .general
   @State private var searchText = ""
 
-  public init(vault: VaultManager = .shared) {
+  @MainActor
+  public init() {
+    self.vault = .shared
+  }
+
+  @MainActor
+  public init(vault: VaultManager) {
     self.vault = vault
   }
 
@@ -252,6 +261,8 @@ public struct SettingsView: View {
             AppearanceSettingsPane()
           case .editor:
             EditorSettingsPane()
+          case .localAI:
+            LocalAISettingsPane()
           case .mcpServer:
             MCPServerSettingsPane()
           case .vault:
@@ -1233,6 +1244,13 @@ public struct AdvancedSettingsPane: View {
 // MARK: - 7. About Settings Pane
 
 public struct AboutSettingsPane: View {
+  /// "Version 1.1 (Build 412)" from the bundle, so the About pane matches the release.
+  static func versionText(_ info: [String: Any]) -> String {
+    let version = info["CFBundleShortVersionString"] as? String ?? "?"
+    guard let build = info["CFBundleVersion"] as? String, !build.isEmpty else { return "Version \(version)" }
+    return "Version \(version) (Build \(build))"
+  }
+
   public var body: some View {
     VStack(spacing: 20) {
       VStack(spacing: 10) {
@@ -1257,7 +1275,7 @@ public struct AboutSettingsPane: View {
         Text("Brain.md")
           .font(.system(size: 22, weight: .bold, design: .rounded))
 
-        Text("Version 1.0 (Build 1)")
+        Text(Self.versionText(Bundle.main.infoDictionary ?? [:]))
           .font(.system(size: 12))
           .foregroundColor(.secondary)
       }
@@ -1311,3 +1329,315 @@ public struct AboutSettingsPane: View {
     }
   }
 }
+
+// MARK: - 8. Local AI & Voice Settings Pane
+
+public struct LocalAISettingsPane: View {
+  @ObservedObject var modelManager = LocalModelManager.shared
+  @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
+  @AppStorage("ai_capture_system_audio") private var captureSystemAudio: Bool = true
+  @AppStorage("ai_capture_microphone") private var captureMicrophone: Bool = true
+  @AppStorage("ai_capture_screen_diagrams") private var captureScreenDiagrams: Bool = true
+  @State private var pendingDeletionBytes: Int64?
+  @AppStorage(MeetingTranscriber.localeDefaultsKey) private var transcriptionLocale = ""
+  @State private var transcriptionLocales: [String] = []
+  @AppStorage(GemmaService.customInstructionsKey) private var customInstructions = ""
+  @ObservedObject private var skillLibrary = SkillLibrary.shared
+
+  public init() {}
+
+  public var body: some View {
+    VStack(spacing: 20) {
+      SettingsCard(
+        title: "On-Device AI",
+        footer: "Gemma 4 E4B (4-bit, quantization-aware trained) runs on this Mac with MLX on Apple Silicon. "
+          + "It downloads once from Hugging Face; after that, notes never leave your Mac."
+      ) {
+        SettingsRow(
+          title: "Enable on-device AI",
+          subtitle: "Summaries, action items, rewriting and screen explanations with Gemma 4",
+          icon: "cpu"
+        ) {
+          Toggle("", isOn: Binding(get: { isAIEnabled }, set: setAIEnabled))
+            .toggleStyle(.switch)
+            .disabled(!LocalModelManager.isSupportedHardware && !isAIEnabled)
+            .help(LocalModelManager.isSupportedHardware ? "" : LocalModelError.requiresAppleSilicon.errorDescription ?? "")
+        }
+
+        Divider()
+
+        VStack(alignment: .leading, spacing: 10) {
+          HStack {
+            Text("mlx-community/gemma-4-E4B-it-qat-4bit")
+              .font(.system(size: 11, design: .monospaced))
+              .foregroundColor(.secondary)
+              .textSelection(.enabled)
+            Spacer()
+            statusBadge
+          }
+          modelDetails
+        }
+        .padding(16)
+      }
+      .confirmationDialog(
+        "Delete the Gemma 4 model files?",
+        isPresented: Binding(get: { pendingDeletionBytes != nil }, set: { if !$0 { pendingDeletionBytes = nil } }),
+        titleVisibility: .visible
+      ) {
+        Button("Delete \(Self.format(pendingDeletionBytes ?? 0))", role: .destructive) {
+          modelManager.removeModelCache()
+          pendingDeletionBytes = nil
+        }
+        Button("Keep Files", role: .cancel) { pendingDeletionBytes = nil }
+      } message: {
+        Text("Keeping them lets you turn on-device AI back on without downloading again.")
+      }
+      .onAppear(perform: resumeDownloadIfNeeded)
+
+      instructionsAndSkills
+
+      // 2. Audio & Visual Capture Permissions & Settings
+      SettingsCard(title: "Meeting Audio & Visual Capture") {
+        SettingsRow(
+          title: "Capture Incoming System Audio",
+          subtitle: "Transcribes remote participants and meeting calls using ScreenCaptureKit",
+          icon: "speaker.wave.3.fill"
+        ) {
+          Toggle("", isOn: $captureSystemAudio)
+            .toggleStyle(.switch)
+        }
+
+        Divider()
+
+        SettingsRow(
+          title: "Capture Microphone Audio",
+          subtitle: "Transcribes local room voice and speaker questions via microphone",
+          icon: "mic.fill"
+        ) {
+          Toggle("", isOn: $captureMicrophone)
+            .toggleStyle(.switch)
+        }
+
+        Divider()
+
+        SettingsRow(
+          title: "Transcription Language",
+          subtitle: "Meetings are transcribed on this Mac; each language's speech model downloads once",
+          icon: "character.bubble"
+        ) {
+          Picker("", selection: $transcriptionLocale) {
+            Text("System (\(Self.languageName(Locale.current.identifier)))").tag("")
+            ForEach(transcriptionLocales, id: \.self) { identifier in
+              Text(Self.languageName(identifier)).tag(identifier)
+            }
+          }
+          .labelsHidden()
+          .frame(width: 220)
+          .task {
+            transcriptionLocales = await MeetingTranscriber.supportedLocaleIdentifiers()
+              .sorted { Self.languageName($0) < Self.languageName($1) }
+          }
+        }
+
+        Divider()
+
+        SettingsRow(
+          title: "Visual Diagram Comprehension",
+          subtitle: "Captures on-screen presentation slides and architectural diagrams for notes",
+          icon: "rectangle.inset.filled.and.cursorarrow"
+        ) {
+          Toggle("", isOn: $captureScreenDiagrams)
+            .toggleStyle(.switch)
+        }
+      }
+    }
+  }
+
+  // MARK: Instructions & Skills
+
+  private var instructionsAndSkills: some View {
+    SettingsCard(
+      title: "Instructions & Skills",
+      footer: "Skills are Markdown files in the vault's \(VaultManager.skillsFolderName) folder: the frontmatter "
+        + "sets the name, icon and where the skill appears; the body is the prompt. Edit them like any note."
+    ) {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 10) {
+          Image(systemName: "text.quote")
+            .foregroundColor(.accentColor)
+            .frame(width: 20)
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Custom Instructions").font(.system(size: 13, weight: .medium))
+            Text("Added to every request, in chat and the ✨ menu. For example: “Answer in Dutch. Keep it short.”")
+              .font(.system(size: 11))
+              .foregroundColor(.secondary)
+          }
+        }
+        TextEditor(text: $customInstructions)
+          .font(.system(size: 13))
+          .scrollContentBackground(.hidden)
+          .padding(6)
+          .frame(height: 96)
+          .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+          .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.12)))
+          .accessibilityLabel("Custom instructions")
+          .onChange(of: customInstructions) { _, text in
+            if text.count > GemmaService.maxCustomInstructionsLength {
+              customInstructions = String(text.prefix(GemmaService.maxCustomInstructionsLength))
+            }
+          }
+        Text("\(customInstructions.count) / \(GemmaService.maxCustomInstructionsLength.formatted())")
+          .font(.system(size: 11))
+          .monospacedDigit()
+          .foregroundColor(.secondary)
+          .frame(maxWidth: .infinity, alignment: .trailing)
+      }
+      .padding(16)
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 0) {
+        ForEach(skillLibrary.skills) { skill in
+          HStack(spacing: 10) {
+            Image(systemName: skill.icon)
+              .foregroundColor(.accentColor)
+              .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(skill.name).font(.system(size: 13, weight: .medium))
+              if !skill.summary.isEmpty {
+                Text(skill.summary).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+              }
+            }
+            Spacer()
+            ForEach(Skill.Placement.allCases.filter(skill.placements.contains), id: \.self) { placement in
+              Text(placement == .menu ? "✨ Menu" : "Chat")
+                .font(.system(size: 10, weight: .medium))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.primary.opacity(0.07)))
+            }
+            Button("Edit") { VaultManager.shared.selectNote(byRelativePath: skill.relativePath) }
+              .help("Open \(skill.relativePath) in the editor")
+          }
+          .padding(.horizontal, 16)
+          .padding(.vertical, 8)
+          Divider().padding(.leading, 46)
+        }
+        if skillLibrary.skills.isEmpty {
+          Text("No skills yet. Create one, or restore the defaults.")
+            .font(.system(size: 12))
+            .foregroundColor(.secondary)
+            .padding(16)
+        }
+        HStack {
+          Button("New Skill") {
+            if let path = try? skillLibrary.createSkill() {
+              VaultManager.shared.selectNote(byRelativePath: path)
+            }
+          }
+          Button("Show in Finder") {
+            try? FileManager.default.createDirectory(at: skillLibrary.folderURL, withIntermediateDirectories: true)
+            NSWorkspace.shared.activateFileViewerSelecting([skillLibrary.folderURL])
+          }
+          Spacer()
+          Button("Restore Defaults") { try? skillLibrary.restoreDefaults() }
+            .help("Adds any default skill whose file is missing. Edited skills are kept.")
+        }
+        .padding(16)
+      }
+    }
+  }
+
+  private func setAIEnabled(_ enabled: Bool) {
+    isAIEnabled = enabled
+    if enabled {
+      skillLibrary.seedDefaultsIfNeeded()
+      resumeDownloadIfNeeded()
+    } else {
+      modelManager.cancelDownload()
+      modelManager.unloadModel()
+      let bytes = modelManager.diskUsageBytes()
+      if bytes > 0 { pendingDeletionBytes = bytes }
+    }
+  }
+
+  /// Enabled but not installed (first enable, or a download interrupted by quitting): fetch it.
+  private func resumeDownloadIfNeeded() {
+    guard isAIEnabled, modelManager.state.status == .notDownloaded else { return }
+    modelManager.startDownload()
+  }
+
+  private static func languageName(_ identifier: String) -> String {
+    Locale.current.localizedString(forIdentifier: identifier) ?? identifier
+  }
+
+  private static func format(_ bytes: Int64) -> String {
+    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+  }
+
+  @ViewBuilder
+  private var modelDetails: some View {
+    let state = modelManager.state
+    switch state.status {
+    case .notDownloaded:
+      Text(isAIEnabled ? "Preparing download…" : "Not downloaded. Turning on-device AI on downloads the model.")
+        .font(.system(size: 12))
+        .foregroundColor(.secondary)
+    case .downloading:
+      ProgressView(value: state.progress)
+        .progressViewStyle(.linear)
+      HStack {
+        Text(state.totalBytes > 0
+          ? "\(Self.format(state.bytesDownloaded)) of \(Self.format(state.totalBytes)) (\(Int(state.progress * 100))%)"
+          : "Contacting Hugging Face…")
+          .font(.system(size: 11, weight: .medium, design: .monospaced))
+          .foregroundColor(.secondary)
+        Spacer()
+        Button("Cancel") { setAIEnabled(false) }
+          .buttonStyle(.bordered)
+      }
+    case .ready:
+      HStack {
+        Label("Installed · \(Self.format(state.totalBytes)) on disk", systemImage: "checkmark.circle.fill")
+          .font(.system(size: 12, weight: .medium))
+          .foregroundColor(.secondary)
+        Spacer()
+        Button("Delete Model Files…", role: .destructive) {
+          pendingDeletionBytes = modelManager.diskUsageBytes()
+        }
+        .buttonStyle(.bordered)
+      }
+    case .error:
+      HStack(alignment: .top) {
+        Text(state.errorMessage ?? "The download failed.")
+          .font(.system(size: 12))
+          .foregroundColor(.red)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer()
+        Button("Retry") {
+          modelManager.checkExistingModel() // clears the error, keeps already-downloaded files
+          modelManager.startDownload()
+        }
+        .buttonStyle(.borderedProminent)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var statusBadge: some View {
+    let (label, icon, color): (String, String, Color) = switch modelManager.state.status {
+    case .notDownloaded: ("Not Installed", "arrow.down.circle", .secondary)
+    case .downloading: ("Downloading \(Int(modelManager.state.progress * 100))%", "arrow.down.circle.fill", .accentColor)
+    case .ready: (modelManager.isLoaded ? "Loaded" : "Ready", "checkmark.circle.fill", .green)
+    case .error: ("Download Failed", "exclamationmark.triangle.fill", .red)
+    }
+    Label(label, systemImage: icon)
+      .font(.system(size: 11, weight: .semibold))
+      .padding(.horizontal, 8)
+      .padding(.vertical, 3)
+      .background(color.opacity(0.15))
+      .foregroundColor(color)
+      .clipShape(Capsule())
+  }
+}
+
