@@ -1244,6 +1244,13 @@ public struct AdvancedSettingsPane: View {
 // MARK: - 7. About Settings Pane
 
 public struct AboutSettingsPane: View {
+  /// "Version 1.1 (Build 412)" from the bundle, so the About pane matches the release.
+  static func versionText(_ info: [String: Any]) -> String {
+    let version = info["CFBundleShortVersionString"] as? String ?? "?"
+    guard let build = info["CFBundleVersion"] as? String, !build.isEmpty else { return "Version \(version)" }
+    return "Version \(version) (Build \(build))"
+  }
+
   public var body: some View {
     VStack(spacing: 20) {
       VStack(spacing: 10) {
@@ -1268,7 +1275,7 @@ public struct AboutSettingsPane: View {
         Text("Brain.md")
           .font(.system(size: 22, weight: .bold, design: .rounded))
 
-        Text("Version 1.0 (Build 1)")
+        Text(Self.versionText(Bundle.main.infoDictionary ?? [:]))
           .font(.system(size: 12))
           .foregroundColor(.secondary)
       }
