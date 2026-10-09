@@ -467,6 +467,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Brain.md;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "brain-md transcribes your side of a meeting on this Mac when you record one.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "brain-md transcribes meetings on this Mac. Audio never leaves your Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -518,6 +520,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Brain.md;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "brain-md transcribes your side of a meeting on this Mac when you record one.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "brain-md transcribes meetings on this Mac. Audio never leaves your Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

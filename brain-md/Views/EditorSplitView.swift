@@ -36,7 +36,10 @@ public struct EditorSplitView: View {
     @State private var showingBubble = false
     @State private var bubbleMessage = ""
     @State private var bubbleDismissTask: Task<Void, Never>? = nil
-    @State private var isRecordingMeeting = false
+    @ObservedObject private var meetingRecorder = MeetingRecorder.shared
+    @ObservedObject private var audioCapture = AudioCaptureService.shared
+    @AppStorage("ai_capture_system_audio") private var captureSystemAudio = true
+    @AppStorage("ai_capture_microphone") private var captureMicrophone = true
     @ObservedObject private var modelManager = LocalModelManager.shared
     @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
     @State private var aiRequest: AIResultRequest?
@@ -174,6 +177,12 @@ public struct EditorSplitView: View {
             }
             }
             
+            if meetingRecorder.isRecording {
+                MeetingLiveOverlay(recorder: meetingRecorder, capture: audioCapture)
+                    .padding(.bottom, showingBubble ? 72 : 24)
+                    .zIndex(999)
+            }
+
             // Floating Bubble Notification at Bottom Middle
             if showingBubble {
                 HStack(spacing: 8) {
@@ -220,6 +229,12 @@ public struct EditorSplitView: View {
         }
         .onAppear {
             scrollSync.isSyncEnabled = syncPreviewScroll
+        }
+        .onChange(of: vault.selectedItem?.id) { _, _ in
+            if meetingRecorder.isRecording {
+                meetingRecorder.stop()
+                showBubble(message: "Recording stopped: you switched notes")
+            }
         }
         .sheet(item: $aiRequest) { request in
             AIResultSheet(
@@ -429,12 +444,12 @@ public struct EditorSplitView: View {
 
                 // Local AI Meeting Transcription & Screen Capture
                 ToolbarIconButton(
-                    icon: isRecordingMeeting ? "record.circle.fill" : "waveform.and.mic",
-                    helpText: isRecordingMeeting ? "Stop Meeting Audio Capture" : "Capture Meeting Audio & Screen Diagrams"
+                    icon: meetingRecorder.isRecording ? "record.circle.fill" : "waveform.and.mic",
+                    helpText: meetingRecorder.isRecording ? "Stop Recording the Meeting" : "Record and Transcribe a Meeting"
                 ) {
                     toggleMeetingRecording()
                 }
-                .foregroundColor(isRecordingMeeting ? .red : (modelManager.state.status == .ready ? .primary : .secondary.opacity(0.6)))
+                .foregroundColor(meetingRecorder.isRecording ? .red : .primary)
 
                 // On-device AI actions (results open in a review sheet)
                 Menu {
@@ -663,27 +678,38 @@ public struct EditorSplitView: View {
     }
 
     private func toggleMeetingRecording() {
-        if isRecordingMeeting {
-            isRecordingMeeting = false
-            AudioCaptureService.shared.stopCapture()
-            showBubble(message: "Meeting transcription stopped")
-            vault.editorContent += "\n\n---\n### 📝 Meeting Minutes & Summary\n- Call and voice transcription concluded.\n"
-            vault.hasUnsavedChanges = true
-        } else {
-            guard modelManager.state.status == .ready else {
-                modelManager.startDownload()
-                showBubble(message: "Downloading Gemma 4 E4B model first...")
-                return
-            }
-            isRecordingMeeting = true
-            showBubble(message: "Recording started. Listening to audio...")
-            vault.editorContent += "\n\n## 🎙️ Live Meeting Transcript (\(Date().formatted(date: .omitted, time: .shortened)))\n"
-            vault.hasUnsavedChanges = true
-            AudioCaptureService.shared.startCapture { segment in
-                vault.editorContent += "\n> \(segment.text)"
-                vault.hasUnsavedChanges = true
-            }
+        if meetingRecorder.isRecording {
+            meetingRecorder.stop()
+            return
         }
+        let configuration = AudioCaptureConfiguration(
+            captureSystemAudio: captureSystemAudio, captureMicrophone: captureMicrophone,
+            sampleRate: 16_000, channels: 1)
+        let heading = "\n\n## Meeting transcript · \(Date().formatted(date: .abbreviated, time: .shortened))\n"
+        var wroteHeading = false
+        meetingRecorder.start(
+            configuration: configuration,
+            locale: MeetingTranscriber.preferredLocale(),
+            onLine: { line in
+                if !wroteHeading {
+                    vault.editorContent += heading
+                    wroteHeading = true
+                }
+                vault.editorContent += "\n" + line
+                vault.hasUnsavedChanges = true
+            },
+            onFinished: { segments, error in
+                if let error {
+                    showBubble(message: error.localizedDescription)
+                } else if segments.isEmpty {
+                    showBubble(message: "Recording stopped: no speech was recognized")
+                } else if isAIAvailable {
+                    let request = RewriteRequest(mode: .summarizeMeeting, sourceText: "", transcripts: segments)
+                    aiRequest = AIResultRequest(title: "Meeting Minutes") { GemmaService.shared.stream(request) }
+                } else {
+                    showBubble(message: "Transcript saved in the note")
+                }
+            })
     }
 
     private var isAIAvailable: Bool {

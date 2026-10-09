@@ -8,6 +8,7 @@
 //
 
 import AppKit
+import Speech
 import SwiftUI
 
 // MARK: - Settings Tab Registry (Extensible for future additions)
@@ -1332,6 +1333,8 @@ public struct LocalAISettingsPane: View {
   @AppStorage("ai_capture_microphone") private var captureMicrophone: Bool = true
   @AppStorage("ai_capture_screen_diagrams") private var captureScreenDiagrams: Bool = true
   @State private var pendingDeletionBytes: Int64?
+  @AppStorage(MeetingTranscriber.localeDefaultsKey) private var transcriptionLocale = ""
+  @State private var transcriptionLocales: [String] = []
 
   public init() {}
 
@@ -1406,6 +1409,28 @@ public struct LocalAISettingsPane: View {
         Divider()
 
         SettingsRow(
+          title: "Transcription Language",
+          subtitle: "Meetings are transcribed on this Mac; each language's speech model downloads once",
+          icon: "character.bubble"
+        ) {
+          Picker("", selection: $transcriptionLocale) {
+            Text("System (\(Self.languageName(Locale.current.identifier)))").tag("")
+            ForEach(transcriptionLocales, id: \.self) { identifier in
+              Text(Self.languageName(identifier)).tag(identifier)
+            }
+          }
+          .labelsHidden()
+          .frame(width: 220)
+          .task {
+            transcriptionLocales = await SpeechTranscriber.supportedLocales
+              .map(\.identifier)
+              .sorted { Self.languageName($0) < Self.languageName($1) }
+          }
+        }
+
+        Divider()
+
+        SettingsRow(
           title: "Visual Diagram Comprehension",
           subtitle: "Captures on-screen presentation slides and architectural diagrams for notes",
           icon: "rectangle.inset.filled.and.cursorarrow"
@@ -1433,6 +1458,10 @@ public struct LocalAISettingsPane: View {
   private func resumeDownloadIfNeeded() {
     guard isAIEnabled, modelManager.state.status == .notDownloaded else { return }
     modelManager.startDownload()
+  }
+
+  private static func languageName(_ identifier: String) -> String {
+    Locale.current.localizedString(forIdentifier: identifier) ?? identifier
   }
 
   private static func format(_ bytes: Int64) -> String {
