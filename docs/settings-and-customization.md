@@ -92,6 +92,8 @@ graph TD
 - **Enable on-device AI**: Downloads Gemma 4 E4B (`mlx-community/gemma-4-E4B-it-qat-4bit`, 6.8 GB) to Application Support with live byte progress and cancel. Turning it off unloads the model and offers to delete the files, showing their size. Failed downloads show the error and a Retry that keeps partial files.
 - **Capture Incoming System Audio**: Records other meeting participants ("Them") through `ScreenCaptureKit`.
 - **Capture Microphone Audio**: Records your side ("Me") through `ScreenCaptureKit`'s microphone capture.
+- **Custom Instructions**: Your own instructions for Gemma (up to 2,000 characters), added to every request in chat and the ✨ menu.
+- **Skills**: Your saved prompts, stored as Markdown files in the vault's `Skills` folder. Edit, create, show in Finder, or restore the defaults. See [Instructions & Skills](local-ai.md#instructions--skills).
 - **Transcription Language**: The language meetings are transcribed in, including Dutch (Belgium and Netherlands); defaults to the system language. Each language's speech model downloads once.
 - **Visual Diagram Comprehension**: Shows **Explain Screen** in the ✨ menu, which captures the display under the pointer for Gemma to explain.
 

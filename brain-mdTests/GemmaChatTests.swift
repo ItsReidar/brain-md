@@ -85,6 +85,37 @@ extension GemmaServiceTests {
         #expect(!chat.isResponding)
     }
 
+    @Test func customInstructionsAreAddedAfterTheBuiltInOnes() {
+        #expect(GemmaService.withCustomInstructions("Base.", custom: nil) == "Base.")
+        #expect(GemmaService.withCustomInstructions("Base.", custom: "  \n") == "Base.")
+        let combined = GemmaService.withCustomInstructions("Base.", custom: " Answer in Dutch. ")
+        #expect(combined.hasPrefix("Base.\n\n"))
+        #expect(combined.hasSuffix("\nAnswer in Dutch."))
+        let long = String(repeating: "x", count: GemmaService.maxCustomInstructionsLength + 50)
+        let capped = GemmaService.withCustomInstructions("Base.", custom: long)
+        #expect(capped.hasSuffix("\n" + String(repeating: "x", count: GemmaService.maxCustomInstructionsLength)))
+        #expect(!capped.contains(String(repeating: "x", count: GemmaService.maxCustomInstructionsLength + 1)))
+    }
+
+    /// A skill run from chat shows its name, while Gemma gets the full prompt and the note.
+    @Test func chatSkillShowsItsNameAndSendsItsPrompt() async throws {
+        let key = LocalModelManager.enabledDefaultsKey
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { if let saved { UserDefaults.standard.set(saved, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) } }
+        UserDefaults.standard.set(false, forKey: key)
+
+        let manager = LocalModelManager(
+            modelsDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        let chat = GemmaChat(service: GemmaService(modelManager: manager), modelManager: manager)
+        let skill = try #require(Skill.parse("---\nname: Open Questions\n---\nList what {{note}} leaves open.",
+                                             relativePath: "Skills/Open Questions.md"))
+        chat.send(skill.chatMessage, note: .init(title: "Plan", content: "Ship v2."), displayText: skill.name)
+        try await waitUntilIdle(chat)
+        #expect(chat.messages[0].text == "Open Questions")
+        #expect(chat.messages[0].prompt.contains("Ship v2."))
+        #expect(chat.messages[0].prompt.hasSuffix("List what the note leaves open."))
+    }
+
     @Test func blankChatMessagesAreIgnored() {
         let chat = GemmaChat()
         chat.send(" \n ", note: nil)

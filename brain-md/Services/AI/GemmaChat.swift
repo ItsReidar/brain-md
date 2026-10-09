@@ -88,6 +88,7 @@ public final class GemmaChat: ObservableObject {
     private let service: GemmaService
     private var session: ChatSession?
     private weak var sessionContainer: ModelContainer?
+    private var sessionInstructions: String?
     private var sharedNoteContent: String?
     private var generation: Task<Void, Never>?
     private var activeReplyID: Message.ID?
@@ -101,7 +102,9 @@ public final class GemmaChat: ObservableObject {
             .sink { [weak self] _ in self?.session = nil }
     }
 
-    public func send(_ text: String, note: NoteContext?) {
+    /// Sends `text` to Gemma. `displayText` replaces it in the transcript, e.g. a skill's name
+    /// instead of its full prompt.
+    public func send(_ text: String, note: NoteContext?, displayText: String? = nil) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isResponding else { return }
 
@@ -110,7 +113,7 @@ public final class GemmaChat: ObservableObject {
         if let note { sharedNoteContent = note.content }
         let history = Self.replayHistory(messages)
         let reply = Message(role: .assistant, text: "", prompt: "")
-        messages.append(Message(role: .user, text: text, prompt: prompt))
+        messages.append(Message(role: .user, text: displayText ?? text, prompt: prompt))
         messages.append(reply)
 
         isResponding = true
@@ -170,10 +173,14 @@ public final class GemmaChat: ObservableObject {
     }
 
     private func session(for container: ModelContainer, history: [Chat.Message]) -> ChatSession {
-        if let session, sessionContainer === container { return session }
+        // Edited custom instructions take effect on the next message: the session is rebuilt
+        // from history with the new ones.
+        let instructions = GemmaService.withCustomInstructions(Self.instructions)
+        if let session, sessionContainer === container, sessionInstructions == instructions { return session }
+        sessionInstructions = instructions
         let session = ChatSession(
             container,
-            instructions: Self.instructions,
+            instructions: instructions,
             history: history,
             generateParameters: Self.generateParameters,
             processing: UserInput.Processing())

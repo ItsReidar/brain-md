@@ -59,11 +59,29 @@ public final class GemmaService: ObservableObject {
             // Gemma's own processor sizes them to its token budget, blurring slide text.
             let session = ChatSession(
                 container,
-                instructions: Self.instructions,
+                instructions: Self.withCustomInstructions(Self.instructions),
                 generateParameters: GenerateParameters(maxTokens: 2048, temperature: 0.3),
                 processing: UserInput.Processing())
             let images: [UserInput.Image] = image.map { [.ciImage(CIImage(cgImage: $0))] } ?? []
             return session.streamResponse(to: prompt, images: images)
+        }
+    }
+
+    /// Streams Gemma's answer to a skill, with the note added when the skill uses it.
+    public func stream(_ skill: Skill, noteText: String) -> AsyncThrowingStream<String, Error> {
+        let prompt: String
+        do {
+            prompt = try skill.prompt(note: noteText)
+        } catch {
+            return AsyncThrowingStream { $0.finish(throwing: error) }
+        }
+        return generate { container in
+            ChatSession(
+                container,
+                instructions: Self.withCustomInstructions(Self.instructions),
+                generateParameters: GenerateParameters(maxTokens: 2048, temperature: 0.3),
+                processing: UserInput.Processing()
+            ).streamResponse(to: prompt)
         }
     }
 
@@ -125,6 +143,19 @@ public final class GemmaService: ObservableObject {
     }
 
     // MARK: - Prompts
+
+    /// The user's own instructions from Settings, added to every request (note actions and chat).
+    public static let customInstructionsKey = "ai_custom_instructions"
+    public static let maxCustomInstructionsLength = 2_000
+
+    /// `base` followed by the user's custom instructions, when there are any.
+    static func withCustomInstructions(
+        _ base: String, custom: String? = UserDefaults.standard.string(forKey: customInstructionsKey)
+    ) -> String {
+        let custom = String((custom ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxCustomInstructionsLength))
+        guard !custom.isEmpty else { return base }
+        return "\(base)\n\nThe user's own instructions, which take priority over the style rules above:\n\(custom)"
+    }
 
     static let instructions = """
         You are a writing assistant inside a Markdown notes app. Answer in Markdown only, without \

@@ -41,6 +41,7 @@ public struct EditorSplitView: View {
     @AppStorage("ai_capture_system_audio") private var captureSystemAudio = true
     @AppStorage("ai_capture_microphone") private var captureMicrophone = true
     @ObservedObject private var modelManager = LocalModelManager.shared
+    @ObservedObject private var skillLibrary = SkillLibrary.shared
     @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
     @State private var aiRequest: AIResultRequest?
     @AppStorage("ai_capture_screen_diagrams") private var isScreenExplanationEnabled = true
@@ -455,9 +456,15 @@ public struct EditorSplitView: View {
                 // On-device AI actions (results open in a review sheet)
                 Menu {
                     if isAIAvailable {
-                        Button("Summarize Note") { runAI(.summarizeMeeting, title: "Summary") }
-                        Button("Extract Action Items") { runAI(.extractActionItems, title: "Action Items") }
-                        Button("Polish & Rewrite") { runAI(.rewrite, title: "Polished Note") }
+                        let menuSkills = skillLibrary.skills(for: .menu)
+                        ForEach(menuSkills) { skill in
+                            Button { runSkill(skill) } label: {
+                                Label(skill.name, systemImage: skill.icon)
+                            }
+                        }
+                        if menuSkills.isEmpty {
+                            Text("No skills in the ✨ menu yet")
+                        }
                         if isScreenExplanationEnabled {
                             Divider()
                             Menu("Explain Screen") {
@@ -467,6 +474,7 @@ public struct EditorSplitView: View {
                         }
                         Divider()
                         Button("Chat with Gemma…") { openWindow(id: GemmaChatView.windowID) }
+                        Button("Manage Skills…") { openSettings() }
                     } else {
                         Button("Set Up On-Device AI…") { openSettings() }
                     }
@@ -731,9 +739,9 @@ public struct EditorSplitView: View {
         }
     }
 
-    private func runAI(_ mode: RewriteRequest.Mode, title: String) {
-        let request = RewriteRequest(mode: mode, sourceText: vault.editorContent)
-        aiRequest = AIResultRequest(title: title) { GemmaService.shared.stream(request) }
+    private func runSkill(_ skill: Skill) {
+        let note = vault.editorContent
+        aiRequest = AIResultRequest(title: skill.name) { GemmaService.shared.stream(skill, noteText: note) }
     }
 
     /// Lets the user pick a window, app or display with the system picker, then has Gemma explain it.

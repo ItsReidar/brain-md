@@ -23,9 +23,7 @@ flowchart LR
 
 | Feature | Where | What happens |
 |---|---|---|
-| Summarize Note | ✨ menu | Meeting-style minutes: summary, decisions, action items, open questions |
-| Extract Action Items | ✨ menu | A Markdown checklist with owners and dates when the note mentions them |
-| Polish & Rewrite | ✨ menu | Fixes grammar and structure, keeping facts, links, code and front matter |
+| Skills | ✨ menu, and the chat's suggestions and **Skills** menu | Your saved prompts, as Markdown files in the vault (see [Instructions & Skills](#instructions--skills)). The defaults: Summarize Note, Extract Action Items, Polish & Rewrite, List the Open Questions and Suggest a Better Title |
 | Explain Screen | ✨ menu › Explain Screen | **Screen Under Pointer** captures that display (without brain-md's windows). **Choose Window, App or Display…** opens the macOS picker so you can pick exactly what to explain. Gemma then explains the slide or diagram |
 | Record a meeting | 🎙 toolbar button | Live transcript lines labelled **Them** / **Me** with timestamps; minutes from Gemma when you stop |
 | Gemma Chat | ✨ menu › Chat with Gemma…, or View › Gemma Chat (⇧⌘J) | A conversation in its own window, optionally about the open note |
@@ -47,6 +45,33 @@ A separate window for asking Gemma anything, without the preset actions.
 - **Context usage** shows under the message field after the first answer, as a ring and "1.7K / 131K" tokens of Gemma's 131,072-token window. The ring turns amber at 70 % and red at 90 %; hover for exact numbers and the last answer's speed. A shared note counts too (roughly 1,000 tokens per 4,000 characters). Start a new chat when it's nearly full.
 - Opening the window loads and warms up Gemma in the background, so the first answer starts in about a quarter of a second instead of about four.
 
+## Instructions & Skills
+
+**Settings › Local AI & Voice › Instructions & Skills**
+
+- **Custom Instructions** (up to 2,000 characters) are added to every request, in chat and the ✨ menu, after the built-in rules: for example "Answer in Dutch. Keep it short." In chat, edits apply from the next message.
+- **Skills** are saved prompts, stored as Markdown files in the vault's `Skills` folder, so they sync with your notes and you edit them like any note. Settings lists them with **Edit** (opens the file), **New Skill**, **Show in Finder** and **Restore Defaults** (re-adds missing default skills; edited ones are kept).
+
+A skill file:
+
+```markdown
+---
+name: Translate to Dutch
+description: Translates the note
+icon: globe                # an SF Symbol name
+show-in: [menu, chat]      # the ✨ menu, the chat window, or both
+uses-note: true            # adds the open note to the prompt
+order: 10                  # lower comes first
+---
+Translate this note into Dutch, keeping its Markdown structure.
+```
+
+The body is the prompt. With `uses-note: true` the note is appended, or placed where `{{note}}` appears; with `false` the prompt is sent on its own. Missing fields default to the file name, `sparkles`, both places, `true` and 100. A file without a body is ignored.
+
+In the ✨ menu a skill's answer opens in the review sheet. In chat it's sent as a message shown with the skill's name; a skill that uses the note always includes it, even when the note chip is off.
+
+The five default skills are written the first time on-device AI is used with a vault. Deleting one is permanent; use **Restore Defaults** to get it back. The `Skills` folder sits under **App Folders** in the sidebar and is left out of the 3D graph (see [Vault Management](vault-management.md#app-folders)).
+
 ## Languages
 
 Meetings are transcribed with Apple's **SpeechTranscriber**, the long-form model built for meetings, when it supports the language (English, French, German, Spanish and others). Languages it doesn't cover fall back to **DictationTranscriber**, which supports more, including **Dutch** (`nl_BE` and `nl_NL`). The Transcription Language picker lists every language either engine supports. A requested region the engines don't have maps to the language's main region (English in Belgium → `en_US`).
@@ -57,6 +82,7 @@ Meetings are transcribed with Apple's **SpeechTranscriber**, the long-form model
 
 - **Enable on-device AI** downloads the model (6.8 GB) with live progress. Turning it off unloads the model and asks whether to delete the files.
 - **Capture Incoming System Audio** / **Capture Microphone Audio** choose the meeting sources.
+- **Instructions & Skills** set custom instructions and manage skills (see above).
 - **Transcription Language** defaults to the system language. Each language's speech model downloads once, the first time it's used.
 - **Visual Diagram Comprehension** shows or hides Explain Screen.
 
@@ -88,6 +114,7 @@ Speech recognition permission is not requested: SpeechAnalyzer transcribes on-de
 | `Services/AI/LocalModelManager.swift` | Download, verify, load and unload the model |
 | `Services/AI/HubAdapters.swift` | Bridges swift-huggingface and swift-transformers to mlx-swift-lm (replaces the MLXHuggingFace macros); drops Gemma 4's no-op attention mask so chat turns reuse the KV cache |
 | `Services/AI/GemmaService.swift` | Prompts and streaming generation, prewarm, idle unload |
+| `Services/AI/Skills.swift` | Skill file parsing, prompts, the vault's skill library and default skills |
 | `Services/AI/GemmaChat.swift` | Chat state, note context, session rebuild from history, context usage |
 | `Services/AI/VisualCaptureService.swift` | Full-resolution screenshot of the display under the pointer, or of a window, app or display chosen in the system picker |
 | `Services/AI/AudioCaptureService.swift` | ScreenCaptureKit system audio + microphone, levels |

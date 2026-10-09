@@ -37,6 +37,7 @@ brain-md/
 │   │   └── BrainError.swift       # Strongly-typed error domain
 │   ├── Services/                  # Business logic & background workers
 │   │   ├── VaultManager.swift     # File CRUD, selection, and monitor
+│   │   ├── VaultAppFolders.swift  # Skills & attachments as app folders (sidebar, graph)
 │   │   ├── VaultManaging.swift    # Core protocol contract
 │   │   ├── NoteTemplateEngine.swift # Title format & Markdown template engine
 │   │   ├── SyntaxHighlighter.swift # Custom regex syntax tokenizer
@@ -46,6 +47,7 @@ brain-md/
 │   │       ├── LocalModelManager.swift # Gemma 4 download, verify, load/unload
 │   │       ├── GemmaService.swift # Prompts & streaming generation
 │   │       ├── GemmaChat.swift    # Free-form chat state & history replay
+│   │       ├── Skills.swift       # Skill files, prompts & the vault's skill library
 │   │       ├── VisualCaptureService.swift # Screenshots for Explain Screen
 │   │       ├── AudioCaptureService.swift # System audio + microphone capture
 │   │       ├── MeetingTranscriber.swift # SpeechAnalyzer per audio source
@@ -147,7 +149,9 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `testScrollViewFinderRegistersAndReleasesPreview()` | `ScrollViewFinder` registers on window attach and unregisters on dismantle. |
 | `testMetricsIgnoreDocumentFrameOrigin()` / `testMetricsNonFlippedDocument()` / `testMetricsHonorContentInsets()` / `testMetricsShortDocument()` | `ScrollMetrics` geometry: frame-origin independence, `isFlipped` handling, content insets, and non-scrollable documents. |
 | `LocalModelManagerTests` | Snapshot completeness (every indexed weight file), legacy placeholder cleanup, disk size of symlinked blobs, memory check, and loading without a download. |
-| `GemmaServiceTests` | Prompt wording per mode, empty-note and disabled errors (without loading the model), speaker labels, truncation marker. Chat: note attached only when new or changed, history replay of complete exchanges, failed turns, blank messages, context-usage labels and warning levels. |
+| `GemmaServiceTests` | Prompt wording per mode, empty-note and disabled errors (without loading the model), speaker labels, truncation marker. Chat: note attached only when new or changed, history replay of complete exchanges, failed turns, blank messages, context-usage labels and warning levels, custom instructions, skills sent from chat. |
+| `SkillsTests` | Skill frontmatter and defaults, note placement (`{{note}}` or appended), empty notes, sort order, default skills and template; library seeding once per vault, restore keeps edits, unique new names, ignored files; the test host never seeds the user's vault. |
+| `VaultAppFoldersTests` | Which attachment settings make an app folder, case-insensitive membership, sidebar split and order, graph excludes Skills and attachments. |
 | `HubAdaptersTests` | Gemma 4's all-ones attention mask is dropped for text prompts (so chat turns reuse the KV cache) and kept for real masks and media; opt-in real-model check that a follow-up reuses the cache. |
 | `GemmaBenchmarkTests` | Opt-in speed measurements (load, first token, prompt and generation tokens/s, prewarm); see [On-Device AI & Meetings](local-ai.md#testing). |
 | `VisualCaptureServiceTests` | AppKit → ScreenCaptureKit coordinates (including a display above the main one), the disabled setting for both capture modes, picker configuration (one window, app or display; brain-md excluded) and full-resolution capture size. |

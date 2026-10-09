@@ -1334,6 +1334,8 @@ public struct LocalAISettingsPane: View {
   @State private var pendingDeletionBytes: Int64?
   @AppStorage(MeetingTranscriber.localeDefaultsKey) private var transcriptionLocale = ""
   @State private var transcriptionLocales: [String] = []
+  @AppStorage(GemmaService.customInstructionsKey) private var customInstructions = ""
+  @ObservedObject private var skillLibrary = SkillLibrary.shared
 
   public init() {}
 
@@ -1382,6 +1384,8 @@ public struct LocalAISettingsPane: View {
         Text("Keeping them lets you turn on-device AI back on without downloading again.")
       }
       .onAppear(perform: resumeDownloadIfNeeded)
+
+      instructionsAndSkills
 
       // 2. Audio & Visual Capture Permissions & Settings
       SettingsCard(title: "Meeting Audio & Visual Capture") {
@@ -1440,9 +1444,105 @@ public struct LocalAISettingsPane: View {
     }
   }
 
+  // MARK: Instructions & Skills
+
+  private var instructionsAndSkills: some View {
+    SettingsCard(
+      title: "Instructions & Skills",
+      footer: "Skills are Markdown files in the vault's \(VaultManager.skillsFolderName) folder: the frontmatter "
+        + "sets the name, icon and where the skill appears; the body is the prompt. Edit them like any note."
+    ) {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 10) {
+          Image(systemName: "text.quote")
+            .foregroundColor(.accentColor)
+            .frame(width: 20)
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Custom Instructions").font(.system(size: 13, weight: .medium))
+            Text("Added to every request, in chat and the ✨ menu. For example: “Answer in Dutch. Keep it short.”")
+              .font(.system(size: 11))
+              .foregroundColor(.secondary)
+          }
+        }
+        TextEditor(text: $customInstructions)
+          .font(.system(size: 13))
+          .scrollContentBackground(.hidden)
+          .padding(6)
+          .frame(height: 96)
+          .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+          .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.12)))
+          .accessibilityLabel("Custom instructions")
+          .onChange(of: customInstructions) { _, text in
+            if text.count > GemmaService.maxCustomInstructionsLength {
+              customInstructions = String(text.prefix(GemmaService.maxCustomInstructionsLength))
+            }
+          }
+        Text("\(customInstructions.count) / \(GemmaService.maxCustomInstructionsLength.formatted())")
+          .font(.system(size: 11))
+          .monospacedDigit()
+          .foregroundColor(.secondary)
+          .frame(maxWidth: .infinity, alignment: .trailing)
+      }
+      .padding(16)
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 0) {
+        ForEach(skillLibrary.skills) { skill in
+          HStack(spacing: 10) {
+            Image(systemName: skill.icon)
+              .foregroundColor(.accentColor)
+              .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(skill.name).font(.system(size: 13, weight: .medium))
+              if !skill.summary.isEmpty {
+                Text(skill.summary).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+              }
+            }
+            Spacer()
+            ForEach(Skill.Placement.allCases.filter(skill.placements.contains), id: \.self) { placement in
+              Text(placement == .menu ? "✨ Menu" : "Chat")
+                .font(.system(size: 10, weight: .medium))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.primary.opacity(0.07)))
+            }
+            Button("Edit") { VaultManager.shared.selectNote(byRelativePath: skill.relativePath) }
+              .help("Open \(skill.relativePath) in the editor")
+          }
+          .padding(.horizontal, 16)
+          .padding(.vertical, 8)
+          Divider().padding(.leading, 46)
+        }
+        if skillLibrary.skills.isEmpty {
+          Text("No skills yet. Create one, or restore the defaults.")
+            .font(.system(size: 12))
+            .foregroundColor(.secondary)
+            .padding(16)
+        }
+        HStack {
+          Button("New Skill") {
+            if let path = try? skillLibrary.createSkill() {
+              VaultManager.shared.selectNote(byRelativePath: path)
+            }
+          }
+          Button("Show in Finder") {
+            try? FileManager.default.createDirectory(at: skillLibrary.folderURL, withIntermediateDirectories: true)
+            NSWorkspace.shared.activateFileViewerSelecting([skillLibrary.folderURL])
+          }
+          Spacer()
+          Button("Restore Defaults") { try? skillLibrary.restoreDefaults() }
+            .help("Adds any default skill whose file is missing. Edited skills are kept.")
+        }
+        .padding(16)
+      }
+    }
+  }
+
   private func setAIEnabled(_ enabled: Bool) {
     isAIEnabled = enabled
     if enabled {
+      skillLibrary.seedDefaultsIfNeeded()
       resumeDownloadIfNeeded()
     } else {
       modelManager.cancelDownload()

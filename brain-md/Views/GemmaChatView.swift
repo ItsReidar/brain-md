@@ -12,6 +12,7 @@ struct GemmaChatView: View {
     @ObservedObject var chat: GemmaChat
     @ObservedObject var vault: VaultManager
     @ObservedObject private var modelManager = LocalModelManager.shared
+    @ObservedObject private var skillLibrary = SkillLibrary.shared
     @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
     @AppStorage("ai_chat_include_note") private var includeNote = true
     @Environment(\.openSettings) private var openSettings
@@ -135,6 +136,7 @@ struct GemmaChatView: View {
 
                 HStack(spacing: 8) {
                     noteChip
+                    skillsMenu
                     Spacer(minLength: 8)
                     sendButton
                 }
@@ -257,22 +259,15 @@ struct GemmaChatView: View {
         let prompt: String
         /// Prompts that need the user's own text are put in the field instead of being sent.
         let sendsImmediately: Bool
+        var skill: Skill?
     }
 
+    /// Chat skills first (those that need the note only when it's shared), then fill-in prompts.
     private var suggestions: [Suggestion] {
-        if openNote != nil, includeNote {
-            return [
-                Suggestion(title: "Summarize this note", icon: "text.alignleft",
-                           prompt: "Summarize this note in a few bullet points.", sendsImmediately: true),
-                Suggestion(title: "List the open questions", icon: "questionmark.bubble",
-                           prompt: "What questions does this note leave open?", sendsImmediately: true),
-                Suggestion(title: "Find the action items", icon: "checklist",
-                           prompt: "List the action items in this note as a checklist.", sendsImmediately: true),
-                Suggestion(title: "Suggest a better title", icon: "textformat",
-                           prompt: "Suggest three better titles for this note.", sendsImmediately: true),
-            ]
-        }
-        return [
+        let skills = skillLibrary.skills(for: .chat)
+            .filter { !$0.usesNote || isSharingNote }
+            .map { Suggestion(title: $0.name, icon: $0.icon, prompt: $0.chatMessage, sendsImmediately: true, skill: $0) }
+        let fillIns = [
             Suggestion(title: "Explain a concept", icon: "lightbulb",
                        prompt: "Explain in simple terms: ", sendsImmediately: false),
             Suggestion(title: "Draft an email", icon: "envelope",
@@ -282,11 +277,45 @@ struct GemmaChatView: View {
             Suggestion(title: "Translate text", icon: "globe",
                        prompt: "Translate into Dutch: ", sendsImmediately: false),
         ]
+        return Array((skills + fillIns).prefix(isSharingNote ? max(4, min(skills.count, 6)) : 4))
     }
 
     private func use(_ suggestion: Suggestion) {
+        if let skill = suggestion.skill { return run(skill) }
         draft = suggestion.prompt
         if suggestion.sendsImmediately { send() } else { isInputFocused = true }
+    }
+
+    /// Sends a skill's prompt, shown as the skill's name. A skill that uses the note always gets it.
+    private func run(_ skill: Skill) {
+        guard !chat.isResponding else { return }
+        let note = skill.usesNote || includeNote
+            ? openNote.map { GemmaChat.NoteContext(title: $0.displayName, content: vault.editorContent) }
+            : nil
+        if skill.usesNote, note == nil { return }
+        chat.send(skill.chatMessage, note: note, displayText: skill.name)
+        isInputFocused = true
+    }
+
+    private var skillsMenu: some View {
+        Menu {
+            let skills = skillLibrary.skills(for: .chat)
+            ForEach(skills) { skill in
+                Button { run(skill) } label: { Label(skill.name, systemImage: skill.icon) }
+                    .disabled(skill.usesNote && openNote == nil)
+            }
+            if skills.isEmpty { Text("No chat skills yet") }
+            Divider()
+            Button("Manage Skills…") { openSettings() }
+        } label: {
+            Label("Skills", systemImage: "sparkles")
+                .font(.system(size: 12))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(chat.isResponding)
+        .help("Run one of your skills. Skills that use the note always include it.")
     }
 
     private func send() {
