@@ -17,7 +17,9 @@ final class LocalAIServicesTests: XCTestCase {
         XCTAssertEqual(initialState.status, .notDownloaded)
         XCTAssertEqual(initialState.progress, 0.0)
 
-        let manager = LocalModelManager()
+        // Isolated folder: the default location holds the real downloaded model.
+        let manager = LocalModelManager(
+            modelsDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
         XCTAssertEqual(manager.state.status, .notDownloaded)
 
         manager.updateProgress(bytesDownloaded: 1_000_000_000, totalBytes: 2_000_000_000)
