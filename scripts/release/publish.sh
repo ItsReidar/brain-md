@@ -4,8 +4,10 @@
 # and commits it to the Homebrew tap.
 #
 # Usage:
-#   scripts/release/publish.sh [--version 1.2.3] [--tap-dir PATH] [--skip-tap | --skip-release] [--yes]
+#   scripts/release/publish.sh [--version 1.2.3] [--notes-file PATH] [--tap-dir PATH] [--skip-tap | --skip-release] [--yes]
 #
+#   --notes-file         Markdown shown at the top of the release notes. Defaults to
+#                        docs/release-notes/<version>.md when it exists.
 #   --tap-dir / TAP_DIR  Local clone of ItsReidar/homebrew-tap. Defaults to the clone Homebrew
 #                        made for `brew tap itsreidar/tap`, if present.
 #   --skip-tap           Only publish the GitHub release.
@@ -23,6 +25,7 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 
 version=""
 tap_dir="${TAP_DIR:-}"
+notes_file=""
 skip_tap=false
 skip_release=false
 assume_yes=false
@@ -30,6 +33,7 @@ assume_yes=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --version) version="${2:?--version needs a value}"; shift 2 ;;
+        --notes-file) notes_file="${2:?--notes-file needs a value}"; shift 2 ;;
         --tap-dir) tap_dir="${2:?--tap-dir needs a value}"; shift 2 ;;
         --skip-tap) skip_tap=true; shift ;;
         --skip-release) skip_release=true; shift ;;
@@ -56,6 +60,19 @@ gh auth status >/dev/null 2>&1 || die "GitHub CLI is not authenticated — run: 
 validate_version "$version"
 
 tag="v$version"
+[[ -n "$notes_file" ]] || notes_file="$REPO_ROOT/docs/release-notes/$version.md"
+if [[ -f "$notes_file" ]]; then
+    release_notes="$(cat "$notes_file")
+
+---
+
+"
+elif [[ "$notes_file" == "$REPO_ROOT/docs/release-notes/$version.md" ]]; then
+    release_notes=""
+    warn "no release notes at ${notes_file#"$REPO_ROOT"/}; the release gets install instructions only"
+else
+    die "notes file not found: $notes_file"
+fi
 dmg="$DIST_DIR/$(dmg_name "$version")"
 checksum_file="$dmg.sha256"
 cask="$DIST_DIR/$CASK_NAME.rb"
@@ -88,7 +105,7 @@ else
         --repo "$GITHUB_REPO" \
         --target "$commit" \
         --title "$DISPLAY_NAME $version" \
-        --notes "Install with Homebrew: \`brew install --cask itsreidar/tap/$CASK_NAME\`, or download the DMG below.
+        --notes "${release_notes}Install with Homebrew: \`brew install --cask itsreidar/tap/$CASK_NAME\`, or download the DMG below.
 
 $DISPLAY_NAME is signed but not notarized by Apple, so macOS blocks its first launch. Either open System Settings > Privacy & Security and click **Open Anyway**, or run \`xattr -dr com.apple.quarantine /Applications/brain-md.app\` in Terminal.
 

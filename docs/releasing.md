@@ -5,7 +5,7 @@ Brain.md is released as a DMG on [GitHub Releases](https://github.com/ItsReidar/
 | Script | What it does | Network |
 |---|---|---|
 | `scripts/release/package.sh` | Archives a universal (arm64 + x86_64) Release build, signs it, verifies the signature, builds `dist/brain-md-<version>.dmg` + `.sha256`, and renders the cask `dist/brain-md.rb`. | None |
-| `scripts/release/publish.sh` | Creates the GitHub release `v<version>` and uploads the DMG, checks that the published download matches the checksum, then commits and pushes the cask to the tap. Asks before every public step. | GitHub |
+| `scripts/release/publish.sh` | Creates the GitHub release `v<version>` with the notes from `docs/release-notes/<version>.md` and uploads the DMG, checks that the published download matches the checksum, then commits and pushes the cask to the tap. Asks before every public step. | GitHub |
 
 ---
 
@@ -52,15 +52,16 @@ Back up the certificate and its private key (File → Export Items… as `.p12`,
 ## Cutting a release
 
 1. Set the version: update **MARKETING_VERSION** in the Xcode project (General → Identity → Version), or pass `--version` to both scripts. The build number defaults to the commit count.
-2. Commit and push. `publish.sh` refuses to publish a dirty tree or a commit GitHub doesn't have, so the tag always matches what was built.
-3. Package:
+2. Write the release notes in `docs/release-notes/<version>.md` (see [1.1](release-notes/1.1.md) for the style: what's new, in user terms). `publish.sh` puts them above the standard install instructions; pass `--notes-file PATH` to use another file. Without a notes file the release gets the install instructions only.
+3. Commit and push. `publish.sh` refuses to publish a dirty tree or a commit GitHub doesn't have, so the tag always matches what was built.
+4. Package:
 
    ```bash
    scripts/release/package.sh
    ```
 
-4. Smoke-test `dist/brain-md-<version>.dmg`: open it, drag Brain.md to Applications, and launch it.
-5. Publish:
+5. Smoke-test `dist/brain-md-<version>.dmg`: open it, drag Brain.md to Applications, and launch it.
+6. Publish:
 
    ```bash
    scripts/release/publish.sh
