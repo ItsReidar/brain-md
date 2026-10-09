@@ -198,6 +198,24 @@ public struct SidebarView: View {
     
     // MARK: - File Tree
 
+    /// A small uppercase label with a rule, separating the tree's sections ("Notes", "App Folders").
+    private func sectionHeader(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .textCase(.uppercase)
+                .foregroundColor(.secondary)
+            Rectangle()
+                .fill(Color.primary.opacity(0.12))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
     private func treeRow(_ item: NoteItem, folderIcon: String? = nil) -> some View {
         ItemRowView(
             item: item,
@@ -225,11 +243,12 @@ public struct SidebarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 if !vault.allTags.isEmpty {
                     tagsSection
-                    Divider()
-                        .padding(.vertical, 4)
                 }
                 
                 let tree = VaultManager.splitAppFolders(vault.rootItems, appFolders: vault.appFolderNames)
+                if !tree.user.isEmpty {
+                    sectionHeader("Notes")
+                }
                 ForEach(tree.user) { item in
                     treeRow(item)
                 }
@@ -237,19 +256,7 @@ public struct SidebarView: View {
                 // Folders brain-md manages (Skills, attachments) sit below the user's own folders.
                 let appItems = tree.app
                 if !appItems.isEmpty {
-                    HStack(spacing: 6) {
-                        Text("App Folders")
-                            .font(.system(size: 10, weight: .semibold))
-                            .textCase(.uppercase)
-                            .foregroundColor(.secondary)
-                        Rectangle()
-                            .fill(Color.primary.opacity(0.12))
-                            .frame(height: 1)
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.top, 10)
-                    .padding(.bottom, 2)
-                    .accessibilityAddTraits(.isHeader)
+                    sectionHeader("App Folders")
                     ForEach(appItems) { item in
                         treeRow(item, folderIcon: item.name.caseInsensitiveCompare(VaultManager.skillsFolderName) == .orderedSame
                             ? "sparkles" : "paperclip")

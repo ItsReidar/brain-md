@@ -128,7 +128,7 @@ To maintain full interoperability with external tools like Obsidian, Git, or VS 
 
 ## App Folders
 
-Two vault-root folders are managed by brain-md rather than by you, so the sidebar lists them under an **App Folders** separator below your own folders and notes, and the 3D graph leaves them out:
+Two vault-root folders are managed by brain-md rather than by you, so the sidebar lists them under an **App Folders** header below your own folders and notes (under **Notes**), and the 3D graph leaves them out:
 
 | Folder | Icon | Holds |
 |---|---|---|
