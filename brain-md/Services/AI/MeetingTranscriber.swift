@@ -4,6 +4,7 @@
 //
 
 @preconcurrency import AVFoundation
+import CoreMedia
 import Foundation
 import Speech
 import os
@@ -84,20 +85,16 @@ nonisolated public final class MeetingTranscriber: Sendable {
         onPreparing: @escaping @Sendable (String) -> Void
     ) async throws -> [TranscriptionSegment.Speaker: SourcePipeline]
     {
-        guard SpeechTranscriber.isAvailable else { throw TranscriptionError.unavailable }
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
+        guard let (kind, locale) = await Self.engine(for: requested) else {
             throw TranscriptionError.unsupportedLocale(requested.identifier)
         }
+        log.info("Transcribing \(locale.identifier, privacy: .public) with \(String(describing: kind), privacy: .public)")
 
         var pipelines: [TranscriptionSegment.Speaker: SourcePipeline] = [:]
         for speaker in [TranscriptionSegment.Speaker.systemAudio, .microphone] where speakers.contains(speaker) {
-            let transcriber = SpeechTranscriber(
-                locale: locale,
-                transcriptionOptions: [],
-                reportingOptions: [.volatileResults, .fastResults],
-                attributeOptions: [.audioTimeRange])
+            let transcriber = Transcriber(kind, locale: locale)
             if pipelines.isEmpty,
-               let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+               let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber.module]) {
                 onPreparing("Downloading the \(locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier) speech model…")
                 log.info("Installing speech assets for \(locale.identifier, privacy: .public)")
                 try await request.downloadAndInstall()
@@ -106,12 +103,110 @@ nonisolated public final class MeetingTranscriber: Sendable {
         }
         return pipelines
     }
+
+    // MARK: - Language support
+
+    /// Every language either on-device engine can transcribe, by locale identifier.
+    public static func supportedLocaleIdentifiers() async -> [String] {
+        guard SpeechTranscriber.isAvailable else { return [] }
+        let speech = await SpeechTranscriber.supportedLocales
+        let dictation = await DictationTranscriber.supportedLocales
+        return Array(Set((speech + dictation).map(\.identifier)))
+    }
+
+    /// The long-form SpeechTranscriber where it supports the language (best for meetings), else
+    /// DictationTranscriber, which covers more languages, including Dutch.
+    static func engine(for requested: Locale) async -> (TranscriberKind, Locale)? {
+        guard SpeechTranscriber.isAvailable else { return nil }
+        if let locale = match(requested, in: await SpeechTranscriber.supportedLocales) {
+            return (.speech, locale)
+        }
+        if let locale = match(requested, in: await DictationTranscriber.supportedLocales) {
+            return (.dictation, locale)
+        }
+        return nil
+    }
+
+    /// Exact identifier first, then the language's most likely region (en → en_US, nl → nl_NL),
+    /// then any region of the same language. (`supportedLocale(equivalentTo:)` isn't used: it
+    /// reports nl_BE for SpeechTranscriber, which can't transcribe Dutch.)
+    static func match(_ requested: Locale, in available: [Locale]) -> Locale? {
+        guard let language = requested.language.languageCode?.identifier else { return nil }
+        let sameLanguage = available
+            .filter { $0.language.languageCode?.identifier == language }
+            .sorted { $0.identifier < $1.identifier }
+        // Compared by parts, so "nl_BE" and "nl-BE" are the same locale.
+        if let region = requested.region?.identifier,
+           let exact = sameLanguage.first(where: { $0.region?.identifier == region }) {
+            return exact
+        }
+        if let likelyRegion = Locale.Language(identifier: language).maximalIdentifier.split(separator: "-").last,
+           let preferred = sameLanguage.first(where: { $0.region?.identifier == String(likelyRegion) }) {
+            return preferred
+        }
+        return sameLanguage.first
+    }
+}
+
+nonisolated enum TranscriberKind: Sendable {
+    case speech, dictation
+}
+
+/// Wraps the two on-device engines, whose result types differ, behind one interface.
+nonisolated struct Transcriber: @unchecked Sendable {
+    private let speech: SpeechTranscriber?
+    private let dictation: DictationTranscriber?
+
+    init(_ kind: TranscriberKind, locale: Locale) {
+        switch kind {
+        case .speech:
+            speech = SpeechTranscriber(
+                locale: locale,
+                transcriptionOptions: [],
+                reportingOptions: [.volatileResults, .fastResults],
+                attributeOptions: [.audioTimeRange])
+            dictation = nil
+        case .dictation:
+            speech = nil
+            dictation = DictationTranscriber(
+                locale: locale,
+                contentHints: [.farField],
+                transcriptionOptions: [.punctuation],
+                reportingOptions: [.volatileResults, .frequentFinalization],
+                attributeOptions: [.audioTimeRange])
+        }
+    }
+
+    var module: any SpeechModule { speech ?? dictation! }
+
+    /// Results as (text, time range, isFinal), whichever engine produced them.
+    func results() -> AsyncThrowingStream<(text: AttributedString, range: CMTimeRange, isFinal: Bool), Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    if let speech {
+                        for try await result in speech.results {
+                            continuation.yield((result.text, result.range, result.isFinal))
+                        }
+                    } else if let dictation {
+                        for try await result in dictation.results {
+                            continuation.yield((result.text, result.range, result.isFinal))
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 /// One audio source → format conversion → SpeechAnalyzer → labelled segments.
 nonisolated private final class SourcePipeline: @unchecked Sendable {
     let speaker: TranscriptionSegment.Speaker
-    private let transcriber: SpeechTranscriber
+    private let transcriber: Transcriber
     private let analyzer: SpeechAnalyzer
     private let analyzerFormat: AVAudioFormat
     private let input: AsyncStream<AnalyzerInput>.Continuation
@@ -119,16 +214,16 @@ nonisolated private final class SourcePipeline: @unchecked Sendable {
     private var converter: AVAudioConverter?
     private var receivedInput = false
 
-    init(speaker: TranscriptionSegment.Speaker, transcriber: SpeechTranscriber) async throws {
+    init(speaker: TranscriptionSegment.Speaker, transcriber: Transcriber) async throws {
         self.speaker = speaker
         self.transcriber = transcriber
-        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
+        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber.module]) else {
             throw TranscriptionError.unavailable
         }
         analyzerFormat = format
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         input = continuation
-        analyzer = SpeechAnalyzer(modules: [transcriber])
+        analyzer = SpeechAnalyzer(modules: [transcriber.module])
         try await analyzer.start(inputSequence: stream)
     }
 
@@ -149,7 +244,7 @@ nonisolated private final class SourcePipeline: @unchecked Sendable {
     }
 
     func collectResults(into output: AsyncThrowingStream<TranscriptionSegment, Error>.Continuation) async throws {
-        for try await result in transcriber.results {
+        for try await result in transcriber.results() {
             let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
             output.yield(TranscriptionSegment(

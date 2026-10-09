@@ -8,7 +8,6 @@
 //
 
 import AppKit
-import Speech
 import SwiftUI
 
 // MARK: - Settings Tab Registry (Extensible for future additions)
@@ -1422,8 +1421,7 @@ public struct LocalAISettingsPane: View {
           .labelsHidden()
           .frame(width: 220)
           .task {
-            transcriptionLocales = await SpeechTranscriber.supportedLocales
-              .map(\.identifier)
+            transcriptionLocales = await MeetingTranscriber.supportedLocaleIdentifiers()
               .sorted { Self.languageName($0) < Self.languageName($1) }
           }
         }

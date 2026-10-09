@@ -92,7 +92,7 @@ graph TD
 - **Enable on-device AI**: Downloads Gemma 4 E4B (`mlx-community/gemma-4-E4B-it-qat-4bit`, 6.8 GB) to Application Support with live byte progress and cancel. Turning it off unloads the model and offers to delete the files, showing their size. Failed downloads show the error and a Retry that keeps partial files.
 - **Capture Incoming System Audio**: Records other meeting participants ("Them") through `ScreenCaptureKit`.
 - **Capture Microphone Audio**: Records your side ("Me") through `ScreenCaptureKit`'s microphone capture.
-- **Transcription Language**: The language SpeechAnalyzer transcribes in; defaults to the system language. Each language's speech model downloads once.
+- **Transcription Language**: The language meetings are transcribed in, including Dutch (Belgium and Netherlands); defaults to the system language. Each language's speech model downloads once.
 - **Visual Diagram Comprehension**: Shows **Explain Screen** in the ✨ menu, which captures the display under the pointer for Gemma to explain.
 
 See [On-Device AI & Meetings](local-ai.md) for permissions, privacy and model details.
