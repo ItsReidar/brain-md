@@ -163,3 +163,13 @@ public final class GemmaChat: ObservableObject {
         return Array(history.suffix(maxReplayedMessages))
     }
 }
+
+#if DEBUG
+extension GemmaChat {
+    /// Fills the chat with fixed messages for previews and render checks.
+    func loadForPreview(_ messages: [Message], responding: Bool = false) {
+        self.messages = messages
+        isResponding = responding
+    }
+}
+#endif

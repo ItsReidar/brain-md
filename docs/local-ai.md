@@ -38,7 +38,9 @@ Answers are in the note's language (in chat: the language you write in). Notes l
 
 A separate window for asking Gemma anything, without the preset actions.
 
-- **Include current note** (on by default) sends the open note with your message. It's sent once and again only after you edit it, so follow-up questions stay fast.
+- The **note chip** under the message field (on by default) sends the open note with your message; click it to leave the note out. It's sent once and again only after you edit it, so follow-up questions stay fast.
+- An empty chat offers starting points: with a note, Summarize, Open questions, Action items and a better title (sent straight away); without one, prompts you complete yourself.
+- Answers render Markdown (headings, lists, task boxes, quotes, tables and highlighted code blocks). Return sends; ⌥Return adds a line.
 - Each answer has **Copy** and **Insert into Note**, which appends it to the note that's open at that moment.
 - **Stop** (⌘.) ends an answer early; **New Chat** clears the conversation.
 - The conversation lives in memory only: it isn't saved and is gone when you quit. When the model unloads after five idle minutes, the next message reloads it and replays the last 20 exchanges so Gemma still remembers the conversation.
