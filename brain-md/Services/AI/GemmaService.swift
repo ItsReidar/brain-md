@@ -98,6 +98,23 @@ public final class GemmaService: ObservableObject {
         }
     }
 
+    /// Loads the model and generates one token, so the next request skips both the load (about
+    /// 4 s) and the slower first pass on the GPU. Does nothing if the model is already loaded.
+    public func prewarm() async {
+        guard isEnabled, !modelManager.isLoaded, !isGenerating else { return }
+        let stream = generate { container in
+            ChatSession(
+                container, generateParameters: GenerateParameters(maxTokens: 1, temperature: 0),
+                processing: UserInput.Processing()
+            ).streamResponse(to: "Hi")
+        }
+        do {
+            for try await _ in stream {}
+        } catch {
+            log.info("Prewarm skipped: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func scheduleIdleUnload() {
         idleUnloadTask?.cancel()
         idleUnloadTask = Task { [weak self] in

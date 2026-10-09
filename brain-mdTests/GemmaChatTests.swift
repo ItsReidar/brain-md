@@ -113,6 +113,31 @@ extension GemmaServiceTests {
         chat.reset()
     }
 
+    @Test func contextUsageIsCompactAndWarnsNearTheLimit() {
+        let us = Locale(identifier: "en_US")
+        #expect(ContextUsage(tokens: 950).label(locale: us) == "950 / 131K")
+        #expect(ContextUsage(tokens: 1_717).label(locale: us) == "1.7K / 131K")
+        #expect(ContextUsage(tokens: 12_400).label(locale: us) == "12.4K / 131K")
+        #expect(ContextUsage(tokens: 1_717).level == .normal)
+        #expect(ContextUsage(tokens: 92_000).level == .high)       // 70 %
+        #expect(ContextUsage(tokens: 118_000).level == .nearlyFull) // 90 %
+        #expect(ContextUsage(tokens: 200_000).fraction == 1)
+
+        let help = ContextGauge.helpText(
+            ContextUsage(tokens: 1_717), AnswerStats(tokens: 136, tokensPerSecond: 31.66), locale: us)
+        #expect(help == "Context: 1,717 of 131,072 tokens (1 %). Last answer: 136 tokens at 31.7 tokens/s.")
+        #expect(ContextGauge.helpText(ContextUsage(tokens: 120_000), nil, locale: us).hasSuffix("Start a new chat to keep answers accurate."))
+        // Belgian formatting uses the local separators.
+        #expect(ContextGauge.helpText(ContextUsage(tokens: 1_717), nil, locale: Locale(identifier: "nl_BE")).contains("1.717 of 131.072"))
+    }
+
+    @Test func newChatClearsContextUsage() {
+        let chat = GemmaChat()
+        chat.reset()
+        #expect(chat.contextUsage == nil)
+        #expect(chat.lastAnswerStats == nil)
+    }
+
     private func waitUntilIdle(_ chat: GemmaChat, timeout: Duration = .seconds(10)) async throws {
         let deadline = ContinuousClock.now + timeout
         while chat.isResponding {

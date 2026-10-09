@@ -52,6 +52,10 @@ struct GemmaChatView: View {
             }
         }
         .onAppear { isInputFocused = true }
+        // Load and warm up Gemma while the user types, so the first answer starts sooner.
+        .task(id: isAvailable) {
+            if isAvailable { await GemmaService.shared.prewarm() }
+        }
     }
 
     // MARK: - Conversation
@@ -146,9 +150,18 @@ struct GemmaChatView: View {
                     .strokeBorder(isInputFocused ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.12)))
             .onTapGesture { isInputFocused = true }
 
-            Text("Return to send · ⌥Return for a new line · Answers can be wrong")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Text("Return to send · ⌥Return for a new line · Answers can be wrong")
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+                if let usage = chat.contextUsage {
+                    ContextGauge(usage: usage, lastAnswer: chat.lastAnswerStats)
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 4)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
@@ -408,6 +421,54 @@ private struct GemmaAvatar: View {
     }
 }
 
+/// How full Gemma's context window is: a small ring and "1.7K / 131K". The ring turns amber from
+/// 70 % and red from 90 %; the tooltip has exact numbers and the last answer's speed.
+struct ContextGauge: View {
+    let usage: ContextUsage
+    let lastAnswer: AnswerStats?
+
+    private var tint: Color {
+        switch usage.level {
+        case .normal: .secondary
+        case .high: .orange
+        case .nearlyFull: .red
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ZStack {
+                Circle().stroke(Color.primary.opacity(0.12), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: max(0.02, usage.fraction))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 11, height: 11)
+            Text(usage.label()).monospacedDigit()
+        }
+        // Only the ring takes the warning colour: amber or red 11 pt text would fail WCAG AA contrast.
+        .foregroundStyle(.secondary)
+        .fixedSize()
+        .help(Self.helpText(usage, lastAnswer))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Context used")
+        .accessibilityValue(Self.helpText(usage, lastAnswer))
+    }
+
+    static func helpText(_ usage: ContextUsage, _ lastAnswer: AnswerStats?, locale: Locale = .current) -> String {
+        let percent = Int((usage.fraction * 100).rounded())
+        var text = "Context: \(usage.tokens.formatted(.number.locale(locale))) of "
+            + "\(ContextUsage.window.formatted(.number.locale(locale))) tokens (\(percent) %)."
+        if let lastAnswer {
+            text += " Last answer: \(lastAnswer.tokens.formatted(.number.locale(locale))) tokens at "
+                + "\(lastAnswer.tokensPerSecond.formatted(.number.precision(.fractionLength(1)).locale(locale))) tokens/s."
+        }
+        if usage.level == .nearlyFull { text += " Start a new chat to keep answers accurate." }
+        return text
+    }
+}
+
 /// Three pulsing dots while Gemma prepares its answer; static with Reduce Motion.
 private struct TypingIndicator: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -560,7 +621,7 @@ struct ChatMarkdownView: View {
             """, prompt: ""),
         .init(role: .user, text: "Draft a short message to support about it.", prompt: ""),
         .init(role: .assistant, text: "", prompt: ""),
-    ], responding: true)
+    ], responding: true, contextTokens: 1_717, lastAnswer: AnswerStats(tokens: 136, tokensPerSecond: 31.7))
     return GemmaChatView(chat: chat, vault: .shared).frame(width: 560, height: 720)
 }
 #endif

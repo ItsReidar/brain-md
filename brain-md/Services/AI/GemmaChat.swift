@@ -7,6 +7,43 @@ import Combine
 import Foundation
 import MLXLMCommon
 
+/// How much of Gemma's context window a conversation fills.
+public struct ContextUsage: Equatable {
+    /// Gemma 4 E4B's `max_position_embeddings`.
+    public static let window = 131_072
+
+    public enum Level: Equatable { case normal, high, nearlyFull }
+
+    public let tokens: Int
+
+    public var fraction: Double { min(1, max(0, Double(tokens) / Double(Self.window))) }
+
+    public var level: Level {
+        switch fraction {
+        case 0.9...: .nearlyFull
+        case 0.7...: .high
+        default: .normal
+        }
+    }
+
+    /// "1.7K / 131K", in the user's number format.
+    public func label(locale: Locale = .current) -> String {
+        "\(Self.compact(tokens, locale: locale)) / \(Self.compact(Self.window, locale: locale))"
+    }
+
+    /// 950 → "950", 1_717 → "1.7K", 12_400 → "12.4K", 131_072 → "131K" (in en_US).
+    static func compact(_ count: Int, locale: Locale = .current) -> String {
+        let digits = count < 10_000 ? 1...2 : 1...3
+        return count.formatted(.number.notation(.compactName).precision(.significantDigits(digits)).locale(locale))
+    }
+}
+
+/// Length and speed of one answer.
+public struct AnswerStats: Equatable {
+    public let tokens: Int
+    public let tokensPerSecond: Double
+}
+
 /// A free-form conversation with Gemma. Messages live in memory only; "New Chat" clears them.
 public final class GemmaChat: ObservableObject {
     public static let shared = GemmaChat()
@@ -30,6 +67,10 @@ public final class GemmaChat: ObservableObject {
 
     @Published public private(set) var messages: [Message] = []
     @Published public private(set) var isResponding = false
+    /// Tokens the conversation occupies in Gemma's context, measured after each answer.
+    @Published public private(set) var contextUsage: ContextUsage?
+    /// Length and speed of the most recent answer.
+    @Published public private(set) var lastAnswerStats: AnswerStats?
 
     /// Most recent turns replayed after the model reloads; older ones are dropped to bound context.
     static let maxReplayedMessages = 40
@@ -39,6 +80,10 @@ public final class GemmaChat: ObservableObject {
         Reply in the language the user writes in. Be concise unless asked for detail. When the user \
         shares a note, use it as context and don't invent facts that aren't in it.
         """
+
+    static var generateParameters: GenerateParameters {
+        GenerateParameters(maxTokens: 2048, temperature: 0.6)
+    }
 
     private let service: GemmaService
     private var session: ChatSession?
@@ -73,10 +118,16 @@ public final class GemmaChat: ObservableObject {
         generation = Task {
             do {
                 let stream = service.generate { container in
-                    self.session(for: container, history: history).streamResponse(to: prompt)
+                    Self.text(from: self.session(for: container, history: history).streamDetails(to: prompt)) { info in
+                        self.lastAnswerStats = AnswerStats(
+                            tokens: info.generationTokenCount, tokensPerSecond: info.tokensPerSecond)
+                    }
                 }
                 for try await chunk in stream {
                     updateReply(reply.id) { $0.text += chunk }
+                }
+                if let tokens = try? await session?.cacheStatus().processedTokenCount {
+                    contextUsage = ContextUsage(tokens: tokens)
                 }
             } catch is CancellationError {
                 session = nil // a stopped turn leaves the session's own history uncertain
@@ -109,6 +160,8 @@ public final class GemmaChat: ObservableObject {
         messages = []
         session = nil
         sharedNoteContent = nil
+        contextUsage = nil
+        lastAnswerStats = nil
     }
 
     private func updateReply(_ id: Message.ID, _ change: (inout Message) -> Void) {
@@ -122,11 +175,35 @@ public final class GemmaChat: ObservableObject {
             container,
             instructions: Self.instructions,
             history: history,
-            generateParameters: GenerateParameters(maxTokens: 2048, temperature: 0.6),
+            generateParameters: Self.generateParameters,
             processing: UserInput.Processing())
         self.session = session
         sessionContainer = container
         return session
+    }
+
+    /// The text of a detailed generation stream; completion info goes to `onInfo`.
+    private static func text(
+        from details: AsyncThrowingStream<Generation, Error>,
+        onInfo: @escaping (GenerateCompletionInfo) -> Void
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await event in details {
+                        switch event {
+                        case .chunk(let text): continuation.yield(text)
+                        case .info(let info): onInfo(info)
+                        default: break
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     // MARK: - Pure helpers
@@ -167,9 +244,13 @@ public final class GemmaChat: ObservableObject {
 #if DEBUG
 extension GemmaChat {
     /// Fills the chat with fixed messages for previews and render checks.
-    func loadForPreview(_ messages: [Message], responding: Bool = false) {
+    func loadForPreview(
+        _ messages: [Message], responding: Bool = false, contextTokens: Int? = nil, lastAnswer: AnswerStats? = nil
+    ) {
         self.messages = messages
         isResponding = responding
+        contextUsage = contextTokens.map(ContextUsage.init(tokens:))
+        lastAnswerStats = lastAnswer
     }
 }
 #endif

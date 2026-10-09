@@ -44,6 +44,8 @@ A separate window for asking Gemma anything, without the preset actions.
 - Each answer has **Copy** and **Insert into Note**, which appends it to the note that's open at that moment.
 - **Stop** (⌘.) ends an answer early; **New Chat** clears the conversation.
 - The conversation lives in memory only: it isn't saved and is gone when you quit. When the model unloads after five idle minutes, the next message reloads it and replays the last 20 exchanges so Gemma still remembers the conversation.
+- **Context usage** shows under the message field after the first answer, as a ring and "1.7K / 131K" tokens of Gemma's 131,072-token window. The ring turns amber at 70 % and red at 90 %; hover for exact numbers and the last answer's speed. A shared note counts too (roughly 1,000 tokens per 4,000 characters). Start a new chat when it's nearly full.
+- Opening the window loads and warms up Gemma in the background, so the first answer starts in about a quarter of a second instead of about four.
 
 ## Languages
 
@@ -76,6 +78,7 @@ Speech recognition permission is not requested: SpeechAnalyzer transcribes on-de
 - **Pinned revision:** the download is pinned to commit `0f35c6f6`. swift-transformers still depends on yyjson 0.12.0 ([GHSA-f4vc-345x-4mvm](https://github.com/advisories/GHSA-f4vc-345x-4mvm)), which parses the model's JSON files, so only this known set of files is ever parsed. Unpin once [huggingface/swift-transformers#392](https://github.com/huggingface/swift-transformers/pull/392) ships (`TODO` in `LocalModelManager`).
 - **Storage:** `~/Library/Application Support/brain-md/models`, in the Hugging Face cache layout.
 - **Memory:** loading checks that about 1.2× the model size is free (roughly 8 GB) and fails with a clear message otherwise. The model loads on first use and unloads after five idle minutes.
+- **Speed** (M2 Pro, measured with `GemmaBenchmarkTests`): about 31 tokens/s generated and 550–730 tokens/s of prompt read; loading takes about 4 s. Follow-up chat messages reuse the conversation's KV cache, so only the new message is read (about 0.2 s to the first word instead of re-reading the whole chat). mlx-swift-lm 3.32.3's Gemma 4 processor attaches an all-ones attention mask to every prompt, which disables that reuse; `TextMaskDroppingProcessor` in `HubAdapters.swift` drops it for text-only prompts. Larger prefill steps made no difference.
 - **Audio:** Gemma 4's audio encoder isn't available in Swift (mlx-swift-lm drops `audio_tower` weights), so speech-to-text uses SpeechAnalyzer and Gemma works from the transcript.
 
 ## Code map
@@ -83,9 +86,9 @@ Speech recognition permission is not requested: SpeechAnalyzer transcribes on-de
 | File | Role |
 |---|---|
 | `Services/AI/LocalModelManager.swift` | Download, verify, load and unload the model |
-| `Services/AI/HubAdapters.swift` | Bridges swift-huggingface and swift-transformers to mlx-swift-lm (replaces the MLXHuggingFace macros) |
-| `Services/AI/GemmaService.swift` | Prompts and streaming generation, idle unload |
-| `Services/AI/GemmaChat.swift` | Chat state, note context, session rebuild from history |
+| `Services/AI/HubAdapters.swift` | Bridges swift-huggingface and swift-transformers to mlx-swift-lm (replaces the MLXHuggingFace macros); drops Gemma 4's no-op attention mask so chat turns reuse the KV cache |
+| `Services/AI/GemmaService.swift` | Prompts and streaming generation, prewarm, idle unload |
+| `Services/AI/GemmaChat.swift` | Chat state, note context, session rebuild from history, context usage |
 | `Services/AI/VisualCaptureService.swift` | Full-resolution screenshot of the display under the pointer, or of a window, app or display chosen in the system picker |
 | `Services/AI/AudioCaptureService.swift` | ScreenCaptureKit system audio + microphone, levels |
 | `Services/AI/MeetingTranscriber.swift` | Engine and locale choice, one SpeechAnalyzer per source, format conversion, language assets |
@@ -106,6 +109,12 @@ TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1 xcodebuild test -project brain-md.xcodep
 TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1 xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdTests
 ```
 
-The model tests need the model downloaded (enable on-device AI in the app first); one checks that chat remembers the conversation after the model reloads. The speech tests synthesize sentences with `say` (Samantha in English; Ellen and Xander in Dutch, which need those voices installed) and check the transcripts, including a Dutch meeting with both sources at once. The first Dutch run downloads Apple's speech model.
+The model tests need the model downloaded (enable on-device AI in the app first); they check that chat remembers the conversation after the model reloads and that a follow-up message reuses the KV cache. The speech tests synthesize sentences with `say` (Samantha in English; Ellen and Xander in Dutch, which need those voices installed) and check the transcripts, including a Dutch meeting with both sources at once. The first Dutch run downloads Apple's speech model.
+
+Speed measurements are a separate opt-in suite. Turn parallel testing off so only one copy of the model runs; results are written as `BENCH` lines to the output file:
+
+```bash
+TEST_RUNNER_BRAINMD_MODEL_BENCHMARK=1 TEST_RUNNER_BRAINMD_BENCHMARK_OUT=/tmp/brainmd-bench.txt xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -parallel-testing-enabled NO -only-testing:brain-mdTests/GemmaBenchmarkTests
+```
 
 Not automated, because they need macOS permission prompts or system UI: a real screen capture, the content picker and a real call recording.
