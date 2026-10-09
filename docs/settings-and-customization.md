@@ -89,11 +89,13 @@ graph TD
 
 ### 4. Local AI & Voice
 
-- **On-Device Gemma 4 E4B Model**: Optional download toggle to install Google DeepMind's Gemma 4 E4B model (~2.4 GB) directly to local Application Support via MLX. Completely private and offline.
-- **Progress Tracking & Storage Clearance**: Live download progress bar with byte metrics and 1-click model removal to free disk space.
-- **Capture Incoming System Audio**: Seamlessly capture remote participants during video conferences (Zoom, Teams, Meet) using `ScreenCaptureKit` audio stream.
-- **Capture Microphone Audio**: Live transcription of in-person speaker voice via `AVAudioEngine`.
-- **Visual Diagram Comprehension**: Screen frame analysis via `ScreenCaptureKit` display capture to interpret charts, architecture diagrams, and slide decks presented during meetings.
+- **Enable on-device AI**: Downloads Gemma 4 E4B (`mlx-community/gemma-4-E4B-it-qat-4bit`, 6.8 GB) to Application Support with live byte progress and cancel. Turning it off unloads the model and offers to delete the files, showing their size. Failed downloads show the error and a Retry that keeps partial files.
+- **Capture Incoming System Audio**: Records other meeting participants ("Them") through `ScreenCaptureKit`.
+- **Capture Microphone Audio**: Records your side ("Me") through `ScreenCaptureKit`'s microphone capture.
+- **Transcription Language**: The language SpeechAnalyzer transcribes in; defaults to the system language. Each language's speech model downloads once.
+- **Visual Diagram Comprehension**: Shows **Explain Screen** in the ✨ menu, which captures the display under the pointer for Gemma to explain.
+
+See [On-Device AI & Meetings](local-ai.md) for permissions, privacy and model details.
 
 ---
 

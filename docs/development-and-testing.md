@@ -41,7 +41,14 @@ brain-md/
 │   │   ├── NoteTemplateEngine.swift # Title format & Markdown template engine
 │   │   ├── SyntaxHighlighter.swift # Custom regex syntax tokenizer
 │   │   ├── NoteGraphService.swift # Graph link extraction & 3D force simulation
-│   │   └── ScrollSyncCoordinator.swift # Bidirectional scroll synchronizer
+│   │   ├── ScrollSyncCoordinator.swift # Bidirectional scroll synchronizer
+│   │   └── AI/                    # On-device AI & meetings (see local-ai.md)
+│   │       ├── LocalModelManager.swift # Gemma 4 download, verify, load/unload
+│   │       ├── GemmaService.swift # Prompts & streaming generation
+│   │       ├── VisualCaptureService.swift # Screenshots for Explain Screen
+│   │       ├── AudioCaptureService.swift # System audio + microphone capture
+│   │       ├── MeetingTranscriber.swift # SpeechAnalyzer per audio source
+│   │       └── MeetingRecorder.swift # Recording session & transcript lines
 │   ├── Views/                     # SwiftUI views & UI components
 │   │   ├── SidebarView.swift      # File tree navigation & drag-and-drop
 │   │   ├── EditorSplitView.swift  # Dual-pane editor & live preview with SplitDivider
@@ -52,6 +59,8 @@ brain-md/
 │   │   ├── Graph3DSceneView.swift # SceneKit 3D brain network view
 │   │   ├── QuickSwitcherModalView.swift # Spotlight-style note switcher (⌘O)
 │   │   ├── MCPServerModalView.swift # Server inspector & agent setup
+│   │   ├── AIResultSheet.swift    # Review sheet for Gemma output
+│   │   ├── MeetingLiveOverlay.swift # Live levels & partial transcript
 │   │   └── SettingsView.swift     # macOS System Settings window
 │   ├── MCP/                       # Model Context Protocol implementation
 │   │   ├── MCPServer.swift        # JSON-RPC 2.0 tool execution engine
@@ -135,6 +144,11 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `testUnregisterOnlyMatchingScrollView()` | Identity-checked unregistration survives SwiftUI building replacements before dismantling. |
 | `testScrollViewFinderRegistersAndReleasesPreview()` | `ScrollViewFinder` registers on window attach and unregisters on dismantle. |
 | `testMetricsIgnoreDocumentFrameOrigin()` / `testMetricsNonFlippedDocument()` / `testMetricsHonorContentInsets()` / `testMetricsShortDocument()` | `ScrollMetrics` geometry: frame-origin independence, `isFlipped` handling, content insets, and non-scrollable documents. |
+| `LocalModelManagerTests` | Snapshot completeness (every indexed weight file), legacy placeholder cleanup, disk size of symlinked blobs, memory check, and loading without a download. |
+| `GemmaServiceTests` | Prompt wording per mode, empty-note and disabled errors, speaker labels, truncation marker. |
+| `VisualCaptureServiceTests` | AppKit → ScreenCaptureKit coordinates (including a display above the main one) and the disabled setting. |
+| `MeetingTranscriptionTests` | Sample-buffer conversion, level meter mapping, transcript line format, transcription language default. |
+| Opt-in real-model and speech tests | Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1` or `TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1`; see [On-Device AI & Meetings](local-ai.md#testing). |
 
 ---
 
@@ -144,7 +158,9 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
    - All shared state must be protected by `@MainActor` or encapsulated within thread-safe actor/isolation boundaries.
    - Avoid nonisolated references to actor properties in `deinit`.
 2. **Zero Runtime Dependencies**:
-   - Do not introduce external package dependencies (via Swift Package Manager or CocoaPods) unless strictly necessary. `brain-md` relies exclusively on Apple's standard frameworks (`SwiftUI`, `AppKit`, `WebKit`, `Network`, `Foundation`).
+   - Do not introduce external package dependencies (via Swift Package Manager or CocoaPods) unless strictly necessary. `brain-md` relies on Apple's standard frameworks (`SwiftUI`, `AppKit`, `WebKit`, `Network`, `Foundation`).
+   - **Exception: on-device AI.** Running Gemma 4 needs MLX, so the app pins `mlx-swift-lm` 3.32.3, `mlx-swift` 0.32.3, `swift-huggingface` 0.13.0 and `swift-transformers` 1.3.4 to exact versions (`Package.resolved` is committed). Check new versions for advisories before bumping; see [On-Device AI & Meetings](local-ai.md#the-model) for the open yyjson advisory.
+   - **Building MLX needs the Metal Toolchain:** `xcodebuild -downloadComponent MetalToolchain` (once per Xcode install).
 3. **Defensive Path Operations**:
    - Never use raw file paths without passing them through `resolveSecurePath(relativePath:)`.
 4. **AppKit Integration**:
