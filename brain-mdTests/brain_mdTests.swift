@@ -1814,6 +1814,137 @@ struct brain_mdTests {
         #expect(widthsAsymmetric.editorWidth == 600)
         #expect(widthsAsymmetric.previewWidth == 400)
     }
+    
+    @Test func testAttachmentSavingAndPathResolution() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("BrainTestVault-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        let vault = VaultManager(customVaultURL: tempDir)
+        let samplePNGData = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        
+        // 1. Default Attachments folder
+        UserDefaults.standard.set("Attachments", forKey: "attachment_folder")
+        let noteURL = tempDir.appendingPathComponent("MyNote.md")
+        let res1 = try vault.saveAttachment(data: samplePNGData, suggestedFileName: "diagram.png", noteURL: noteURL)
+        #expect(res1.savedURL.path.contains("Attachments/diagram.png"))
+        #expect(res1.markdownReference == "![diagram](Attachments/diagram.png)")
+        #expect(FileManager.default.fileExists(atPath: res1.savedURL.path))
+        
+        // 2. Duplicate filename handling (adds suffix)
+        let res2 = try vault.saveAttachment(data: samplePNGData, suggestedFileName: "diagram.png", noteURL: noteURL)
+        #expect(res2.savedURL.path.contains("Attachments/diagram-1.png"))
+        #expect(res2.markdownReference == "![diagram-1](Attachments/diagram-1.png)")
+        
+        // 3. Subfolder under current note (./assets)
+        UserDefaults.standard.set("./assets", forKey: "attachment_folder")
+        let nestedNoteURL = tempDir.appendingPathComponent("Projects/Deep/Project.md")
+        try FileManager.default.createDirectory(at: nestedNoteURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let res3 = try vault.saveAttachment(data: samplePNGData, suggestedFileName: "chart.png", noteURL: nestedNoteURL)
+        #expect(res3.savedURL.path.contains("Projects/Deep/assets/chart.png"))
+        #expect(res3.markdownReference == "![chart](assets/chart.png)")
+        
+        // 4. Same folder as note (empty setting)
+        UserDefaults.standard.set("", forKey: "attachment_folder")
+        let res4 = try vault.saveAttachment(data: samplePNGData, suggestedFileName: "local.png", noteURL: nestedNoteURL)
+        #expect(res4.savedURL.path == nestedNoteURL.deletingLastPathComponent().appendingPathComponent("local.png").path)
+        #expect(res4.markdownReference == "![local](local.png)")
+        
+        // Reset default
+        UserDefaults.standard.set("Attachments", forKey: "attachment_folder")
+    }
+    
+    @Test func testImageMarkdownParsingAndHTMLResolution() {
+        // 1. Standalone image line parsing
+        let img1 = MarkdownPreviewView.parseImageLine("![App Architecture](Attachments/diagram.png)")
+        #expect(img1 != nil)
+        #expect(img1?.alt == "App Architecture")
+        #expect(img1?.url == "Attachments/diagram.png")
+        #expect(img1?.title == nil)
+        
+        let img2 = MarkdownPreviewView.parseImageLine("![Logo](logo.png \"Brain.md Logo\")")
+        #expect(img2 != nil)
+        #expect(img2?.alt == "Logo")
+        #expect(img2?.url == "logo.png")
+        #expect(img2?.title == "Brain.md Logo")
+        
+        // Non-image links should not match
+        let nonImg = MarkdownPreviewView.parseImageLine("[Normal Link](https://example.com)")
+        #expect(nonImg == nil)
+        
+        // 2. Document block parsing
+        let md = """
+        # My Document
+        
+        ![Diagram](Attachments/diagram.png)
+        
+        Some text after image.
+        """
+        let doc = MarkdownPreviewView.parseDocument(md)
+        let hasImageBlock = doc.blocks.contains { block in
+            if case .image(let alt, let url, _) = block {
+                return alt == "Diagram" && url == "Attachments/diagram.png"
+            }
+            return false
+        }
+        #expect(hasImageBlock)
+        
+        // 3. HTML URL resolution
+        let webURL = "https://images.unsplash.com/photo-1"
+        #expect(MarkdownHTMLRenderer.resolveImageURL(webURL) == webURL)
+        
+        let dataURL = "data:image/png;base64,iVBORw0KGgo="
+        #expect(MarkdownHTMLRenderer.resolveImageURL(dataURL) == dataURL)
+    }
+    
+    @Test func testAttachmentScanningAndFolderVisibility() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("BrainTestAttachmentsVault_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        
+        let vault = VaultManager(customVaultURL: tempDir)
+        
+        // 1. Create a note and save an attachment
+        try vault.createFile(relativePath: "Notes/Welcome.md", content: "# Welcome")
+        let dummyPNG = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D])
+        let noteURL = tempDir.appendingPathComponent("Notes/Welcome.md")
+        _ = try vault.saveAttachment(data: dummyPNG, suggestedFileName: "hero-banner.png", noteURL: noteURL)
+        
+        // 2. Verify vault rootItems contains Attachments folder
+        let attachmentsFolder = vault.rootItems.first(where: { $0.isDirectory && $0.name == "Attachments" })
+        #expect(attachmentsFolder != nil)
+        
+        // 3. Verify Attachments folder contains hero-banner.png in its children
+        let heroItem = attachmentsFolder?.children?.first(where: { $0.name == "hero-banner.png" })
+        #expect(heroItem != nil)
+        #expect(heroItem?.relativePath == "Attachments/hero-banner.png")
+        #expect(heroItem?.isAttachment == true)
+        #expect(heroItem?.isImage == true)
+        #expect(heroItem?.isMarkdown == false)
+        #expect(heroItem?.iconName == "photo.fill")
+        #expect(heroItem?.displayName == "hero-banner.png")
+        
+        // 4. Verify selecting attachment is safe and doesn't trigger UTF-8 read error
+        if let item = heroItem {
+            vault.selectNote(item)
+            #expect(vault.selectedItem?.relativePath == "Attachments/hero-banner.png")
+            #expect(vault.editorTitle == "hero-banner.png")
+            #expect(vault.editorContent == "")
+            #expect(!vault.hasUnsavedChanges)
+        }
+        
+        // 5. Verify getAllNotePaths() still only returns markdown notes
+        let allNotes = vault.getAllNotePaths()
+        #expect(allNotes.contains("Notes/Welcome.md"))
+        #expect(!allNotes.contains("Attachments/hero-banner.png"))
+        
+        // 6. Verify totalNotesCount does not count attachments (2 default seeded notes + 1 created note)
+        #expect(vault.totalNotesCount == 3)
+        
+        // 7. Verify search finds attachment by filename
+        let searchResults = vault.searchNotes(query: "hero-banner")
+        #expect(searchResults.contains(where: { $0.relativePath == "Attachments/hero-banner.png" }))
+    }
 }
 
 

@@ -1046,6 +1046,7 @@ public struct MCPServerSettingsPane: View {
 
 public struct VaultSettingsPane: View {
   @ObservedObject var vault: VaultManager
+  @AppStorage("attachment_folder") private var attachmentFolder: String = "Attachments"
   @State private var showingReseedConfirmation = false
   @State private var reseedSuccess = false
 
@@ -1076,6 +1077,32 @@ public struct VaultSettingsPane: View {
           Button(action: { vault.refreshFiles() }) {
             Label("Rescan Vault", systemImage: "arrow.clockwise")
               .font(.system(size: 11))
+          }
+        }
+      }
+
+      SettingsCard(
+        title: "Attachments & Media",
+        footer:
+          "Pasted or dropped pictures will be automatically saved into this folder and linked in your note. Clear this to store pictures in the same folder as the active note."
+      ) {
+        SettingsRow(
+          title: "Attachment Folder",
+          subtitle: attachmentFolder.trimmingCharacters(in: .whitespaces).isEmpty
+            ? "Store images in the same folder as the note"
+            : "Store in '/\(attachmentFolder.trimmingCharacters(in: CharacterSet(charactersIn: "/")))' within vault"
+        ) {
+          HStack(spacing: 8) {
+            TextField("Attachments", text: $attachmentFolder)
+              .textFieldStyle(.roundedBorder)
+              .frame(width: 140)
+
+            if !attachmentFolder.trimmingCharacters(in: .whitespaces).isEmpty {
+              Button("Reset") {
+                attachmentFolder = "Attachments"
+              }
+              .font(.system(size: 11))
+            }
           }
         }
       }

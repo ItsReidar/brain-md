@@ -634,14 +634,36 @@ private struct ItemRowView: View {
                     .stroke(isDropTargeted ? Color.accentColor : Color.clear, lineWidth: 1.5)
             )
             .contextMenu {
-                Button("Rename Note") { onRename(item) }
-                Button("Delete Note", role: .destructive) { onDelete(item) }
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([item.url])
-                }
-                Button("Copy Relative Path") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(item.relativePath, forType: .string)
+                if item.isAttachment {
+                    Button("Copy Markdown Link") {
+                        let ref = item.isImage ? "![\(item.displayName)](\(item.relativePath))" : "[\(item.displayName)](\(item.relativePath))"
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(ref, forType: .string)
+                    }
+                    Button("Copy Relative Path") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(item.relativePath, forType: .string)
+                    }
+                    Divider()
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([item.url])
+                    }
+                    Button("Open in Default App") {
+                        NSWorkspace.shared.open(item.url)
+                    }
+                    Divider()
+                    Button("Rename Attachment") { onRename(item) }
+                    Button("Delete Attachment", role: .destructive) { onDelete(item) }
+                } else {
+                    Button("Rename Note") { onRename(item) }
+                    Button("Delete Note", role: .destructive) { onDelete(item) }
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([item.url])
+                    }
+                    Button("Copy Relative Path") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(item.relativePath, forType: .string)
+                    }
                 }
             }
         }

@@ -45,12 +45,19 @@ public struct EditorSplitView: View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
                 if let selected = vault.selectedItem {
-                    // Top Editor Toolbar
-                    editorHeader(item: selected)
-                    
-                    Divider()
-                    
-                    // Editor & Preview Content Area
+                    if selected.isAttachment {
+                        AttachmentDetailView(
+                            item: selected,
+                            vault: vault,
+                            onShowBubble: { showBubble(message: $0) }
+                        )
+                    } else {
+                        // Top Editor Toolbar
+                        editorHeader(item: selected)
+                        
+                        Divider()
+                        
+                        // Editor & Preview Content Area
                     GeometryReader { geo in
                         switch viewMode {
                         case .split:
@@ -73,6 +80,20 @@ public struct EditorSplitView: View {
                                     onSave: {
                                         vault.saveCurrentNote()
                                         showBubble(message: "Note saved")
+                                    },
+                                    onImageDroppedOrPasted: { data, filename in
+                                        do {
+                                            let result = try vault.saveAttachment(
+                                                data: data,
+                                                suggestedFileName: filename,
+                                                noteURL: vault.selectedItem?.url
+                                            )
+                                            showBubble(message: "Image added")
+                                            return result.markdownReference
+                                        } catch {
+                                            showBubble(message: "Failed to save image: \(error.localizedDescription)")
+                                            return nil
+                                        }
                                     }
                                 )
                                 .frame(width: editorWidth)
@@ -92,9 +113,14 @@ public struct EditorSplitView: View {
                                     }
                                 )
                                 
-                                MarkdownPreviewView(markdown: vault.editorContent, onTagSelected: { tag in
-                                    vault.selectedTag = tag
-                                })
+                                MarkdownPreviewView(
+                                    markdown: vault.editorContent,
+                                    noteURL: vault.selectedItem?.url,
+                                    vaultURL: vault.vaultURL,
+                                    onTagSelected: { tag in
+                                        vault.selectedTag = tag
+                                    }
+                                )
                                 .frame(width: previewWidth)
                             }
                         case .editor:
@@ -109,17 +135,37 @@ public struct EditorSplitView: View {
                                 onSave: {
                                     vault.saveCurrentNote()
                                     showBubble(message: "Note saved")
+                                },
+                                onImageDroppedOrPasted: { data, filename in
+                                    do {
+                                        let result = try vault.saveAttachment(
+                                            data: data,
+                                            suggestedFileName: filename,
+                                            noteURL: vault.selectedItem?.url
+                                        )
+                                        showBubble(message: "Image added")
+                                        return result.markdownReference
+                                    } catch {
+                                        showBubble(message: "Failed to save image: \(error.localizedDescription)")
+                                        return nil
+                                    }
                                 }
                             )
                         case .preview:
-                            MarkdownPreviewView(markdown: vault.editorContent, onTagSelected: { tag in
-                                vault.selectedTag = tag
-                            })
+                            MarkdownPreviewView(
+                                markdown: vault.editorContent,
+                                noteURL: vault.selectedItem?.url,
+                                vaultURL: vault.vaultURL,
+                                onTagSelected: { tag in
+                                    vault.selectedTag = tag
+                                }
+                            )
                         }
                     }
-                } else {
-                    emptyStateView
                 }
+            } else {
+                emptyStateView
+            }
             }
             
             // Floating Bubble Notification at Bottom Middle
@@ -478,7 +524,9 @@ public struct EditorSplitView: View {
                     try await PDFExportService.shared.exportPDF(
                         markdown: self.vault.editorContent,
                         theme: ThemeManager.shared.currentTheme,
-                        to: targetURL
+                        to: targetURL,
+                        noteURL: self.vault.selectedItem?.url,
+                        vaultURL: self.vault.vaultURL
                     )
                     self.showBubble(message: "PDF exported successfully")
                 } catch {
@@ -643,3 +691,189 @@ public struct SplitDivider: View {
         return (edW, prW)
     }
 }
+
+// MARK: - Attachment Detail View
+
+public struct AttachmentDetailView: View {
+    let item: NoteItem
+    @ObservedObject var vault: VaultManager
+    let onShowBubble: (String) -> Void
+    
+    @State private var imageSize: CGSize? = nil
+    
+    public init(item: NoteItem, vault: VaultManager, onShowBubble: @escaping (String) -> Void) {
+        self.item = item
+        self.vault = vault
+        self.onShowBubble = onShowBubble
+    }
+    
+    public var body: some View {
+        VStack(spacing: 0) {
+            attachmentHeader
+            Divider()
+            if item.isImage {
+                imageCanvas
+            } else {
+                genericFileCanvas
+            }
+        }
+    }
+    
+    private var attachmentHeader: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: item.iconName)
+                    .foregroundColor(.accentColor)
+                    .font(.system(size: 14))
+                
+                Text(item.relativePath)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                
+                Text(item.url.pathExtension.uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.12))
+                    .foregroundColor(.accentColor)
+                    .cornerRadius(4)
+                
+                if !item.formattedSize.isEmpty {
+                    Text(item.formattedSize)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                
+                if let size = imageSize {
+                    Text("\(Int(size.width)) × \(Int(size.height)) px")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                Button(action: {
+                    let ref = item.isImage ? "![\(item.displayName)](\(item.relativePath))" : "[\(item.displayName)](\(item.relativePath))"
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(ref, forType: .string)
+                    onShowBubble("Markdown link copied")
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "link")
+                        Text("Copy Link")
+                    }
+                    .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Copy Markdown reference syntax to clipboard")
+                
+                if item.isImage, let nsImage = NSImage(contentsOf: item.url) {
+                    Button(action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.writeObjects([nsImage])
+                        onShowBubble("Image copied to clipboard")
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "doc.on.doc")
+                            Text("Copy Image")
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Copy image data to clipboard")
+                }
+                
+                Button(action: {
+                    NSWorkspace.shared.activateFileViewerSelecting([item.url])
+                }) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Reveal file in Finder")
+                
+                Button(action: {
+                    NSWorkspace.shared.open(item.url)
+                }) {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Open in default system application")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+    
+    private var imageCanvas: some View {
+        GeometryReader { geo in
+            ScrollView([.horizontal, .vertical]) {
+                ZStack {
+                    if let nsImage = NSImage(contentsOf: item.url) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: max(geo.size.width - 48, 100), maxHeight: max(geo.size.height - 48, 100))
+                            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+                            .padding(24)
+                            .onAppear {
+                                self.imageSize = nsImage.size
+                            }
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 32))
+                                .foregroundColor(.orange)
+                            Text("Unable to load image")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(item.relativePath)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(40)
+                    }
+                }
+                .frame(minWidth: geo.size.width, minHeight: geo.size.height)
+            }
+            .background(Color(NSColor.underPageBackgroundColor))
+        }
+    }
+    
+    private var genericFileCanvas: some View {
+        VStack(spacing: 16) {
+            Image(systemName: item.iconName)
+                .font(.system(size: 54))
+                .foregroundColor(.accentColor)
+            
+            Text(item.displayName)
+                .font(.system(size: 16, weight: .semibold))
+            
+            HStack(spacing: 12) {
+                Text(item.formattedSize)
+                Text("•")
+                Text("Modified \(item.formattedModifiedDate)")
+            }
+            .font(.system(size: 12))
+            .foregroundColor(.secondary)
+            
+            Button("Open in Default App") {
+                NSWorkspace.shared.open(item.url)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(NSColor.underPageBackgroundColor))
+    }
+}
+

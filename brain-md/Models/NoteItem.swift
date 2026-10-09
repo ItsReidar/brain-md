@@ -36,11 +36,32 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
         self.tags = tags
     }
     
+    public static let supportedImageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "svg", "tiff", "tif", "bmp", "heic", "ico"
+    ]
+    
+    public var isMarkdown: Bool {
+        guard !isDirectory else { return false }
+        let ext = url.pathExtension.lowercased()
+        return ext == "md" || ext == "markdown" || ext == "txt"
+    }
+    
+    public var isImage: Bool {
+        guard !isDirectory else { return false }
+        let ext = url.pathExtension.lowercased()
+        return Self.supportedImageExtensions.contains(ext)
+    }
+    
+    public var isAttachment: Bool {
+        guard !isDirectory else { return false }
+        return !isMarkdown
+    }
+    
     public var displayName: String {
         if isDirectory {
             return name
         }
-        if name.lowercased().hasSuffix(".md") {
+        if isMarkdown && name.lowercased().hasSuffix(".md") {
             return String(name.dropLast(3))
         }
         return name
@@ -50,7 +71,17 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
         if isDirectory {
             return "folder.fill"
         }
-        return "doc.text.fill"
+        if isImage {
+            return "photo.fill"
+        }
+        let ext = url.pathExtension.lowercased()
+        if ext == "pdf" {
+            return "doc.richtext.fill"
+        }
+        if isMarkdown {
+            return "doc.text.fill"
+        }
+        return "paperclip"
     }
     
     public var formattedSize: String {

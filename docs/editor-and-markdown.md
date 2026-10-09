@@ -497,7 +497,43 @@ flowchart LR
 - **Keyboard Shortcut (`⌘P`)**: Quick export shortcut available from the editor or the File menu (**File > Export Preview as PDF...**).
 - **Theme-Conscious Vector Styling**: Preserves your active syntax highlighting theme with `@media print` rules, `-webkit-print-color-adjust: exact`, and clean print margins.
 - **Page Break Isolation**: Automated page break management ensures codeblocks, GFM callouts, tables, and blockquotes do not split mid-element across pages.
+- **Embedded Images**: Local vault images and attachments (as well as external web images) are fully loaded into the vector PDF print canvas via sandboxed base URLs.
 - **Interactive Feedback**: Instant confirmation via the floating status capsule notification upon completion.
+
+---
+
+## Image Support & Attachment Management
+
+`brain-md` provides seamless, zero-friction image workflows for your notes:
+
+```mermaid
+flowchart TD
+    Action["Drag & Drop (Finder) or Paste ⌘V (Clipboard)"] --> Editor["MarkdownEditorView / MarkdownNSTextView"]
+    Editor --> Save["VaultManager.saveAttachment()"]
+    Save --> TargetDir["Resolve Attachment Folder (Settings or Note Dir)"]
+    TargetDir --> UniqueName["Generate Unique Filename (Conflict-Free)"]
+    UniqueName --> WriteDisk["Write Image Data Atomically to Disk"]
+    WriteDisk --> CalcRel["Calculate Relative Path from Current Note"]
+    CalcRel --> InsertMD["Insert ![Alt](relative/path.png) at Cursor"]
+    InsertMD --> Preview["MarkdownPreviewView (MarkdownImageView / NSImage)"]
+    InsertMD --> Export["PDFExportService (Offscreen WKWebView with vault baseURL)"]
+```
+
+### Drag-and-Drop & Clipboard Paste
+
+- **Finder Drag-and-Drop**: Drag image files (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.tiff`) directly from macOS Finder into the Markdown editor.
+- **Clipboard Paste (`⌘V`)**: Take a screenshot with macOS (`⇧⌃⌘4` or `⇧⌘4`) and press `⌘V` directly in the editor. `brain-md` automatically detects the image payload on `NSPasteboard`, writes it as a PNG file into your configured attachments folder, and pastes the Markdown image reference at the current caret.
+- **Intelligent Spacing**: Newlines are automatically padded if pasting between existing text lines, maintaining clean Markdown formatting without breaking paragraphs.
+
+### Image Resolution & Rendering
+
+1. **SwiftUI Live Preview (`MarkdownImageView`)**:
+   - Parses standalone image tags `![Alt text](path/to/image.png)`.
+   - **Local Vault Resolution**: First inspects the current note's parent folder, then resolves relative to the vault root and the configured attachment folder.
+   - **Remote URLs**: Loads web images securely via SwiftUI `AsyncImage` with progressive loading indicators.
+   - **Graceful Error Badges**: If an image cannot be located on disk or fails to load, a stylized fallback badge displays the missing path and image name.
+2. **HTML & Vector PDF Export (`baseURL`)**:
+   - Both `MarkdownWebView` and `PDFExportService` pass the root `vaultURL` as the `baseURL` to WebKit, enabling sandboxed local image display and crisp vector PDF embedding without security blocks.
 
 ---
 
@@ -528,4 +564,3 @@ flowchart LR
    - The text view is attached to its scroll view *before* text is inserted. Laying out text while the clip view is still unflipped makes `NSLayoutManager` grow the text view upward, leaving its frame origin far below zero; `adjustFrameToFitContent()` also resets any non-zero origin.
 6. **Lifecycle-Safe Registration**:
    - The editor registers in `makeNSView`; the preview's `ScrollViewFinder` resolves its `NSScrollView` synchronously when it joins a window. Both unregister in `dismantleNSView` through identity-checked `unregisterEditor(_:)` / `unregisterPreview(_:)`, so switching view modes never leaves a stale pane registered or drops a freshly built one.
-

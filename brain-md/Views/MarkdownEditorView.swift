@@ -9,15 +9,21 @@ import AppKit
 public struct MarkdownEditorView: View {
     @Binding var text: String
     var onSave: () -> Void
+    var onImageDroppedOrPasted: ((Data, String?) -> String?)? = nil
     
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var themeManager = ThemeManager.shared
     @AppStorage("editor_font_size") private var fontSize: Double = 14.0
     @AppStorage("editor_font_design") private var fontDesign: String = "monospaced"
     
-    public init(text: Binding<String>, onSave: @escaping () -> Void) {
+    public init(
+        text: Binding<String>,
+        onSave: @escaping () -> Void,
+        onImageDroppedOrPasted: ((Data, String?) -> String?)? = nil
+    ) {
         self._text = text
         self.onSave = onSave
+        self.onImageDroppedOrPasted = onImageDroppedOrPasted
     }
     
     public var body: some View {
@@ -27,7 +33,8 @@ public struct MarkdownEditorView: View {
             currentTheme: theme,
             fontSize: fontSize,
             fontDesign: fontDesign,
-            onSave: onSave
+            onSave: onSave,
+            onImageDroppedOrPasted: onImageDroppedOrPasted
         )
         .background(theme.background)
     }
@@ -41,6 +48,7 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
     var fontSize: Double
     var fontDesign: String
     var onSave: () -> Void
+    var onImageDroppedOrPasted: ((Data, String?) -> String?)?
     
     public func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -65,7 +73,13 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
         let textView = MarkdownNSTextView()
         textView.wantsLayer = true
         textView.onSave = onSave
+        textView.onImageDroppedOrPasted = onImageDroppedOrPasted
         textView.delegate = context.coordinator
+        textView.registerForDraggedTypes([
+            .fileURL,
+            .tiff,
+            .png
+        ])
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
@@ -121,6 +135,7 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? MarkdownNSTextView else { return }
         context.coordinator.parent = self
         textView.onSave = onSave
+        textView.onImageDroppedOrPasted = onImageDroppedOrPasted
         
         let theme = MarkdownNSTheme(theme: currentTheme)
         if textView.backgroundColor != theme.background {
@@ -272,6 +287,7 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
 
 final class MarkdownNSTextView: NSTextView {
     var onSave: (() -> Void)?
+    var onImageDroppedOrPasted: ((Data, String?) -> String?)?
     private var formatObserver: NSObjectProtocol?
     
     deinit {
@@ -369,6 +385,134 @@ final class MarkdownNSTextView: NSTextView {
             }
         }
         return super.performKeyEquivalent(with: event)
+    }
+    
+    // MARK: - Drag and Drop Support
+    
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if hasImageContent(in: sender.draggingPasteboard) {
+            return .copy
+        }
+        return super.draggingEntered(sender)
+    }
+    
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if hasImageContent(in: sender.draggingPasteboard) {
+            return .copy
+        }
+        return super.draggingUpdated(sender)
+    }
+    
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let pboard = sender.draggingPasteboard
+        if handleImageInsertion(from: pboard) {
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
+    
+    // MARK: - Clipboard Paste Handling
+    
+    override func paste(_ sender: Any?) {
+        let pboard = NSPasteboard.general
+        if handleImageInsertion(from: pboard) {
+            return
+        }
+        super.paste(sender)
+    }
+    
+    private func hasImageContent(in pasteboard: NSPasteboard) -> Bool {
+        let imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "tiff", "tif", "svg", "bmp", "heic"]
+        
+        // 1. Check for file URLs to images
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            if urls.contains(where: { imageExtensions.contains($0.pathExtension.lowercased()) }) {
+                return true
+            }
+        }
+        
+        // 2. Check for direct image data types
+        let imageTypes: [NSPasteboard.PasteboardType] = [.png, .tiff]
+        for type in imageTypes {
+            if pasteboard.data(forType: type) != nil {
+                return true
+            }
+        }
+        return false
+    }
+    
+    private func handleImageInsertion(from pasteboard: NSPasteboard) -> Bool {
+        guard let onImageDroppedOrPasted = self.onImageDroppedOrPasted else { return false }
+        let imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "tiff", "tif", "svg", "bmp", "heic"]
+        
+        // 1. Check if files were dropped or pasted from Finder
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            let imageURLs = urls.filter { imageExtensions.contains($0.pathExtension.lowercased()) }
+            if !imageURLs.isEmpty {
+                var markdownSnippets: [String] = []
+                for fileURL in imageURLs {
+                    if let data = try? Data(contentsOf: fileURL) {
+                        let fileName = fileURL.lastPathComponent
+                        if let ref = onImageDroppedOrPasted(data, fileName) {
+                            markdownSnippets.append(ref)
+                        }
+                    }
+                }
+                if !markdownSnippets.isEmpty {
+                    insertMarkdownSnippet(markdownSnippets.joined(separator: "\n\n"))
+                    return true
+                }
+            }
+        }
+        
+        // 2. Check if direct image data exists on pasteboard (e.g. screenshot or copied image)
+        if let pngData = pasteboard.data(forType: .png) {
+            if let ref = onImageDroppedOrPasted(pngData, nil) {
+                insertMarkdownSnippet(ref)
+                return true
+            }
+        } else if let tiffData = pasteboard.data(forType: .tiff),
+                  let bitmap = NSBitmapImageRep(data: tiffData),
+                  let pngData = bitmap.representation(using: .png, properties: [:]) {
+            if let ref = onImageDroppedOrPasted(pngData, nil) {
+                insertMarkdownSnippet(ref)
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    private func insertMarkdownSnippet(_ snippet: String) {
+        let sel = selectedRange()
+        let nsString = self.string as NSString
+        let loc = sel.location != NSNotFound ? sel.location : nsString.length
+        
+        var prefix = ""
+        var suffix = ""
+        
+        if loc > 0 {
+            let prevChar = nsString.substring(with: NSRange(location: loc - 1, length: 1))
+            if prevChar != "\n" {
+                prefix = "\n\n"
+            }
+        }
+        
+        if loc < nsString.length {
+            let nextChar = nsString.substring(with: NSRange(location: loc, length: 1))
+            if nextChar != "\n" {
+                suffix = "\n\n"
+            }
+        }
+        
+        let fullInsertion = prefix + snippet + suffix
+        if shouldChangeText(in: sel, replacementString: fullInsertion) {
+            replaceCharacters(in: sel, with: fullInsertion)
+            didChangeText()
+            let newPos = loc + (prefix as NSString).length + (snippet as NSString).length
+            setSelectedRange(NSRange(location: min(newPos, (self.string as NSString).length), length: 0))
+            scrollRangeToVisible(selectedRange())
+        }
     }
     
     // MARK: - Auto-Pairing & Delimiter Autocomplete

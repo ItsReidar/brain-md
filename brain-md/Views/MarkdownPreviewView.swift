@@ -51,14 +51,23 @@ public enum AlertType: String, CaseIterable, Sendable {
 
 public struct MarkdownPreviewView: View {
     public let markdown: String
+    public var noteURL: URL?
+    public var vaultURL: URL?
     public var onTagSelected: ((String) -> Void)?
     
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var themeManager = ThemeManager.shared
     @AppStorage("preview_content_width") private var previewContentWidth: Double = 850.0
     
-    public init(markdown: String, onTagSelected: ((String) -> Void)? = nil) {
+    public init(
+        markdown: String,
+        noteURL: URL? = nil,
+        vaultURL: URL? = nil,
+        onTagSelected: ((String) -> Void)? = nil
+    ) {
         self.markdown = markdown
+        self.noteURL = noteURL
+        self.vaultURL = vaultURL
         self.onTagSelected = onTagSelected
     }
     
@@ -169,6 +178,7 @@ public struct MarkdownPreviewView: View {
         case definitionList(term: String, definitions: [String])
         case rawHTML(String)
         case horizontalRule
+        case image(alt: String, url: String, title: String?)
         case paragraph(String)
     }
     
@@ -443,7 +453,14 @@ public struct MarkdownPreviewView: View {
                 continue
             }
             
-            // 14. Regular Paragraph
+            // 14. Standalone Image ![alt](url)
+            if trimmed.hasPrefix("!["), let imgMatch = parseImageLine(trimmed) {
+                blocks.append(.image(alt: imgMatch.alt, url: imgMatch.url, title: imgMatch.title))
+                i += 1
+                continue
+            }
+            
+            // 15. Regular Paragraph
             if !trimmed.isEmpty {
                 blocks.append(.paragraph(line))
             }
@@ -457,6 +474,22 @@ public struct MarkdownPreviewView: View {
     }
     
     // MARK: - Parsing Helpers
+    
+    private static let standaloneImageRegex = try! NSRegularExpression(pattern: "^!\\[([^\\]]*)\\]\\(([^\\)]+)\\)$")
+    
+    public static func parseImageLine(_ line: String) -> (alt: String, url: String, title: String?)? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(location: 0, length: trimmed.utf16.count)
+        guard let match = standaloneImageRegex.firstMatch(in: trimmed, range: range),
+              let altRange = Range(match.range(at: 1), in: trimmed),
+              let urlRange = Range(match.range(at: 2), in: trimmed) else {
+            return nil
+        }
+        let alt = String(trimmed[altRange])
+        let rawUrl = String(trimmed[urlRange]).trimmingCharacters(in: .whitespaces)
+        let (url, title) = parseLinkAndTitle(rawUrl)
+        return (alt: alt, url: url, title: title)
+    }
     
     public static func isAlertStart(_ line: String) -> Bool {
         let clean = line.replacingOccurrences(of: " ", with: "").uppercased()
@@ -805,6 +838,15 @@ public struct MarkdownPreviewView: View {
         case .horizontalRule:
             Divider()
                 .padding(.vertical, 8)
+            
+        case .image(let alt, let url, let title):
+            MarkdownImageView(
+                alt: alt,
+                urlString: url,
+                title: title,
+                noteURL: noteURL,
+                vaultURL: vaultURL
+            )
             
         case .paragraph(let text):
             renderParagraph(text)
@@ -1170,6 +1212,194 @@ public struct CollapsibleDetailsView: View {
     }
 }
 
+// MARK: - Markdown Image View
+
+public struct MarkdownImageView: View {
+    let alt: String
+    let urlString: String
+    let title: String?
+    let noteURL: URL?
+    let vaultURL: URL?
+    
+    @State private var loadedImage: NSImage?
+    @State private var hasError: Bool = false
+    
+    public init(
+        alt: String,
+        urlString: String,
+        title: String? = nil,
+        noteURL: URL? = nil,
+        vaultURL: URL? = nil
+    ) {
+        self.alt = alt
+        self.urlString = urlString
+        self.title = title
+        self.noteURL = noteURL
+        self.vaultURL = vaultURL
+    }
+    
+    private var isWebURL: Bool {
+        urlString.lowercased().hasPrefix("http://") || urlString.lowercased().hasPrefix("https://")
+    }
+    
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if isWebURL, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Loading image...")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(14)
+                        .background(Color(NSColor.controlBackgroundColor))
+                        .cornerRadius(6)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .cornerRadius(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            )
+                    case .failure:
+                        errorBadge(message: "Failed to load remote image")
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else if let img = loadedImage {
+                Image(nsImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    )
+            } else if hasError {
+                errorBadge(message: "Image not found (\(urlString))")
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading...")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+                .padding(10)
+                .onAppear {
+                    loadImage()
+                }
+            }
+            
+            if let title = title, !title.isEmpty {
+                Text(title)
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundColor(.secondary)
+            } else if !alt.isEmpty && alt != urlString {
+                Text(alt)
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .onAppear {
+            loadImage()
+        }
+        .onChange(of: urlString) { _, _ in
+            loadImage()
+        }
+    }
+    
+    private func errorBadge(message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "photo.badge.exclamationmark")
+                .font(.system(size: 16))
+                .foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(alt.isEmpty ? "Image" : alt)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text(message)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08))
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+        )
+    }
+    
+    private func loadImage() {
+        if isWebURL { return }
+        
+        let fm = FileManager.default
+        let clean = (urlString.removingPercentEncoding ?? urlString)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // 1. Direct file path if it starts with file://
+        if clean.hasPrefix("file://"), let url = URL(string: clean), fm.fileExists(atPath: url.path) {
+            if let image = NSImage(contentsOf: url) {
+                self.loadedImage = image
+                self.hasError = false
+                return
+            }
+        }
+        
+        // 2. Relative to note's directory
+        if let noteDir = noteURL?.deletingLastPathComponent() {
+            let candidate = noteDir.appendingPathComponent(clean).standardized.resolvingSymlinksInPath()
+            if fm.fileExists(atPath: candidate.path), let img = NSImage(contentsOf: candidate) {
+                self.loadedImage = img
+                self.hasError = false
+                return
+            }
+        }
+        
+        // 3. Relative to vault root
+        if let vURL = vaultURL {
+            let candidate = vURL.appendingPathComponent(clean).standardized.resolvingSymlinksInPath()
+            if fm.fileExists(atPath: candidate.path), let img = NSImage(contentsOf: candidate) {
+                self.loadedImage = img
+                self.hasError = false
+                return
+            }
+            
+            // 4. In configured attachment folder under vault root
+            let folder = UserDefaults.standard.string(forKey: "attachment_folder") ?? "Attachments"
+            let cleanFolder = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if !cleanFolder.isEmpty {
+                let folderCandidate = vURL.appendingPathComponent(cleanFolder).appendingPathComponent(clean).standardized.resolvingSymlinksInPath()
+                if fm.fileExists(atPath: folderCandidate.path), let img = NSImage(contentsOf: folderCandidate) {
+                    self.loadedImage = img
+                    self.hasError = false
+                    return
+                }
+            }
+        }
+        
+        // 5. Try absolute path directly if file exists
+        if fm.fileExists(atPath: clean), let img = NSImage(contentsOfFile: clean) {
+            self.loadedImage = img
+            self.hasError = false
+            return
+        }
+        
+        self.loadedImage = nil
+        self.hasError = true
+    }
+}
+
 // MARK: - CodeBlockView with Syntax Highlighting & Copy
 
 struct CodeBlockView: View {
@@ -1496,13 +1726,19 @@ private struct FlowLayout: Layout {
 
 public enum MarkdownHTMLRenderer {
     
-    public static func renderHTML(markdown: String, theme: TerminalTheme, contentWidth: Double) -> String {
+    public static func renderHTML(
+        markdown: String,
+        theme: TerminalTheme,
+        contentWidth: Double,
+        noteURL: URL? = nil,
+        vaultURL: URL? = nil
+    ) -> String {
         let (frontmatter, bodyMarkdown) = FrontmatterParser.parse(markdown)
         let doc = MarkdownPreviewView.parseDocument(frontmatter != nil ? bodyMarkdown : markdown)
         
         let css = generateCSS(theme: theme, contentWidth: contentWidth)
         let frontmatterHTML = renderFrontmatterHTML(frontmatter)
-        let bodyHTML = renderBodyHTML(blocks: doc.blocks, footnotes: doc.footnotes)
+        let bodyHTML = renderBodyHTML(blocks: doc.blocks, footnotes: doc.footnotes, noteURL: noteURL, vaultURL: vaultURL)
         
         let mermaidScriptTag: String
         if let scriptURL = MermaidScriptProvider.getScriptURL() {
@@ -1597,34 +1833,43 @@ public enum MarkdownHTMLRenderer {
     
     // MARK: - Body HTML Generation
     
-    public static func renderBodyHTML(blocks: [MarkdownPreviewView.MarkdownBlock], footnotes: [MarkdownPreviewView.FootnoteItem]) -> String {
+    public static func renderBodyHTML(
+        blocks: [MarkdownPreviewView.MarkdownBlock],
+        footnotes: [MarkdownPreviewView.FootnoteItem],
+        noteURL: URL? = nil,
+        vaultURL: URL? = nil
+    ) -> String {
         var out = ""
         for block in blocks {
             switch block {
+            case .image(let alt, let url, let title):
+                let resolvedUrl = resolveImageURL(url, noteURL: noteURL, vaultURL: vaultURL)
+                let titleAttr = title != nil ? " title=\"\(escapeHTML(title!))\"" : ""
+                out += "<div class=\"image-container\"><img src=\"\(escapeHTML(resolvedUrl))\" alt=\"\(escapeHTML(alt))\"\(titleAttr) style=\"max-width: 100%; height: auto; border-radius: 4px;\" /></div>\n"
             case .h1(let text):
                 let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
                 let anchor = id ?? slugify(title)
-                out += "<h1 id=\"\(anchor)\">\(renderInline(title))</h1>\n"
+                out += "<h1 id=\"\(anchor)\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</h1>\n"
             case .h2(let text):
                 let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
                 let anchor = id ?? slugify(title)
-                out += "<h2 id=\"\(anchor)\">\(renderInline(title))</h2>\n"
+                out += "<h2 id=\"\(anchor)\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</h2>\n"
             case .h3(let text):
                 let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
                 let anchor = id ?? slugify(title)
-                out += "<h3 id=\"\(anchor)\">\(renderInline(title))</h3>\n"
+                out += "<h3 id=\"\(anchor)\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</h3>\n"
             case .h4(let text):
                 let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
                 let anchor = id ?? slugify(title)
-                out += "<h4 id=\"\(anchor)\">\(renderInline(title))</h4>\n"
+                out += "<h4 id=\"\(anchor)\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</h4>\n"
             case .h5(let text):
                 let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
                 let anchor = id ?? slugify(title)
-                out += "<h5 id=\"\(anchor)\">\(renderInline(title))</h5>\n"
+                out += "<h5 id=\"\(anchor)\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</h5>\n"
             case .h6(let text):
                 let (title, id) = MarkdownPreviewView.parseHeadingTextAndID(text)
                 let anchor = id ?? slugify(title)
-                out += "<h6 id=\"\(anchor)\">\(renderInline(title))</h6>\n"
+                out += "<h6 id=\"\(anchor)\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</h6>\n"
             case .alert(let type, let text):
                 out += renderAlertHTML(type: type, text: text) + "\n"
             case .codeBlock(let lang, let code):
@@ -1632,7 +1877,7 @@ public enum MarkdownHTMLRenderer {
             case .mermaidDiagram(let code):
                 out += renderMermaidHTML(code: code) + "\n"
             case .blockquote(let text):
-                out += "<blockquote><p>\(renderInline(text))</p></blockquote>\n"
+                out += "<blockquote><p>\(renderInline(text, noteURL: noteURL, vaultURL: vaultURL))</p></blockquote>\n"
             case .taskItem(let done, let text):
                 let checkedAttr = done ? "checked" : ""
                 let doneClass = done ? "task-done" : ""
@@ -1827,7 +2072,7 @@ public enum MarkdownHTMLRenderer {
     
     // MARK: - Inline Markdown Formatting
     
-    public static func renderInline(_ text: String) -> String {
+    public static func renderInline(_ text: String, noteURL: URL? = nil, vaultURL: URL? = nil) -> String {
         var str = text
         str = str.replacingOccurrences(of: "<del>", with: "~~")
         str = str.replacingOccurrences(of: "</del>", with: "~~")
@@ -1864,10 +2109,11 @@ public enum MarkdownHTMLRenderer {
                     let alt = String(str[altR])
                     let rawUrl = String(str[urlR]).trimmingCharacters(in: .whitespaces)
                     let (url, title) = MarkdownPreviewView.parseLinkAndTitle(rawUrl)
+                    let resolvedUrl = resolveImageURL(url, noteURL: noteURL, vaultURL: vaultURL)
                     let titleAttr = title != nil ? " title=\"\(escapeHTML(title!))\"" : ""
                     let key = "@@IMG_\(pCounter)@@"
                     pCounter += 1
-                    placeholders[key] = "<img src=\"\(escapeHTML(url))\" alt=\"\(escapeHTML(alt))\"\(titleAttr) style=\"max-width: 100%; height: auto; border-radius: 4px;\" />"
+                    placeholders[key] = "<img src=\"\(escapeHTML(resolvedUrl))\" alt=\"\(escapeHTML(alt))\"\(titleAttr) style=\"max-width: 100%; height: auto; border-radius: 4px;\" />"
                     str.replaceSubrange(r, with: key)
                 }
             }
@@ -2635,6 +2881,53 @@ public enum MarkdownHTMLRenderer {
             .replacingOccurrences(of: "\"", with: "&quot;")
     }
     
+    public static func resolveImageURL(_ urlString: String, noteURL: URL? = nil, vaultURL: URL? = nil) -> String {
+        if urlString.lowercased().hasPrefix("http://") ||
+           urlString.lowercased().hasPrefix("https://") ||
+           urlString.lowercased().hasPrefix("data:") {
+            return urlString
+        }
+        let fm = FileManager.default
+        let clean = (urlString.removingPercentEncoding ?? urlString).trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // 1. Direct file:// URL
+        if clean.hasPrefix("file://") {
+            return clean
+        }
+        
+        // 2. Note directory
+        if let noteDir = noteURL?.deletingLastPathComponent() {
+            let candidate = noteDir.appendingPathComponent(clean).standardized.resolvingSymlinksInPath()
+            if fm.fileExists(atPath: candidate.path) {
+                return candidate.absoluteString
+            }
+        }
+        
+        // 3. Vault root
+        if let vURL = vaultURL {
+            let candidate = vURL.appendingPathComponent(clean).standardized.resolvingSymlinksInPath()
+            if fm.fileExists(atPath: candidate.path) {
+                return candidate.absoluteString
+            }
+            
+            // 4. Attachments folder under vault root
+            let folder = UserDefaults.standard.string(forKey: "attachment_folder") ?? "Attachments"
+            let cleanFolder = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if !cleanFolder.isEmpty {
+                let folderCandidate = vURL.appendingPathComponent(cleanFolder).appendingPathComponent(clean).standardized.resolvingSymlinksInPath()
+                if fm.fileExists(atPath: folderCandidate.path) {
+                    return folderCandidate.absoluteString
+                }
+            }
+        }
+        
+        if fm.fileExists(atPath: clean) {
+            return URL(fileURLWithPath: clean).absoluteString
+        }
+        
+        return urlString
+    }
+    
     private static func slugify(_ text: String) -> String {
         let clean = text.lowercased()
             .replacingOccurrences(of: " ", with: "-")
@@ -2648,10 +2941,12 @@ public enum MarkdownHTMLRenderer {
 
 public struct MarkdownWebView: NSViewRepresentable {
     public let html: String
+    public var vaultURL: URL?
     public var onTagSelected: ((String) -> Void)?
     
-    public init(html: String, onTagSelected: ((String) -> Void)? = nil) {
+    public init(html: String, vaultURL: URL? = nil, onTagSelected: ((String) -> Void)? = nil) {
         self.html = html
+        self.vaultURL = vaultURL
         self.onTagSelected = onTagSelected
     }
     
@@ -2671,7 +2966,7 @@ public struct MarkdownWebView: NSViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
         
-        let baseURL = MermaidScriptProvider.getScriptURL()?.deletingLastPathComponent() ?? Bundle.main.resourceURL
+        let baseURL = vaultURL ?? MermaidScriptProvider.getScriptURL()?.deletingLastPathComponent() ?? Bundle.main.resourceURL
         webView.loadHTMLString(html, baseURL: baseURL)
         context.coordinator.lastHTML = html
         

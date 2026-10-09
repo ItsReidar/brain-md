@@ -123,3 +123,35 @@ To maintain full interoperability with external tools like Obsidian, Git, or VS 
 - **Event Handling**: Listens for `.write`, `.delete`, `.rename`, and `.extend` events.
 - **Debounced Rescanning**: When rapid external changes occur (e.g. `git checkout` or automated scripts), events are coalesced to prevent UI churn.
 - **In-Memory Conflict Protection**: If an external change modifies the note currently loaded in the editor, `brain-md` intelligently syncs the content without discarding uncommitted keystrokes.
+
+---
+
+## Attachment & Image Management
+
+`brain-md` allows you to manage images and media attachments cleanly without cluttering your note folders:
+
+```text
+📁 ~/Documents/Brain-md/ (Vault Root)
+├── 📁 Attachments/
+│   ├── 🖼️ pasted-image-2026-10-02-154500.png
+│   └── 🖼️ diagram-1.png
+├── 📁 Projects/
+│   └── 📄 Roadmap.md (references ![Diagram](../Attachments/diagram-1.png))
+└── 📄 Architecture.md (references ![Pasted](Attachments/pasted-image-2026-10-02-154500.png))
+```
+
+### Attachment Storage Modes
+
+In **Settings > Vault > Attachments & Media**, users can configure where images and file attachments are saved:
+
+1. **Dedicated Directory** (default: `Attachments`): All dropped or pasted images are organized into a designated folder at the vault root (or any custom relative path).
+2. **Current Note Directory** (empty folder setting): Images are stored side-by-side with the active Markdown note.
+
+### Automatic Relative Markdown Links
+
+When an image is added via drag-and-drop or clipboard paste (`⌘V`), `VaultManager.saveAttachment`:
+
+1. Creates the target attachment folder on disk if it does not yet exist.
+2. Generates a timestamped or sanitized unique filename (`name-1.png`, etc.) to prevent accidental overwrites.
+3. Automatically computes the exact relative path from the current note's parent folder to the attachment, guaranteeing complete portability with Obsidian, VS Code, and Git.
+4. Inserts `![Alt](relative/path.png)` directly into the editor at the cursor position.

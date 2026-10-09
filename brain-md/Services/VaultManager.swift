@@ -448,6 +448,18 @@ public final class VaultManager: ObservableObject, VaultManaging {
                     size: Int64(size),
                     tags: noteTags
                 ))
+            } else if !file.lastPathComponent.hasPrefix(".") && !file.pathExtension.isEmpty {
+                // Non-markdown attachment (images, pdfs, media, etc.)
+                items.append(NoteItem(
+                    name: file.lastPathComponent,
+                    relativePath: relPath,
+                    url: file,
+                    isDirectory: false,
+                    children: nil,
+                    modifiedAt: modDate,
+                    size: Int64(size),
+                    tags: []
+                ))
             }
         }
         
@@ -465,12 +477,17 @@ public final class VaultManager: ObservableObject, VaultManaging {
             saveCurrentNote()
         }
         selectedItem = item
-        editorTitle = item.name
-        do {
-            editorContent = try readFile(relativePath: item.relativePath)
+        editorTitle = item.displayName
+        if item.isMarkdown {
+            do {
+                editorContent = try readFile(relativePath: item.relativePath)
+                hasUnsavedChanges = false
+            } catch {
+                logActivity(action: "Read Failed", detail: error.localizedDescription, isError: true)
+            }
+        } else {
+            editorContent = ""
             hasUnsavedChanges = false
-        } catch {
-            logActivity(action: "Read Failed", detail: error.localizedDescription, isError: true)
         }
     }
     
@@ -510,7 +527,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
     }
     
     public func saveCurrentNote() {
-        guard let current = selectedItem, !current.isDirectory else { return }
+        guard let current = selectedItem, !current.isDirectory, current.isMarkdown else { return }
         do {
             try writeFile(relativePath: current.relativePath, content: editorContent)
             hasUnsavedChanges = false
@@ -668,6 +685,118 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
     
+    // MARK: - Attachments & Media
+    
+    /// Saves an image or attachment file into the configured attachment directory,
+    /// generating a unique filename and returning the relative Markdown reference.
+    @discardableResult
+    public func saveAttachment(
+        data: Data,
+        suggestedFileName: String? = nil,
+        noteURL: URL? = nil
+    ) throws -> (savedURL: URL, markdownReference: String) {
+        let fm = FileManager.default
+        let rawSetting = (UserDefaults.standard.string(forKey: "attachment_folder") ?? "Attachments")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // 1. Determine target directory
+        let targetDirectory: URL
+        let noteDir = noteURL?.deletingLastPathComponent() ?? vaultURL
+        
+        if rawSetting.isEmpty {
+            // Same folder as note
+            targetDirectory = noteDir
+        } else if rawSetting.hasPrefix("./") {
+            // Relative to current note's folder
+            let sub = String(rawSetting.dropFirst(2)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            targetDirectory = noteDir.appendingPathComponent(sub, isDirectory: true)
+        } else {
+            // In specified folder relative to vault root
+            let cleanSub = rawSetting.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            targetDirectory = vaultURL.appendingPathComponent(cleanSub, isDirectory: true)
+        }
+        
+        // Create target directory if needed
+        if !fm.fileExists(atPath: targetDirectory.path) {
+            try fm.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
+        }
+        
+        // 2. Determine file extension and base name
+        var ext = (suggestedFileName as NSString?)?.pathExtension.lowercased() ?? ""
+        if ext.isEmpty {
+            ext = detectImageExtension(data: data) ?? "png"
+        }
+        
+        let rawBaseName = (suggestedFileName as NSString?)?.deletingPathExtension ?? ""
+        let baseName: String
+        if !rawBaseName.isEmpty && rawBaseName != "image" && rawBaseName.lowercased() != "pasted image" {
+            baseName = rawBaseName.replacingOccurrences(of: "/", with: "-")
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd-HHmmss"
+            baseName = "Pasted-Image-\(formatter.string(from: Date()))"
+        }
+        
+        // 3. Ensure unique filename
+        var candidateName = "\(baseName).\(ext)"
+        var candidateURL = targetDirectory.appendingPathComponent(candidateName)
+        var counter = 1
+        while fm.fileExists(atPath: candidateURL.path) {
+            candidateName = "\(baseName)-\(counter).\(ext)"
+            candidateURL = targetDirectory.appendingPathComponent(candidateName)
+            counter += 1
+        }
+        
+        // 4. Write data
+        try data.write(to: candidateURL, options: .atomic)
+        refreshFiles()
+        logActivity(action: "Saved Attachment", detail: candidateName, isError: false)
+        
+        // 5. Compute markdown reference relative to current note
+        let relativeMarkdownPath: String
+        let baseDir = (noteURL?.deletingLastPathComponent() ?? vaultURL).standardized.resolvingSymlinksInPath()
+        let fileStandard = candidateURL.standardized.resolvingSymlinksInPath()
+        
+        if fileStandard.deletingLastPathComponent().path == baseDir.path {
+            relativeMarkdownPath = candidateName
+        } else {
+            let baseComponents = baseDir.pathComponents
+            let fileComponents = fileStandard.pathComponents
+            
+            var commonPrefixLen = 0
+            while commonPrefixLen < baseComponents.count &&
+                  commonPrefixLen < fileComponents.count &&
+                  baseComponents[commonPrefixLen] == fileComponents[commonPrefixLen] {
+                commonPrefixLen += 1
+            }
+            
+            let upCount = baseComponents.count - commonPrefixLen
+            let ups = Array(repeating: "..", count: upCount)
+            let downs = fileComponents[commonPrefixLen...]
+            let rel = (ups + downs).joined(separator: "/")
+            relativeMarkdownPath = rel.isEmpty ? candidateName : rel
+        }
+        
+        let altText = (candidateName as NSString).deletingPathExtension
+        let markdownRef = "![\(altText)](\(relativeMarkdownPath))"
+        return (savedURL: candidateURL, markdownReference: markdownRef)
+    }
+    
+    private func detectImageExtension(data: Data) -> String? {
+        guard data.count >= 4 else { return nil }
+        let bytes = [UInt8](data.prefix(4))
+        if bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
+            return "png"
+        } else if bytes[0] == 0xFF && bytes[1] == 0xD8 {
+            return "jpg"
+        } else if bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 {
+            return "gif"
+        } else if bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 {
+            return "webp"
+        }
+        return nil
+    }
+    
     public func createDirectory(relativePath: String) throws {
         try createFolder(relativePath: relativePath)
     }
@@ -687,11 +816,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         var targetName = trimmedName
         if !isDir.boolValue {
             let oldExt = oldURL.pathExtension
-            let supportedExtensions = ["md", "markdown", "txt"]
-            let hasSupportedExt = supportedExtensions.contains { ext in
-                targetName.lowercased().hasSuffix(".\(ext)")
-            }
-            if !hasSupportedExt && !oldExt.isEmpty {
+            if !oldExt.isEmpty && !targetName.lowercased().hasSuffix(".\(oldExt.lowercased())") {
                 targetName = "\(targetName).\(oldExt)"
             }
         }
@@ -921,6 +1046,16 @@ public final class VaultManager: ObservableObject, VaultManaging {
                         ))
                     }
                 }
+            } else if !file.lastPathComponent.hasPrefix(".") && !file.pathExtension.isEmpty && !isTagOnly {
+                let fileName = file.lastPathComponent
+                if fileName.lowercased().contains(query) {
+                    let relPath = relativePath(of: file, relativeTo: base)
+                    results.append(NoteSearchResult(
+                        relativePath: relPath,
+                        title: fileName,
+                        snippet: "Attachment (\(file.pathExtension.uppercased()))"
+                    ))
+                }
             }
         }
     }
@@ -935,7 +1070,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         for item in items {
             if item.isDirectory, let children = item.children {
                 collectNotePaths(in: children, paths: &paths)
-            } else if !item.isDirectory {
+            } else if !item.isDirectory && item.isMarkdown {
                 paths.append(item.relativePath)
             }
         }

@@ -44,7 +44,9 @@ public final class PDFExportService: NSObject, WKNavigationDelegate {
     public func generatePDFData(
         markdown: String,
         theme: TerminalTheme? = nil,
-        contentWidth: Double = 850
+        contentWidth: Double = 850,
+        noteURL: URL? = nil,
+        vaultURL: URL? = nil
     ) async throws -> Data {
         // Cancel any pending operation
         cleanup()
@@ -53,7 +55,9 @@ public final class PDFExportService: NSObject, WKNavigationDelegate {
         let html = MarkdownHTMLRenderer.renderHTML(
             markdown: markdown,
             theme: activeTheme,
-            contentWidth: contentWidth
+            contentWidth: contentWidth,
+            noteURL: noteURL,
+            vaultURL: vaultURL
         )
         
         let config = WKWebViewConfiguration()
@@ -73,7 +77,8 @@ public final class PDFExportService: NSObject, WKNavigationDelegate {
                 await self?.handleTimeout()
             }
             
-            webView.loadHTMLString(html, baseURL: Bundle.main.resourceURL)
+            let baseURL = vaultURL ?? noteURL?.deletingLastPathComponent() ?? Bundle.main.resourceURL
+            webView.loadHTMLString(html, baseURL: baseURL)
         }
     }
     
@@ -82,9 +87,17 @@ public final class PDFExportService: NSObject, WKNavigationDelegate {
         markdown: String,
         theme: TerminalTheme? = nil,
         to destinationURL: URL,
-        contentWidth: Double = 850
+        contentWidth: Double = 850,
+        noteURL: URL? = nil,
+        vaultURL: URL? = nil
     ) async throws {
-        let pdfData = try await generatePDFData(markdown: markdown, theme: theme, contentWidth: contentWidth)
+        let pdfData = try await generatePDFData(
+            markdown: markdown,
+            theme: theme,
+            contentWidth: contentWidth,
+            noteURL: noteURL,
+            vaultURL: vaultURL
+        )
         try pdfData.write(to: destinationURL, options: .atomic)
     }
     
