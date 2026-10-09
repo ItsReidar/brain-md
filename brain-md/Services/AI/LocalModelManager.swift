@@ -15,6 +15,7 @@ public enum LocalModelError: LocalizedError, Equatable {
     case notDownloaded
     case incompleteDownload
     case insufficientMemory(requiredBytes: Int64, availableBytes: Int64)
+    case requiresAppleSilicon
 
     public var errorDescription: String? {
         switch self {
@@ -25,6 +26,8 @@ public enum LocalModelError: LocalizedError, Equatable {
         case .insufficientMemory(let required, let available):
             "Not enough free memory to load Gemma 4: it needs about \(Self.gigabytes(required)), "
                 + "\(Self.gigabytes(available)) is available. Close other apps and try again."
+        case .requiresAppleSilicon:
+            "On-device AI needs a Mac with Apple Silicon: MLX runs Gemma 4 on its GPU."
         }
     }
 
@@ -175,8 +178,18 @@ public final class LocalModelManager: ObservableObject {
 
     // MARK: - Load / Unload
 
+    /// MLX needs an Apple Silicon GPU. The universal app's Intel slice builds, but must not load the model.
+    public static var isSupportedHardware: Bool {
+        #if arch(arm64)
+        true
+        #else
+        false
+        #endif
+    }
+
     /// Loads the model from disk (offline), or returns it if already loaded.
     public func loadModel() async throws -> ModelContainer {
+        guard Self.isSupportedHardware else { throw LocalModelError.requiresAppleSilicon }
         if let container { return container }
         if let loadTask { return try await loadTask.value }
         guard let directory = completeSnapshotDirectory() else { throw LocalModelError.notDownloaded }

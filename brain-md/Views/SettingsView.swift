@@ -1360,6 +1360,8 @@ public struct LocalAISettingsPane: View {
         ) {
           Toggle("", isOn: Binding(get: { isAIEnabled }, set: setAIEnabled))
             .toggleStyle(.switch)
+            .disabled(!LocalModelManager.isSupportedHardware && !isAIEnabled)
+            .help(LocalModelManager.isSupportedHardware ? "" : LocalModelError.requiresAppleSilicon.errorDescription ?? "")
         }
 
         Divider()

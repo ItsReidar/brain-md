@@ -21,6 +21,15 @@ struct LocalModelManagerTests {
         try Data(contents.utf8).write(to: directory.appendingPathComponent(name))
     }
 
+    @Test func onlyAppleSiliconLoadsTheModel() {
+        #if arch(arm64)
+        #expect(LocalModelManager.isSupportedHardware)
+        #else
+        #expect(!LocalModelManager.isSupportedHardware)
+        #endif
+        #expect(LocalModelError.requiresAppleSilicon.errorDescription?.contains("Apple Silicon") == true)
+    }
+
     @Test func snapshotRequiresEveryIndexedWeightFile() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
