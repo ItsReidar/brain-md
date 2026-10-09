@@ -1327,113 +1327,59 @@ public struct AboutSettingsPane: View {
 
 public struct LocalAISettingsPane: View {
   @ObservedObject var modelManager = LocalModelManager.shared
+  @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
   @AppStorage("ai_capture_system_audio") private var captureSystemAudio: Bool = true
   @AppStorage("ai_capture_microphone") private var captureMicrophone: Bool = true
   @AppStorage("ai_capture_screen_diagrams") private var captureScreenDiagrams: Bool = true
+  @State private var pendingDeletionBytes: Int64?
 
   public init() {}
 
   public var body: some View {
     VStack(spacing: 20) {
-      // 1. Dedicated Model Installation & Progress Card
       SettingsCard(
-        title: "Gemma 4 E4B Model Installation & Storage",
-        footer: "Google DeepMind's Gemma 4 E4B runs on-device using MLX on Apple Silicon. Audio and screen diagrams are processed entirely offline with zero cloud latency."
+        title: "On-Device AI",
+        footer: "Gemma 4 E4B (4-bit, quantization-aware trained) runs on this Mac with MLX on Apple Silicon. "
+          + "It downloads once from Hugging Face; after that, notes never leave your Mac."
       ) {
-        VStack(alignment: .leading, spacing: 14) {
-          // Model Header & Status Badge
-          HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "cpu.fill")
-              .font(.system(size: 24))
-              .foregroundColor(.accentColor)
-              .frame(width: 32, height: 32)
-              .background(Color.accentColor.opacity(0.12))
-              .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        SettingsRow(
+          title: "Enable on-device AI",
+          subtitle: "Summaries, action items, rewriting and screen explanations with Gemma 4",
+          icon: "cpu"
+        ) {
+          Toggle("", isOn: Binding(get: { isAIEnabled }, set: setAIEnabled))
+            .toggleStyle(.switch)
+        }
 
-            VStack(alignment: .leading, spacing: 3) {
-              Text("Gemma 4 E4B On-Device Model")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.primary)
+        Divider()
 
-              Text("4-Billion parameter multimodal foundation model (~2.4 GB)")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-            }
-
+        VStack(alignment: .leading, spacing: 10) {
+          HStack {
+            Text("mlx-community/gemma-4-E4B-it-qat-4bit")
+              .font(.system(size: 11, design: .monospaced))
+              .foregroundColor(.secondary)
+              .textSelection(.enabled)
             Spacer()
-
-            // Status Pill
             statusBadge
           }
-
-          Divider()
-
-          // Persistent Download Progress Section
-          VStack(alignment: .leading, spacing: 8) {
-            HStack {
-              Text("Download Status")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.secondary)
-
-              Spacer()
-
-              progressLabel
-            }
-
-            // Always-visible full-width linear progress bar
-            ProgressView(value: modelManager.state.progress, total: 1.0)
-              .progressViewStyle(.linear)
-              .tint(modelManager.state.status == .ready ? .green : .accentColor)
-          }
-
-          Divider()
-
-          // Action Controls
-          HStack {
-            if modelManager.state.status == .downloading {
-              Text("Downloading weights in background...")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-
-              Spacer()
-
-              Button("Cancel") {
-                modelManager.removeModelCache()
-              }
-              .buttonStyle(.bordered)
-            } else if modelManager.state.status == .ready {
-              HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                  .foregroundColor(.green)
-                Text("Installed on disk (~2.4 GB)")
-                  .font(.system(size: 12, weight: .medium))
-                  .foregroundColor(.secondary)
-              }
-
-              Spacer()
-
-              Button("Remove Model Cache", role: .destructive) {
-                modelManager.removeModelCache()
-              }
-              .buttonStyle(.bordered)
-            } else {
-              Text("Model not installed. Download required to enable offline transcription & rewrite.")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-
-              Spacer()
-
-              Button(action: {
-                modelManager.startDownload()
-              }) {
-                Label("Download Gemma 4 E4B (~2.4 GB)", systemImage: "arrow.down.circle.fill")
-              }
-              .buttonStyle(.borderedProminent)
-            }
-          }
+          modelDetails
         }
         .padding(16)
       }
+      .confirmationDialog(
+        "Delete the Gemma 4 model files?",
+        isPresented: Binding(get: { pendingDeletionBytes != nil }, set: { if !$0 { pendingDeletionBytes = nil } }),
+        titleVisibility: .visible
+      ) {
+        Button("Delete \(Self.format(pendingDeletionBytes ?? 0))", role: .destructive) {
+          modelManager.removeModelCache()
+          pendingDeletionBytes = nil
+        }
+        Button("Keep Files", role: .cancel) { pendingDeletionBytes = nil }
+      } message: {
+        Text("Keeping them lets you turn on-device AI back on without downloading again.")
+      }
+      .onAppear(perform: resumeDownloadIfNeeded)
 
       // 2. Audio & Visual Capture Permissions & Settings
       SettingsCard(title: "Meeting Audio & Visual Capture") {
@@ -1471,71 +1417,91 @@ public struct LocalAISettingsPane: View {
     }
   }
 
+  private func setAIEnabled(_ enabled: Bool) {
+    isAIEnabled = enabled
+    if enabled {
+      resumeDownloadIfNeeded()
+    } else {
+      modelManager.cancelDownload()
+      modelManager.unloadModel()
+      let bytes = modelManager.diskUsageBytes()
+      if bytes > 0 { pendingDeletionBytes = bytes }
+    }
+  }
+
+  /// Enabled but not installed (first enable, or a download interrupted by quitting): fetch it.
+  private func resumeDownloadIfNeeded() {
+    guard isAIEnabled, modelManager.state.status == .notDownloaded else { return }
+    modelManager.startDownload()
+  }
+
+  private static func format(_ bytes: Int64) -> String {
+    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+  }
+
   @ViewBuilder
-  private var statusBadge: some View {
-    switch modelManager.state.status {
+  private var modelDetails: some View {
+    let state = modelManager.state
+    switch state.status {
     case .notDownloaded:
-      Text("Not Installed")
-        .font(.system(size: 11, weight: .semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Color.secondary.opacity(0.12))
+      Text(isAIEnabled ? "Preparing download…" : "Not downloaded. Turning on-device AI on downloads the model.")
+        .font(.system(size: 12))
         .foregroundColor(.secondary)
-        .clipShape(Capsule())
     case .downloading:
-      HStack(spacing: 5) {
-        ProgressView()
-          .controlSize(.small)
-          .scaleEffect(0.7)
-        Text("Downloading \(Int(modelManager.state.progress * 100))%")
-          .font(.system(size: 11, weight: .semibold))
+      ProgressView(value: state.progress)
+        .progressViewStyle(.linear)
+      HStack {
+        Text(state.totalBytes > 0
+          ? "\(Self.format(state.bytesDownloaded)) of \(Self.format(state.totalBytes)) (\(Int(state.progress * 100))%)"
+          : "Contacting Hugging Face…")
+          .font(.system(size: 11, weight: .medium, design: .monospaced))
+          .foregroundColor(.secondary)
+        Spacer()
+        Button("Cancel") { setAIEnabled(false) }
+          .buttonStyle(.bordered)
       }
-      .padding(.horizontal, 8)
-      .padding(.vertical, 3)
-      .background(Color.accentColor.opacity(0.15))
-      .foregroundColor(.accentColor)
-      .clipShape(Capsule())
     case .ready:
-      Label("Ready", systemImage: "checkmark.circle.fill")
-        .font(.system(size: 11, weight: .semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Color.green.opacity(0.15))
-        .foregroundColor(.green)
-        .clipShape(Capsule())
+      HStack {
+        Label("Installed · \(Self.format(state.totalBytes)) on disk", systemImage: "checkmark.circle.fill")
+          .font(.system(size: 12, weight: .medium))
+          .foregroundColor(.secondary)
+        Spacer()
+        Button("Delete Model Files…", role: .destructive) {
+          pendingDeletionBytes = modelManager.diskUsageBytes()
+        }
+        .buttonStyle(.bordered)
+      }
     case .error:
-      Label("Download Failed", systemImage: "exclamationmark.triangle.fill")
-        .font(.system(size: 11, weight: .semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Color.red.opacity(0.15))
-        .foregroundColor(.red)
-        .clipShape(Capsule())
+      HStack(alignment: .top) {
+        Text(state.errorMessage ?? "The download failed.")
+          .font(.system(size: 12))
+          .foregroundColor(.red)
+          .fixedSize(horizontal: false, vertical: true)
+        Spacer()
+        Button("Retry") {
+          modelManager.checkExistingModel() // clears the error, keeps already-downloaded files
+          modelManager.startDownload()
+        }
+        .buttonStyle(.borderedProminent)
+      }
     }
   }
 
   @ViewBuilder
-  private var progressLabel: some View {
-    switch modelManager.state.status {
-    case .notDownloaded:
-      Text("0 MB / 2,400 MB (0%)")
-        .font(.system(size: 11, weight: .medium, design: .monospaced))
-        .foregroundColor(.secondary)
-    case .downloading:
-      let downloadedMB = modelManager.state.bytesDownloaded / 1_000_000
-      let totalMB = modelManager.state.totalBytes > 0 ? modelManager.state.totalBytes / 1_000_000 : 2400
-      Text("\(downloadedMB) MB / \(totalMB) MB (\(Int(modelManager.state.progress * 100))%)")
-        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .foregroundColor(.accentColor)
-    case .ready:
-      Text("2,400 MB / 2,400 MB (100%)")
-        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-        .foregroundColor(.green)
-    case .error:
-      Text("Error: \(modelManager.state.errorMessage ?? "Download interrupted")")
-        .font(.system(size: 11, weight: .medium))
-        .foregroundColor(.red)
+  private var statusBadge: some View {
+    let (label, icon, color): (String, String, Color) = switch modelManager.state.status {
+    case .notDownloaded: ("Not Installed", "arrow.down.circle", .secondary)
+    case .downloading: ("Downloading \(Int(modelManager.state.progress * 100))%", "arrow.down.circle.fill", .accentColor)
+    case .ready: (modelManager.isLoaded ? "Loaded" : "Ready", "checkmark.circle.fill", .green)
+    case .error: ("Download Failed", "exclamationmark.triangle.fill", .red)
     }
+    Label(label, systemImage: icon)
+      .font(.system(size: 11, weight: .semibold))
+      .padding(.horizontal, 8)
+      .padding(.vertical, 3)
+      .background(color.opacity(0.15))
+      .foregroundColor(color)
+      .clipShape(Capsule())
   }
 }
 

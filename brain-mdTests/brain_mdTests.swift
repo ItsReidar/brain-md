@@ -628,12 +628,13 @@ struct brain_mdTests {
     }
 
     @Test func testSettingsDefaultsAndAppStorage() {
-        // 1. Verify all 7 tabs in the settings registry
+        // 1. Verify all 8 tabs in the settings registry
         let tabs = SettingsTab.allCases
-        #expect(tabs.count == 7)
+        #expect(tabs.count == 8)
         #expect(tabs.contains(.general))
         #expect(tabs.contains(.appearance))
         #expect(tabs.contains(.editor))
+        #expect(tabs.contains(.localAI))
         #expect(tabs.contains(.mcpServer))
         #expect(tabs.contains(.vault))
         #expect(tabs.contains(.advanced))

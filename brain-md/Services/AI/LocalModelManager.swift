@@ -45,6 +45,8 @@ public final class LocalModelManager: ObservableObject {
     nonisolated static let downloadPatterns = ["*.safetensors", "*.json", "*.jinja"]
     /// Weights plus KV cache and activations: loading needs this much headroom over the file size.
     nonisolated static let memoryHeadroom = 1.2
+    /// `@AppStorage` key for the "Enable on-device AI" setting.
+    public static let enabledDefaultsKey = "ai_on_device_enabled"
 
     @Published public var state: ModelDownloadState
     @Published public private(set) var isLoaded = false
@@ -155,6 +157,11 @@ public final class LocalModelManager: ObservableObject {
 
     public func cancelDownload() {
         downloadTask?.cancel()
+    }
+
+    /// Bytes the model occupies on disk, including partial downloads.
+    public func diskUsageBytes() -> Int64 {
+        Self.allocatedSize(of: repositoryDirectory)
     }
 
     /// Cancels any download, unloads the model and deletes its files.
