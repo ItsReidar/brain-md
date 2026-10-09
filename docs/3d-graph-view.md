@@ -10,6 +10,8 @@ The 3D Visual Brain Graph transforms your markdown vault into an interactive 3D 
 
 Built entirely in **native Apple SceneKit (Metal-accelerated)**, the visualizer runs 100% offline with zero external dependencies and sub-millisecond layout computation.
 
+The graph shows your own knowledge only: notes and tags in the app folders (`Skills` and the root attachments folder) are left out, via `VaultManager.knowledgeNotePaths()` (see [App Folders](vault-management.md#app-folders)).
+
 ```text
                     ┌─────────────────────────────────────────┐
                     │          Vault Notes (.md)              │

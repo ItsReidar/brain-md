@@ -6,8 +6,8 @@ This document covers the local development workflow, project structure, automate
 
 ## Developer Prerequisites
 
-- **Operating System**: macOS 14.0 (Sonoma) or macOS 15+ (Sequoia)
-- **IDE**: Xcode 16.0 or newer
+- **Operating System**: macOS 26 (Tahoe) or later; Apple Silicon for on-device AI
+- **IDE**: Xcode 26 or newer, with the Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`)
 - **Language**: Swift 6.0 (Strict Concurrency enabled)
 - **Command Line Tools**: `xcode-select --install`
 
@@ -27,13 +27,22 @@ brain-md/
 │   ├── editor-and-markdown.md     # Syntax highlighting & Mermaid diagrams
 │   ├── mcp-server.md              # Model Context Protocol API reference
 │   ├── settings-and-customization.md # System settings & templates
+│   ├── 3d-graph-view.md           # SceneKit brain graph & layout model
+│   ├── local-ai.md                # Gemma 4, skills, chat & meeting transcription
+│   ├── releasing.md               # DMG, signing & Homebrew cask
+│   ├── release-notes/             # Per-version notes used by publish.sh
 │   └── development-and-testing.md # This guide
+├── scripts/release/               # package.sh & publish.sh (see releasing.md)
+├── packaging/homebrew/            # Cask template
 ├── brain-md.xcodeproj             # Xcode project package
 ├── brain-md/                      # Main application source code
 │   ├── brain_mdApp.swift          # App entrypoint (@main) & menu commands
 │   ├── ContentView.swift          # Primary application window
 │   ├── Models/                    # Data transfer objects & errors
 │   │   ├── NoteItem.swift         # Directory node & file model
+│   │   ├── Frontmatter.swift      # YAML frontmatter parser
+│   │   ├── LocalAIModels.swift    # AI request, transcript & capture types
+│   │   ├── TerminalTheme.swift    # Editor/code color themes
 │   │   └── BrainError.swift       # Strongly-typed error domain
 │   ├── Services/                  # Business logic & background workers
 │   │   ├── VaultManager.swift     # File CRUD, selection, and monitor
@@ -43,8 +52,12 @@ brain-md/
 │   │   ├── SyntaxHighlighter.swift # Custom regex syntax tokenizer
 │   │   ├── NoteGraphService.swift # Graph link extraction & 3D force simulation
 │   │   ├── ScrollSyncCoordinator.swift # Bidirectional scroll synchronizer
+│   │   ├── MarkdownFormatService.swift # Format menu commands (bold, headings, …)
+│   │   ├── PDFExportService.swift # Vector PDF export of the preview
+│   │   ├── ThemeManager.swift     # Theme selection & syntax colors
 │   │   └── AI/                    # On-device AI & meetings (see local-ai.md)
 │   │       ├── LocalModelManager.swift # Gemma 4 download, verify, load/unload
+│   │       ├── HubAdapters.swift  # Hugging Face/tokenizer bridges, KV-cache mask fix
 │   │       ├── GemmaService.swift # Prompts & streaming generation
 │   │       ├── GemmaChat.swift    # Free-form chat state & history replay
 │   │       ├── Skills.swift       # Skill files, prompts & the vault's skill library
@@ -59,7 +72,7 @@ brain-md/
 │   │   ├── MarkdownPreviewView.swift# Rich formatted markdown renderer
 │   │   ├── MermaidDiagramView.swift # Offline WKWebView diagram runner
 │   │   ├── BrainGraphModalView.swift # 3D knowledge graph modal
-│   │   ├── Graph3DSceneView.swift # SceneKit 3D brain network view
+│   │   ├── BrainGraph3DView.swift # SceneKit 3D brain network view (Graph3DSceneView)
 │   │   ├── QuickSwitcherModalView.swift # Spotlight-style note switcher (⌘O)
 │   │   ├── MCPServerModalView.swift # Server inspector & agent setup
 │   │   ├── AIResultSheet.swift    # Review sheet for Gemma output
@@ -72,7 +85,8 @@ brain-md/
 │   │   ├── MCPStdioServer.swift   # Standard I/O subprocess transport
 │   │   └── MCPTypes.swift         # Protocol schemas, requests, & responses
 │   ├── Resources/                 # Static offline bundled assets
-│   │   └── mermaid.min.js         # Bundled offline Mermaid.js engine
+│   │   ├── mermaid.min.js         # Bundled offline Mermaid.js engine
+│   │   └── TerminalThemes.swift   # Built-in color theme definitions
 │   └── Assets.xcassets/           # App icon set & color assets
 ├── brain-mdTests/                 # Unit test suite (Swift Testing)
 └── brain-mdUITests/               # Automated UI integration tests
@@ -149,7 +163,9 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `testScrollViewFinderRegistersAndReleasesPreview()` | `ScrollViewFinder` registers on window attach and unregisters on dismantle. |
 | `testMetricsIgnoreDocumentFrameOrigin()` / `testMetricsNonFlippedDocument()` / `testMetricsHonorContentInsets()` / `testMetricsShortDocument()` | `ScrollMetrics` geometry: frame-origin independence, `isFlipped` handling, content insets, and non-scrollable documents. |
 | `LocalModelManagerTests` | Snapshot completeness (every indexed weight file), legacy placeholder cleanup, disk size of symlinked blobs, memory check, and loading without a download. |
-| `GemmaServiceTests` | Prompt wording per mode, empty-note and disabled errors (without loading the model), speaker labels, truncation marker. Chat: note attached only when new or changed, history replay of complete exchanges, failed turns, blank messages, context-usage labels and warning levels, custom instructions, skills sent from chat. |
+| `NoteGraphServiceTests` | Wikilink (with aliases) and Markdown link extraction, link resolution, graph edges and degrees, folder hubs and clustering, valid 3D layout coordinates. |
+| `LocalAIServicesTests` | AI model types: download state transitions, capture configurations, speaker labels, frame metadata, request modes. |
+| `GemmaServiceTests` (+ `GemmaChatTests.swift`, which extends it) | Prompt wording per mode, empty-note and disabled errors (without loading the model), speaker labels, truncation marker. Chat: note attached only when new or changed, history replay of complete exchanges, failed turns, blank messages, context-usage labels and warning levels, custom instructions, skills sent from chat. |
 | `SkillsTests` | Skill frontmatter and defaults, note placement (`{{note}}` or appended), empty notes, sort order, default skills and template; library seeding once per vault, restore keeps edits, unique new names, ignored files; the test host never seeds the user's vault. |
 | `VaultAppFoldersTests` | Which attachment settings make an app folder, case-insensitive membership, sidebar split and order, graph excludes Skills and attachments. |
 | `HubAdaptersTests` | Gemma 4's all-ones attention mask is dropped for text prompts (so chat turns reuse the KV cache) and kept for real masks and media; opt-in real-model check that a follow-up reuses the cache. |

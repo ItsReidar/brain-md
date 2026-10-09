@@ -28,6 +28,8 @@ flowchart LR
 | Record a meeting | 🎙 toolbar button | Live transcript lines labelled **Them** / **Me** with timestamps; minutes from Gemma when you stop |
 | Gemma Chat | ✨ menu › Chat with Gemma…, or View › Gemma Chat (⇧⌘J) | A conversation in its own window, optionally about the open note |
 
+The ✨ menu also has **Chat with Gemma…** and **Manage Skills…** (opens Settings). Until the model is downloaded and on-device AI is turned on, it shows only **Set Up On-Device AI…**.
+
 Gemma's output always opens in a **review sheet** first. Nothing is written to a note until you choose Insert Below or Replace Note (which asks for confirmation). Meeting transcript lines are the exception: they are written to the open note as they're finalized, and switching notes stops the recording.
 
 Answers are in the note's language (in chat: the language you write in). Notes longer than about 8,000 tokens (32,000 characters) are truncated with a visible marker.
@@ -105,7 +107,8 @@ Speech recognition permission is not requested: SpeechAnalyzer transcribes on-de
 - **Storage:** `~/Library/Application Support/brain-md/models`, in the Hugging Face cache layout.
 - **Memory:** loading checks that about 1.2× the model size is free (roughly 8 GB) and fails with a clear message otherwise. The model loads on first use and unloads after five idle minutes.
 - **Speed** (M2 Pro, measured with `GemmaBenchmarkTests`): about 31 tokens/s generated and 550–730 tokens/s of prompt read; loading takes about 4 s. Follow-up chat messages reuse the conversation's KV cache, so only the new message is read (about 0.2 s to the first word instead of re-reading the whole chat). mlx-swift-lm 3.32.3's Gemma 4 processor attaches an all-ones attention mask to every prompt, which disables that reuse; `TextMaskDroppingProcessor` in `HubAdapters.swift` drops it for text-only prompts. Larger prefill steps made no difference.
-- **Audio:** Gemma 4's audio encoder isn't available in Swift (mlx-swift-lm drops `audio_tower` weights), so speech-to-text uses SpeechAnalyzer and Gemma works from the transcript.
+- **Audio:** mlx-swift-lm 3.32.3 has no Gemma 4 audio encoder (its `gemma4` model drops the `audio_tower` weights; it supports text and images), so speech-to-text uses SpeechAnalyzer and Gemma works from the transcript.
+- **Apple Silicon only:** MLX runs on Apple Silicon GPUs; on an Intel Mac on-device AI isn't available.
 
 ## Code map
 

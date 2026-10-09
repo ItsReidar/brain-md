@@ -20,10 +20,11 @@ graph TD
         T1["1. General"]
         T2["2. Appearance"]
         T3["3. Editor & Markdown"]
-        T4["4. MCP Server"]
-        T5["5. Vault & Storage"]
-        T6["6. Advanced"]
-        T7["7. About"]
+        T4["4. Local AI & Voice"]
+        T5["5. MCP Server"]
+        T6["6. Vault & Storage"]
+        T7["7. Advanced"]
+        T8["8. About"]
     end
 
     subgraph Components ["Reusable macOS Form Elements"]
@@ -42,7 +43,7 @@ graph TD
 
 ---
 
-## The 7 Configuration Panes
+## The 8 Configuration Panes
 
 ### 1. General Settings
 
@@ -95,7 +96,7 @@ graph TD
 - **Custom Instructions**: Your own instructions for Gemma (up to 2,000 characters), added to every request in chat and the ✨ menu.
 - **Skills**: Your saved prompts, stored as Markdown files in the vault's `Skills` folder. Edit, create, show in Finder, or restore the defaults. See [Instructions & Skills](local-ai.md#instructions--skills).
 - **Transcription Language**: The language meetings are transcribed in, including Dutch (Belgium and Netherlands); defaults to the system language. Each language's speech model downloads once.
-- **Visual Diagram Comprehension**: Shows **Explain Screen** in the ✨ menu, which captures the display under the pointer for Gemma to explain.
+- **Visual Diagram Comprehension**: Shows the **Explain Screen** submenu in the ✨ menu: **Screen Under Pointer** or **Choose Window, App or Display…**.
 
 See [On-Device AI & Meetings](local-ai.md) for permissions, privacy and model details.
 
@@ -129,10 +130,10 @@ See [On-Device AI & Meetings](local-ai.md) for permissions, privacy and model de
 
 ---
 
-### 7. About
+### 8. About
 
 - **App Identity**: High-resolution `brain.head.profile` icon with blue-to-purple gradient.
-- **Version & Build**: Version 1.0 (Build 1).
+- **Version & Build**: Read from the app bundle (for example "Version 1.1 (Build 412)"); the build number is the commit count at release.
 - **Technology Stack**: Native Swift 6, AppKit, SwiftUI, MCP 1.0 Protocol.
 - **Repository Link**: Direct link to the open-source GitHub repository.
 

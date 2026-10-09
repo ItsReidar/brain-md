@@ -4,12 +4,12 @@
 
 # brain.md 🧠
 
-[![macOS](https://img.shields.io/badge/macOS-14.0%2B-black?style=flat-square&logo=apple)](https://apple.com)
+[![macOS](https://img.shields.io/badge/macOS-26%2B-black?style=flat-square&logo=apple)](https://apple.com)
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square&logo=swift)](https://swift.org)
 [![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20AppKit-blue?style=flat-square)](https://developer.apple.com/xcode/swiftui/)
 [![MCP](https://img.shields.io/badge/MCP-1.0%20Compliant-purple?style=flat-square)](https://modelcontextprotocol.io)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](LICENSE)
-[![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20External-emerald?style=flat-square)](#️-system-architecture)
+[![Dependencies](https://img.shields.io/badge/Dependencies-MLX%20for%20on--device%20AI%20only-emerald?style=flat-square)](docs/local-ai.md#the-model)
 
 > **The ultra-fast, local-first macOS Markdown knowledge base with an embedded Model Context Protocol (MCP) server.** Seamlessly bridge your personal thoughts with AI coding assistants (Claude Desktop, Cursor, Gemini, and autonomous agents).
 
@@ -17,7 +17,7 @@
 
 ## ✨ Features
 
-- **⚡ Blazing Fast & Lightweight (120 FPS)**: 100% native Swift 6, SwiftUI, and AppKit. Layer-backed Core Animation rendering (`wantsLayer = true`), debounced live preview synchronization, and coalesced background syntax passes ensure silky smooth 120 FPS ProMotion typing responsiveness (<1ms keystroke latency) even on large notes. Instant startup, ~1.2 MB binary, zero electron or web bloat.
+- **⚡ Blazing Fast & Lightweight (120 FPS)**: 100% native Swift 6, SwiftUI, and AppKit. Layer-backed Core Animation rendering (`wantsLayer = true`), debounced live preview synchronization, and coalesced background syntax passes ensure silky smooth 120 FPS ProMotion typing responsiveness (<1ms keystroke latency) even on large notes. Instant startup, zero Electron or web bloat; the on-device AI model loads only when you use it.
 - **🧠 3D Visual Brain Graph**: Native Metal-accelerated 3D graph (Apple SceneKit) showing notes as velvety matte spheres clustered around folder hubs, linked via prominent 3D synaptic cylinders (`SCNCylinder` with glowing emissive materials for crystal-clear visibility), wikilinks (`[[Note]]`), markdown links, and `#tag` clusters. Features fluid organic floating and breathing animations, rotational elastic inertia, zero-allocation 120 FPS dynamic line tracking, single-click 3D trackball spin, cursor-anchored zoom, dynamic front-facing badge labels, live search filtering, and click-to-inspect popover with instant jump-to-editor navigation (`⌥⌘G`). The Skills and attachments folders are left out.
 - **🔍 Spotlight Quick Switcher (`⌘O`)**: Instant keyboard-driven note navigation modal with fuzzy matching, real-time query filtering, folder location tags, and arrow-key navigation for lightning-fast jumps between notes.
 - **📂 Local-First Markdown Vault**: Plain-text `.md` files stored directly on your disk in human-readable hierarchies. Fully interoperable with Obsidian, VS Code, Logseq, and Git.
@@ -53,6 +53,14 @@ graph TB
         Highlighter["Syntax Highlighter Engine"]
         Mermaid["Offline Mermaid Engine (WKWebView)"]
         Settings["macOS System Settings (SettingsView)"]
+        ChatWindow["Gemma Chat Window (GemmaChatView)"]
+    end
+
+    subgraph AI ["On-Device AI (MLX + Apple Speech)"]
+        ModelManager["LocalModelManager (Gemma 4 E4B)"]
+        Gemma["GemmaService & GemmaChat"]
+        Skills["SkillLibrary (Skills/*.md)"]
+        Meetings["MeetingRecorder (ScreenCaptureKit + SpeechAnalyzer)"]
     end
 
     subgraph Storage ["Local Vault & Storage Engine"]
@@ -89,6 +97,14 @@ graph TB
     Editor --> VM
     GraphService --> VM
     Settings --> TemplateEngine
+
+    %% On-device AI
+    Editor --> Gemma
+    Editor --> Meetings
+    ChatWindow --> Gemma
+    Gemma --> ModelManager
+    Gemma --> Skills
+    Skills --> VM
 
     %% Storage to Disk
     VM <--> Disk
@@ -129,15 +145,15 @@ Maintainers: see [Releasing](docs/releasing.md).
 
 ### Prerequisites
 
-- macOS 14.0 (Sonoma) or macOS 15+ (Sequoia)
-- Xcode 16.0+ (with Swift 6 toolchain)
+- macOS 26 (Tahoe) or later; on-device AI needs Apple Silicon
+- Xcode 26 or later (Swift 6), with the Metal Toolchain: `xcodebuild -downloadComponent MetalToolchain`
 
 ### Building from Source
 
 1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/your-username/brain-md.git
+   git clone https://github.com/ItsReidar/brain-md.git
    cd brain-md
    ```
 
@@ -216,12 +232,17 @@ For full payload specifications, schema examples, and curl tests, see [MCP Serve
 | `⌘O`        | Spotlight Quick Switcher (open/jump to note)             |
 | `⌘S`        | Save current note to disk immediately                    |
 | `⌘P`        | Export live preview as paginated vector PDF              |
-| `⌘F`        | Focus vault search bar                                   |
 | `⌥⌘G`       | Open 3D Visual Brain Graph modal                         |
 | `⌘,`        | Open macOS System Settings window                        |
-| `⌘⌃1` / `⌘1`| Switch to Split View (Editor + Live Preview)             |
-| `⌘⌃2` / `⌘2`| Switch to Editor-Only View                               |
-| `⌘⌃3` / `⌘3`| Switch to Preview-Only View                              |
+| `⌘⌃1`       | Switch to Split View (Editor + Live Preview)             |
+| `⌘⌃2`       | Switch to Editor-Only View                               |
+| `⌘⌃3`       | Switch to Preview-Only View                              |
+| `⇧⌘J`       | Open the Gemma Chat window                               |
+| `⌘.`        | Stop a Gemma answer (chat or review sheet)               |
+| `⌘B` / `⌘I` | Bold / Italic                                            |
+| `⌘E` / `⌥⌘C`| Inline code / Code block                                 |
+| `⌘K`        | Insert a link                                            |
+| `⌥⌘1`–`⌥⌘6` | Heading 1–6                                              |
 
 ---
 
@@ -236,6 +257,7 @@ Explore the comprehensive technical guides in the [`docs/`](docs/) directory:
 - [**Settings & Customization**](docs/settings-and-customization.md): macOS Ventura-style settings architecture, token formatting, and custom Markdown templates.
 - [**Development & Testing**](docs/development-and-testing.md): Building, testing, benchmarking, and contributing to `brain.md`.
 - [**On-Device AI & Meetings**](docs/local-ai.md): Gemma 4 with MLX, review sheet, Gemma Chat, meeting transcription and languages, permissions and model details.
+- [**3D Visual Brain Graph**](docs/3d-graph-view.md): SceneKit rendering, force-directed layout and interaction model.
 - [**Releasing**](docs/releasing.md): Packaging, signing without a paid developer account, DMG and Homebrew cask distribution.
 
 ---

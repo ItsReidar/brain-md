@@ -6,10 +6,11 @@ This document details the architectural principles, component structure, state m
 
 ## High-Level Architecture Overview
 
-`brain-md` is designed around three primary decoupled subsystems:
+`brain-md` is designed around four primary decoupled subsystems:
 1. **Presentation Layer (SwiftUI + AppKit)**: Reactive, declarative UI combined with targeted AppKit primitives for native window styling, split views, and keyboard acceleration.
 2. **Local Storage & Vault Engine**: Direct filesystem-backed document store with tree-building, real-time background file monitoring, and template resolution.
 3. **Model Context Protocol (MCP) Server**: Embedded JSON-RPC 2.0 engine exposing vault operations to local and network AI agents via HTTP/SSE and Standard I/O.
+4. **On-Device AI**: Gemma 4 E4B with MLX for skills, chat and screen explanations, plus Apple's SpeechAnalyzer for meeting transcription. Loaded only when used; see [On-Device AI & Meetings](local-ai.md).
 
 ```mermaid
 graph TD
@@ -25,6 +26,16 @@ graph TD
         Settings["SettingsView"]
         Highlighter["SyntaxHighlighter"]
         Mermaid["MermaidDiagramView"]
+        Chat["GemmaChatView (⇧⌘J)"]
+        ResultSheet["AIResultSheet (review before insert)"]
+    end
+
+    subgraph AI ["On-Device AI Layer"]
+        ModelManager["LocalModelManager (download, load, unload)"]
+        Gemma["GemmaService / GemmaChat (MLX ChatSession)"]
+        Skills["SkillLibrary (vault Skills/*.md)"]
+        Meetings["MeetingRecorder → MeetingTranscriber (SpeechAnalyzer)"]
+        Capture["AudioCaptureService / VisualCaptureService (ScreenCaptureKit)"]
     end
 
     subgraph Service ["Core Service Layer"]
@@ -179,7 +190,7 @@ In the **MCP Server** settings pane, users can enable **Read-Only Mode**. When a
 
 ## Performance Optimizations
 
-1. **Sub-second Startup**: Direct lightweight AppKit/SwiftUI scene graph initialization avoids third-party SDK overhead.
+1. **Sub-second Startup**: Direct lightweight AppKit/SwiftUI scene graph initialization. The only third-party code, MLX for on-device AI, does no work at launch: the 6.8 GB model loads on first use (or when the chat window opens) and unloads after five idle minutes.
 2. **Directory Tree Caching**: File trees (`NoteItem`) are constructed through depth-first scanning only when directory events trigger or explicit user actions occur.
 3. **Syntax Highlighting Caching**: Regular expressions for Markdown tokens and code fence matching are compiled once and cached statically in memory.
 4. **Offline Asset Bundling**: The Mermaid JavaScript bundle (`mermaid.min.js`) is stored locally inside `brain-md/Resources/`, avoiding network latency, external dependencies, or telemetry leaks.
