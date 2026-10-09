@@ -197,7 +197,8 @@ public struct BrainGraphModalView: View {
     
     private func reloadGraph() async {
         isLoading = true
-        let notePaths = vault.getAllNotePaths()
+        // Skills and attachments are app folders, not part of the user's knowledge graph.
+        let notePaths = vault.knowledgeNotePaths()
         
         var contents: [String: String] = [:]
         for path in notePaths {
@@ -207,7 +208,7 @@ public struct BrainGraphModalView: View {
         }
         
         var tagMap: [String: [String]] = [:]
-        collectTags(from: vault.rootItems, map: &tagMap)
+        collectTags(from: vault.rootItems.filter { !vault.isInAppFolder($0.relativePath) }, map: &tagMap)
         
         let builtGraph = NoteGraphService.shared.buildGraph(
             notePaths: notePaths,

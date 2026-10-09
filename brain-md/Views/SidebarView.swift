@@ -197,6 +197,28 @@ public struct SidebarView: View {
     }
     
     // MARK: - File Tree
+
+    private func treeRow(_ item: NoteItem, folderIcon: String? = nil) -> some View {
+        ItemRowView(
+            item: item,
+            selectedItem: vault.selectedItem,
+            onSelect: { selected in
+                vault.selectNote(selected)
+            },
+            onRename: { target in
+                renamingItem = target
+                renameText = target.displayName
+                showingRenameAlert = true
+            },
+            onDelete: { target in
+                try? vault.deleteFile(relativePath: target.relativePath)
+            },
+            onMove: { sourcePath, targetDirectory in
+                try? vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: targetDirectory)
+            },
+            folderIcon: folderIcon
+        )
+    }
     
     private var fileTreeList: some View {
         ScrollView {
@@ -207,25 +229,31 @@ public struct SidebarView: View {
                         .padding(.vertical, 4)
                 }
                 
-                ForEach(vault.rootItems) { item in
-                    ItemRowView(
-                        item: item,
-                        selectedItem: vault.selectedItem,
-                        onSelect: { selected in
-                            vault.selectNote(selected)
-                        },
-                        onRename: { target in
-                            renamingItem = target
-                            renameText = target.displayName
-                            showingRenameAlert = true
-                        },
-                        onDelete: { target in
-                            try? vault.deleteFile(relativePath: target.relativePath)
-                        },
-                        onMove: { sourcePath, targetDirectory in
-                            try? vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: targetDirectory)
-                        }
-                    )
+                let tree = VaultManager.splitAppFolders(vault.rootItems, appFolders: vault.appFolderNames)
+                ForEach(tree.user) { item in
+                    treeRow(item)
+                }
+
+                // Folders brain-md manages (Skills, attachments) sit below the user's own folders.
+                let appItems = tree.app
+                if !appItems.isEmpty {
+                    HStack(spacing: 6) {
+                        Text("App Folders")
+                            .font(.system(size: 10, weight: .semibold))
+                            .textCase(.uppercase)
+                            .foregroundColor(.secondary)
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.12))
+                            .frame(height: 1)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+                    .accessibilityAddTraits(.isHeader)
+                    ForEach(appItems) { item in
+                        treeRow(item, folderIcon: item.name.caseInsensitiveCompare(VaultManager.skillsFolderName) == .orderedSame
+                            ? "sparkles" : "paperclip")
+                    }
                 }
                 
                 // Vault Root drop zone at the bottom of the list for easy moving out of folders
@@ -526,6 +554,8 @@ private struct ItemRowView: View {
     let onRename: (NoteItem) -> Void
     let onDelete: (NoteItem) -> Void
     let onMove: (String, String) -> Void
+    /// Replaces the folder icon, for app folders.
+    var folderIcon: String? = nil
     
     @State private var isExpanded = true
     @State private var isDropTargeted = false
@@ -553,7 +583,7 @@ private struct ItemRowView: View {
                 },
                 label: {
                     HStack(spacing: 6) {
-                        Image(systemName: isDropTargeted ? "folder.badge.plus" : item.iconName)
+                        Image(systemName: isDropTargeted ? "folder.badge.plus" : folderIcon ?? item.iconName)
                             .foregroundColor(isDropTargeted ? .accentColor : .secondary)
                             .font(.system(size: 13))
                         Text(item.displayName)
