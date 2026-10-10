@@ -47,6 +47,35 @@ nonisolated public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     public var isDiarizer: Bool { if case .diarizer = kind { true } else { false } }
     public var supportsVision: Bool { if case .language(let vision, _) = kind { vision } else { false } }
     public var supportsAudio: Bool { if case .language(_, let audio) = kind { audio } else { false } }
+
+    /// What the model can do, shown as bubbles in Settings.
+    public struct Capability: Hashable, Sendable {
+        public let label: String
+        /// SF Symbol.
+        public let symbol: String
+
+        public static let text = Capability(label: "Text", symbol: "text.alignleft")
+        public static let images = Capability(label: "Images", symbol: "photo")
+        public static let speech = Capability(label: "Speech", symbol: "waveform")
+        public static let speechToText = Capability(label: "Speech to Text", symbol: "waveform")
+        public static let live = Capability(label: "Live", symbol: "dot.radiowaves.left.and.right")
+        public static let base = Capability(label: "Base", symbol: "square.stack.3d.down.right")
+        public static func speakers(_ count: Int) -> Capability {
+            Capability(label: "Up to \(count) speakers", symbol: "person.2.wave.2")
+        }
+    }
+
+    /// Inputs first (text, images, speech), then qualifiers (live, base).
+    public var capabilities: [Capability] {
+        switch kind {
+        case .language(let vision, let audio):
+            [.text] + (vision ? [.images] : []) + (audio ? [.speech] : []) + (isInstructionTuned ? [] : [.base])
+        case .speech(_, let streaming):
+            [.speechToText] + (streaming ? [.live] : [])
+        case .diarizer(let maxSpeakers):
+            [.speakers(maxSpeakers)]
+        }
+    }
 }
 
 nonisolated public enum ModelCatalog {

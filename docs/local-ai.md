@@ -104,8 +104,8 @@ The Transcription Language setting applies to Apple Speech and Whisper (which ot
 **Settings › Local AI & Voice**
 
 - **Enable on-device AI** turns the MLX models on. Turning it off unloads them and asks whether to delete their files.
-- **Language Model** lists every language model with size, licence and capabilities: **Download**, **Use** and delete. One is active; switching unloads the previous one.
-- **Speech Recognition** lists the speech models; **No speech model** means Gemma 4 E4B or Apple Speech (see [Speech engines](#speech-engines)). **Transcription Language** defaults to the system language.
+- **Language Model** lists every language model with size, licence and capability bubbles (**Text**, **Images**, **Speech**, **Base**): **Download**, **Use** and delete. One is active; switching unloads the previous one.
+- **Speech Recognition** lists the speech models (bubbles **Speech to Text**, and **Live** for streaming models); **No speech model** means Gemma 4 E4B or Apple Speech (see [Speech engines](#speech-engines)). **Transcription Language** defaults to the system language.
 - **Speaker Identification** downloads Sortformer and turns **Identify Speakers** on or off.
 - **Instructions & Skills** set custom instructions and manage skills (see above).
 - **Capture Incoming System Audio** / **Capture Microphone Audio** choose the meeting sources; **Visual Diagram Comprehension** shows or hides Explain Screen.

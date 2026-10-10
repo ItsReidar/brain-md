@@ -76,6 +76,17 @@ struct ModelCatalogTests {
         }
     }
 
+    @Test func capabilitiesListTextFirstForEveryLanguageModel() throws {
+        func labels(_ id: String) throws -> [String] { try #require(ModelCatalog.model(id)).capabilities.map(\.label) }
+        #expect(ModelCatalog.languageModels.allSatisfy { $0.capabilities.first == .text })
+        #expect(try labels("gemma-4-e4b-qat") == ["Text", "Images", "Speech"])
+        #expect(try labels("gemma-4-e2b-base") == ["Text", "Images", "Base"])
+        #expect(try labels("mistral-7b-4bit") == ["Text"])
+        #expect(try labels("nemotron-3.5-streaming-8bit") == ["Speech to Text", "Live"])
+        #expect(try labels("whisper-small") == ["Speech to Text"])
+        #expect(try labels("sortformer-4spk-v2.1") == ["Up to 4 speakers"])
+    }
+
     @Test func baseModelsShipABundledChatTemplate() throws {
         let base = ModelCatalog.languageModels.filter { !$0.isInstructionTuned }
         #expect(Set(base.map(\.id)) == ["gemma-4-e4b-base", "gemma-4-e2b-base"])

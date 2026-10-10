@@ -31,12 +31,15 @@ struct ModelRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(model.displayName).font(.system(size: 13, weight: .medium))
-                    ForEach(badges, id: \.self) { badge in
-                        Text(badge)
+                    ForEach(model.capabilities, id: \.self) { capability in
+                        Label(capability.label, systemImage: capability.symbol)
+                            .labelStyle(.titleAndIcon)
+                            .imageScale(.small)
                             .font(.system(size: 10, weight: .medium))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.primary.opacity(0.07)))
+                            .fixedSize()
                     }
                 }
                 Text(model.summary)
@@ -67,16 +70,8 @@ struct ModelRow: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(model.displayName)\(isSelected ? ", selected" : "")")
-    }
-
-    private var badges: [String] {
-        switch model.kind {
-        case .language(let vision, let audio):
-            (model.isInstructionTuned ? [] : ["Base"]) + (vision ? ["Images"] : []) + (audio ? ["Speech"] : [])
-        case .speech(_, let streaming): streaming ? ["Live"] : []
-        case .diarizer(let maxSpeakers): ["Up to \(maxSpeakers)"]
-        }
+        .accessibilityLabel("\(model.displayName)\(isSelected ? ", selected" : ""), "
+            + model.capabilities.map(\.label).joined(separator: ", "))
     }
 
     @ViewBuilder
