@@ -1441,7 +1441,7 @@ public struct LocalAISettingsPane: View {
       SettingsCard(
         title: "Speaker Identification",
         footer: "Labels up to four voices on the call as Speaker 1–4; your microphone is always “Me”. "
-          + "Without it, call audio is labelled “Them”."
+          + "Works with a speech model or Gemma 4 E4B, not with Apple Speech. Without it, call audio is labelled “Them”."
       ) {
         ModelRow(
           model: diarizer, isSelected: false, isSelectable: false,
