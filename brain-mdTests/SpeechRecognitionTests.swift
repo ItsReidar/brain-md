@@ -45,6 +45,13 @@ struct SpeechEngineTests {
         #expect(resolve(speech: nemotron, language: gemma, installed: all, hardware: false) == .appleSpeech)
     }
 
+    @Test func baseModelsHearButNeverTranscribeMeetings() throws {
+        let base = try #require(ModelCatalog.model("gemma-4-e4b-base"))
+        #expect(base.supportsAudio)
+        #expect(resolve(speech: nil, language: base, installed: [base.id]) == .appleSpeech)
+        #expect(resolve(speech: nemotron, language: base, installed: [base.id, nemotron.id]) == .speechModel(nemotron))
+    }
+
     @Test func aLanguageModelIsNeverUsedAsTheSpeechModel() {
         #expect(resolve(speech: gemma, language: qwen, installed: [gemma.id, qwen.id]) == .appleSpeech)
     }
@@ -80,7 +87,7 @@ struct ModelCatalogTests {
         func labels(_ id: String) throws -> [String] { try #require(ModelCatalog.model(id)).capabilities.map(\.label) }
         #expect(ModelCatalog.languageModels.allSatisfy { $0.capabilities.first == .text })
         #expect(try labels("gemma-4-e4b-qat") == ["Text", "Images", "Speech"])
-        #expect(try labels("gemma-4-e2b-base") == ["Text", "Images", "Base"])
+        #expect(try labels("gemma-4-e2b-base") == ["Text", "Images", "Speech", "Base"])
         #expect(try labels("mistral-7b-4bit") == ["Text"])
         #expect(try labels("nemotron-3.5-streaming-8bit") == ["Speech to Text", "Live"])
         #expect(try labels("whisper-small") == ["Speech to Text"])
@@ -95,12 +102,14 @@ struct ModelCatalogTests {
             let template = try #require(ChatTemplates.template(named: name), "\(name).jinja isn't in the app bundle")
             #expect(template.contains("<|turn>") && template.contains("bos_token"))
         }
-        // Base models never transcribe meetings, even though their checkpoints include the audio tower.
-        #expect(base.allSatisfy { !$0.supportsAudio })
+        // Their checkpoints include the audio tower, so they show Speech.
+        let allHear = base.allSatisfy(\.supportsAudio)
+        #expect(allHear)
     }
 
     @Test func onlyGemma4E4BHearsAudio() {
-        #expect(ModelCatalog.languageModels.filter(\.supportsAudio).map(\.id) == ["gemma-4-e4b-qat"])
+        #expect(ModelCatalog.languageModels.filter(\.supportsAudio).map(\.id)
+            == ["gemma-4-e4b-qat", "gemma-4-e4b-base", "gemma-4-e2b-base"])
     }
 }
 

@@ -11,7 +11,8 @@ import Foundation
 /// One downloadable MLX model.
 nonisolated public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     public enum Kind: Hashable, Sendable {
-        /// Chat and note tasks. `vision` enables Explain Screen; `audio` lets the model transcribe speech.
+        /// Chat and note tasks. `vision`: the model takes images (Explain Screen). `audio`: it takes
+        /// speech; meetings use it only when it's also instruction-tuned.
         case language(vision: Bool, audio: Bool)
         /// Speech recognition through mlx-audio-swift. `engine` is the mlx-audio model type;
         /// `streaming` engines emit words while someone is still talking.
@@ -107,9 +108,9 @@ nonisolated public enum ModelCatalog {
             summary: "Google · images · not instruction-tuned: continues text, follows instructions loosely",
             repo: "mlx-community/gemma-4-e4b-4bit",
             revision: "1560521ede4c3196854c19b6a77fcc2db8d4e289",
-            // Its checkpoint has the audio tower, but a base model doesn't reliably follow
-            // "transcribe this", so meetings never fall back to it.
-            kind: .language(vision: true, audio: false), approximateBytes: 5_249_794_027,
+            // Hears audio (its checkpoint has the audio tower), but as a base model it doesn't reliably
+            // follow "transcribe this", so `SpeechEngine` never uses it for meetings.
+            kind: .language(vision: true, audio: true), approximateBytes: 5_249_794_027,
             license: "Apache-2.0", extraEOSTokens: ["<turn|>"],
             isInstructionTuned: false, fallbackChatTemplate: "gemma4"),
         ModelDescriptor(
@@ -117,7 +118,7 @@ nonisolated public enum ModelCatalog {
             summary: "Google · images · smallest Gemma, not instruction-tuned",
             repo: "mlx-community/gemma-4-e2b-4bit",
             revision: "a280baf4aece348bd0f561ca43b9d47cc66d8498",
-            kind: .language(vision: true, audio: false), approximateBytes: 3_613_513_088,
+            kind: .language(vision: true, audio: true), approximateBytes: 3_613_513_088,
             license: "Apache-2.0", extraEOSTokens: ["<turn|>"],
             isInstructionTuned: false, fallbackChatTemplate: "gemma4"),
         ModelDescriptor(

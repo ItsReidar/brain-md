@@ -80,7 +80,7 @@ The five default skills are written the first time on-device AI is used with a v
 Each recording picks its engine when it starts, from what's installed:
 
 1. **The speech model selected in Settings**, if it's downloaded. Fastest, and the only option with words appearing while people talk (streaming models).
-2. **Otherwise the active language model, if it can hear:** Gemma 4 E4B. It reuses the model already in memory, but it's slower and shows each passage when the speaker pauses.
+2. **Otherwise the active language model, if it can hear and is instruction-tuned:** Gemma 4 E4B (not the Base models). It reuses the model already in memory, but it's slower and shows each passage when the speaker pauses.
 3. **Otherwise Apple Speech** (SpeechAnalyzer), built into macOS.
 
 MLX engines need on-device AI turned on and Apple Silicon. Settings › Speech Recognition says which engine meetings will use, and why.
@@ -136,7 +136,7 @@ Every model is an MLX conversion on Hugging Face, defined by one entry in `Servi
 | Ministral 3 3B | `mlx-community/Ministral-3-3B-Instruct-2512-8bit` | 4.5 GB | ✓ |  | Apache-2.0 |
 | Mistral 7B v0.3 (4-bit / 8-bit) | `mlx-community/Mistral-7B-Instruct-v0.3-{4bit,8bit}` | 4.1 / 7.7 GB |  |  | Apache-2.0 |
 
-Vision-capable architectures load through mlx-swift-lm's VLM factory, Mistral 7B through the LLM factory. Gemma 4 E4B is the quantization-aware-trained 4-bit conversion; the "qat-mobile" export uses mixed 2/4-bit weights mlx-swift-lm can't load. The **Base** models are pretrained checkpoints, not instruction-tuned: they continue text and follow instructions loosely, so expect rougher summaries and chat. They have no chat template, so brain-md uses Gemma 4's own (`Vendor/ChatTemplates/gemma4.jinja`, from the instruct E4B at the pinned revision; the tokenizers' vocabularies are identical). A catalog entry names such a template with `fallbackChatTemplate`. Their checkpoints include the audio tower, but meetings never fall back to a base model, because it doesn't reliably transcribe on request. Gemma 4 12B's audio path (`gemma4_unified`, mlx-swift-lm#400) isn't ported, so it doesn't transcribe.
+Vision-capable architectures load through mlx-swift-lm's VLM factory, Mistral 7B through the LLM factory. Gemma 4 E4B is the quantization-aware-trained 4-bit conversion; the "qat-mobile" export uses mixed 2/4-bit weights mlx-swift-lm can't load. The **Base** models are pretrained checkpoints, not instruction-tuned: they continue text and follow instructions loosely, so expect rougher summaries and chat. They have no chat template, so brain-md uses Gemma 4's own (`Vendor/ChatTemplates/gemma4.jinja`, from the instruct E4B at the pinned revision; the tokenizers' vocabularies are identical). A catalog entry names such a template with `fallbackChatTemplate`. Their checkpoints include the audio tower, so they show **Speech**, but meetings never fall back to a base model, because it doesn't reliably transcribe on request (`SpeechEngine` requires an instruction-tuned model). Gemma 4 12B's audio path (`gemma4_unified`, mlx-swift-lm#400) isn't ported, so it doesn't transcribe.
 
 ### Speech models
 

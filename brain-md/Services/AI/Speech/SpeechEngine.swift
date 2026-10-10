@@ -16,7 +16,8 @@ nonisolated public enum SpeechEngine: Equatable, Sendable {
     case appleSpeech
 
     /// Order: the selected speech model if it's installed, then the active language model if it can
-    /// hear and is installed, then Apple Speech. MLX engines need on-device AI turned on and Apple Silicon.
+    /// hear, is instruction-tuned (a base model doesn't reliably transcribe on request) and is
+    /// installed, then Apple Speech. MLX engines need on-device AI turned on and Apple Silicon.
     public static func resolve(
         selectedSpeechModel: ModelDescriptor?,
         activeLanguageModel: ModelDescriptor,
@@ -28,7 +29,7 @@ nonisolated public enum SpeechEngine: Equatable, Sendable {
         if let selectedSpeechModel, selectedSpeechModel.isSpeechModel, isInstalled(selectedSpeechModel) {
             return .speechModel(selectedSpeechModel)
         }
-        if activeLanguageModel.supportsAudio, isInstalled(activeLanguageModel) {
+        if activeLanguageModel.supportsAudio, activeLanguageModel.isInstructionTuned, isInstalled(activeLanguageModel) {
             return .languageModel(activeLanguageModel)
         }
         return .appleSpeech
