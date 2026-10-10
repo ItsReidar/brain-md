@@ -80,11 +80,25 @@ struct ModelStoreTests {
         let snapshot = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: snapshot) }
 
+        try write("config.json", in: snapshot, contents: "{}")
+        try write("model.safetensors", in: snapshot, contents: "weights")
+
         try store.linkForMLXAudio(nemotron, snapshot: snapshot)
-        let link = directory.appendingPathComponent("mlx-audio/mlx-community_nemotron-3.5-asr-streaming-0.6b-8bit")
-        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == snapshot.path)
-        try store.linkForMLXAudio(nemotron, snapshot: snapshot) // relinking replaces it
-        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == snapshot.path)
+        let folder = directory.appendingPathComponent("mlx-audio/mlx-community_nemotron-3.5-asr-streaming-0.6b-8bit")
+        // A real folder with a link per file: mlx-audio can list it, and deleting it leaves the snapshot.
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: folder.path)) == nil)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: folder.appendingPathComponent("model.safetensors").path)
+            == snapshot.appendingPathComponent("model.safetensors").path)
+        #expect(try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).count == 2)
+        #expect(ModelStore.links(folder, toEveryFileIn: snapshot))
+
+        // A whole-folder link from an earlier version is replaced, without touching the snapshot.
+        try FileManager.default.removeItem(at: folder)
+        try FileManager.default.createSymbolicLink(at: folder, withDestinationURL: snapshot)
+        #expect(!ModelStore.links(folder, toEveryFileIn: snapshot))
+        try store.linkForMLXAudio(nemotron, snapshot: snapshot)
+        #expect(ModelStore.links(folder, toEveryFileIn: snapshot))
+        #expect(FileManager.default.fileExists(atPath: snapshot.appendingPathComponent("model.safetensors").path))
 
         try store.linkForMLXAudio(Self.gemma, snapshot: snapshot) // language models aren't linked
         #expect(!FileManager.default.fileExists(

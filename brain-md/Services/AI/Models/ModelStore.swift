@@ -179,6 +179,10 @@ public final class ModelStore: ObservableObject {
     /// mlx-audio-swift loads speech models by repository name from `<cache>/mlx-audio/<org>_<name>` and
     /// downloads the latest revision when that folder is missing. Linking the verified pinned snapshot
     /// there makes it load offline, at the revision brain-md pinned.
+    ///
+    /// The folder is real, with one link per file. A folder that's itself a link can fail to list
+    /// ("Not a directory"); mlx-audio then treats the model as incomplete and deletes its Hub cache
+    /// entry, which is the snapshot brain-md downloaded.
     func mlxAudioDirectory(of model: ModelDescriptor) -> URL {
         modelsDirectory.appendingPathComponent("mlx-audio", isDirectory: true)
             .appendingPathComponent(model.repo.replacingOccurrences(of: "/", with: "_"), isDirectory: true)
@@ -186,23 +190,37 @@ public final class ModelStore: ObservableObject {
 
     func linkForMLXAudio(_ model: ModelDescriptor, snapshot: URL) throws {
         guard model.isSpeechModel || model.isDiarizer else { return }
-        let link = mlxAudioDirectory(of: model)
+        let folder = mlxAudioDirectory(of: model)
         let fm = FileManager.default
-        try fm.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if (try? fm.destinationOfSymbolicLink(atPath: link.path)) != nil || fm.fileExists(atPath: link.path) {
-            try fm.removeItem(at: link)
+        if (try? fm.destinationOfSymbolicLink(atPath: folder.path)) != nil || fm.fileExists(atPath: folder.path) {
+            try fm.removeItem(at: folder) // removes only the links, never the snapshot's files
         }
-        try fm.createSymbolicLink(at: link, withDestinationURL: snapshot)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        for file in try fm.contentsOfDirectory(atPath: snapshot.path) {
+            try fm.createSymbolicLink(
+                atPath: folder.appendingPathComponent(file).path,
+                withDestinationPath: snapshot.appendingPathComponent(file).path)
+        }
     }
 
-    /// Re-creates a missing link, e.g. for a snapshot downloaded before linking existed.
+    /// Re-creates missing or outdated links, e.g. for a snapshot linked by an earlier version.
     func ensureMLXAudioLink(_ model: ModelDescriptor) throws -> URL {
         guard let snapshot = snapshotDirectory(of: model) else { throw LocalModelError.notDownloaded }
-        let link = mlxAudioDirectory(of: model)
-        if (try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) != snapshot.path {
+        if !Self.links(mlxAudioDirectory(of: model), toEveryFileIn: snapshot) {
             try linkForMLXAudio(model, snapshot: snapshot)
         }
         return snapshot
+    }
+
+    nonisolated static func links(_ folder: URL, toEveryFileIn snapshot: URL) -> Bool {
+        let fm = FileManager.default
+        guard (try? fm.destinationOfSymbolicLink(atPath: folder.path)) == nil,
+              let files = try? fm.contentsOfDirectory(atPath: snapshot.path), !files.isEmpty
+        else { return false }
+        return files.allSatisfy {
+            (try? fm.destinationOfSymbolicLink(atPath: folder.appendingPathComponent($0).path))
+                == snapshot.appendingPathComponent($0).path
+        }
     }
 
     // MARK: - Hardware
