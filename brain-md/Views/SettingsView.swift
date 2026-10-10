@@ -174,6 +174,7 @@ public struct SettingsView: View {
   @ObservedObject var vault: VaultManager
   @State private var selectedTab: SettingsTab = .general
   @State private var searchText = ""
+  @AppStorage(AIFeatures.key) private var showsAIFeatures = true
 
   @MainActor
   public init() {
@@ -185,11 +186,16 @@ public struct SettingsView: View {
     self.vault = vault
   }
 
+  /// Local AI & Voice is hidden while the AI Features switch is off.
+  private var visibleTabs: [SettingsTab] {
+    SettingsTab.allCases.filter { showsAIFeatures || $0 != .localAI }
+  }
+
   private var filteredTabs: [SettingsTab] {
     if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-      return SettingsTab.allCases
+      return visibleTabs
     }
-    return SettingsTab.allCases.filter {
+    return visibleTabs.filter {
       $0.rawValue.localizedCaseInsensitiveContains(searchText)
     }
   }
@@ -370,6 +376,7 @@ public struct GeneralSettingsPane: View {
   @AppStorage("autosave_debounce_seconds") private var autosaveDebounce: Double = 1.0
   @AppStorage("file_watcher_enabled") private var fileWatcherEnabled: Bool = true
   @AppStorage("mcp_autostart_on_launch") private var mcpAutostart: Bool = true
+  @AppStorage(AIFeatures.key) private var showsAIFeatures = true
 
   private var previewTitle: String {
     NoteTemplateEngine.resolveTitle(preset: noteTitleFormat, customFormat: customTitleFormat)
@@ -377,6 +384,25 @@ public struct GeneralSettingsPane: View {
 
   public var body: some View {
     VStack(spacing: 16) {
+      SettingsCard(
+        title: "AI Features",
+        footer: showsAIFeatures
+          ? "Turn off for a plain notes app. Nothing is deleted: downloaded models, skills and AI settings come back when you turn this on again."
+          : "Hidden: the ✨ menu, skills, AI Chat, Explain Screen, meeting recording and Local AI & Voice settings."
+      ) {
+        SettingsRow(
+          title: "Show AI features",
+          subtitle: "Skills, AI Chat, Explain Screen, meeting transcription and on-device models",
+          icon: "sparkles"
+        ) {
+          Toggle("", isOn: Binding(
+            get: { showsAIFeatures },
+            set: { $0 ? AIFeatures.turnOn() : AIFeatures.turnOff() }))
+            .toggleStyle(.switch)
+            .accessibilityLabel("Show AI features")
+        }
+      }
+
       SettingsCard(title: "Startup & New Notes") {
         // 1. Note Title Format
         SettingsRow(

@@ -16,6 +16,7 @@ struct AssistantChatView: View {
     @AppStorage(ModelSelection.languageModelKey) private var languageModelID = ModelCatalog.defaultLanguageModelID
     @ObservedObject private var skillLibrary = SkillLibrary.shared
     @AppStorage(ModelSelection.enabledKey) private var isAIEnabled = false
+    @AppStorage(AIFeatures.key) private var showsAIFeatures = true
     @AppStorage("ai_chat_include_note") private var includeNote = true
     @Environment(\.openSettings) private var openSettings
     @State private var draft = ""
@@ -26,7 +27,7 @@ struct AssistantChatView: View {
 
     private var isAvailable: Bool {
         _ = languageModelID // re-evaluate when the active model changes
-        return isAIEnabled && runtime.isActiveModelInstalled
+        return showsAIFeatures && isAIEnabled && runtime.isActiveModelInstalled
     }
 
     private var modelName: String { runtime.activeModel.displayName }
@@ -242,10 +243,11 @@ struct AssistantChatView: View {
     private var unavailable: some View {
         VStack(spacing: 12) {
             AssistantAvatar(size: 48).saturation(0.2)
-            Text(isAIEnabled ? "\(modelName) isn't downloaded yet" : "On-device AI is turned off")
+            Text(!showsAIFeatures ? "AI features are turned off"
+                : isAIEnabled ? "\(modelName) isn't downloaded yet" : "On-device AI is turned off")
                 .font(.system(size: 17, weight: .semibold))
-            Text(isAIEnabled
-                ? "Chat becomes available once the model has finished downloading."
+            Text(!showsAIFeatures ? "Turn them back on in Settings › General."
+                : isAIEnabled ? "Chat becomes available once the model has finished downloading."
                 : "Turn it on and pick a model to chat privately on this Mac.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)

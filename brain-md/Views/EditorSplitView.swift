@@ -45,6 +45,7 @@ public struct EditorSplitView: View {
     @AppStorage(ModelSelection.languageModelKey) private var languageModelID = ModelCatalog.defaultLanguageModelID
     @ObservedObject private var skillLibrary = SkillLibrary.shared
     @AppStorage(ModelSelection.enabledKey) private var isAIEnabled = false
+    @AppStorage(AIFeatures.key) private var showsAIFeatures = true
     @State private var aiRequest: AIResultRequest?
     @AppStorage("ai_capture_screen_diagrams") private var isScreenExplanationEnabled = true
     @Environment(\.openSettings) private var openSettings
@@ -430,7 +431,7 @@ public struct EditorSplitView: View {
             // Action Buttons in Top Right
             HStack(spacing: 4) {
                 // Model download progress (started from Settings)
-                if let download = activeDownload {
+                if showsAIFeatures, let download = activeDownload {
                     HStack(spacing: 6) {
                         ProgressView(value: download.state.progress)
                             .progressViewStyle(.linear)
@@ -446,56 +447,59 @@ public struct EditorSplitView: View {
                     .help("Downloading \(download.model.displayName) for on-device AI")
                 }
 
-                // Local AI Meeting Transcription & Screen Capture
-                ToolbarIconButton(
-                    icon: meetingRecorder.isRecording ? "record.circle.fill" : "waveform.and.mic",
-                    helpText: meetingRecorder.isRecording ? "Stop Recording the Meeting" : "Record and Transcribe a Meeting"
-                ) {
-                    toggleMeetingRecording()
-                }
-                .foregroundColor(meetingRecorder.isRecording ? .red : .primary)
-
-                // On-device AI actions (results open in a review sheet)
-                Menu {
-                    if isAIAvailable {
-                        let menuSkills = skillLibrary.skills(for: .menu)
-                        ForEach(menuSkills) { skill in
-                            Button { runSkill(skill) } label: {
-                                Label(skill.name, systemImage: skill.icon)
-                            }
-                        }
-                        if menuSkills.isEmpty {
-                            Text("No skills in the ✨ menu yet")
-                        }
-                        if isScreenExplanationEnabled {
-                            Divider()
-                            if runtime.activeModel.supportsVision {
-                                Menu("Explain Screen") {
-                                    Button("Screen Under Pointer") { explainScreen() }
-                                    Button("Choose Window, App or Display…") { explainChosenContent() }
-                                }
-                            } else {
-                                Button("Explain Screen (needs a model that sees images)") {}
-                                    .disabled(true)
-                            }
-                        }
-                        Divider()
-                        Button("AI Chat…") { openWindow(id: AssistantChatView.windowID) }
-                        Button("Manage Skills…") { openSettings() }
-                    } else {
-                        Button("Set Up On-Device AI…") { openSettings() }
+                // AI features, hidden by the master switch in Settings › General.
+                if showsAIFeatures {
+                    // Local AI Meeting Transcription & Screen Capture
+                    ToolbarIconButton(
+                        icon: meetingRecorder.isRecording ? "record.circle.fill" : "waveform.and.mic",
+                        helpText: meetingRecorder.isRecording ? "Stop Recording the Meeting" : "Record and Transcribe a Meeting"
+                    ) {
+                        toggleMeetingRecording()
                     }
-                } label: {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(isAIAvailable ? .purple : .secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(isAIAvailable ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
-                        .cornerRadius(5)
+                    .foregroundColor(meetingRecorder.isRecording ? .red : .primary)
+
+                    // On-device AI actions (results open in a review sheet)
+                    Menu {
+                        if isAIAvailable {
+                            let menuSkills = skillLibrary.skills(for: .menu)
+                            ForEach(menuSkills) { skill in
+                                Button { runSkill(skill) } label: {
+                                    Label(skill.name, systemImage: skill.icon)
+                                }
+                            }
+                            if menuSkills.isEmpty {
+                                Text("No skills in the ✨ menu yet")
+                            }
+                            if isScreenExplanationEnabled {
+                                Divider()
+                                if runtime.activeModel.supportsVision {
+                                    Menu("Explain Screen") {
+                                        Button("Screen Under Pointer") { explainScreen() }
+                                        Button("Choose Window, App or Display…") { explainChosenContent() }
+                                    }
+                                } else {
+                                    Button("Explain Screen (needs a model that sees images)") {}
+                                        .disabled(true)
+                                }
+                            }
+                            Divider()
+                            Button("AI Chat…") { openWindow(id: AssistantChatView.windowID) }
+                            Button("Manage Skills…") { openSettings() }
+                        } else {
+                            Button("Set Up On-Device AI…") { openSettings() }
+                        }
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(isAIAvailable ? .purple : .secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(isAIAvailable ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
+                            .cornerRadius(5)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .help(isAIAvailable ? "On-device AI (\(runtime.activeModel.displayName))" : aiUnavailableReason)
                 }
-                .menuStyle(.borderlessButton)
-                .help(isAIAvailable ? "On-device AI (\(runtime.activeModel.displayName))" : aiUnavailableReason)
 
                 // Export as PDF Button
                 ToolbarIconButton(
@@ -737,7 +741,7 @@ public struct EditorSplitView: View {
 
     private var isAIAvailable: Bool {
         _ = languageModelID // re-evaluate when the active model changes
-        return isAIEnabled && runtime.isActiveModelInstalled
+        return showsAIFeatures && isAIEnabled && runtime.isActiveModelInstalled
     }
 
     /// The first catalog model that's downloading, for the toolbar progress pill.

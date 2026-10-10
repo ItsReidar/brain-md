@@ -124,7 +124,7 @@ public final class SkillLibrary: ObservableObject {
             // `$rootItems` publishes before the property changes; read the files afterwards.
             Task { @MainActor in
                 guard let self else { return }
-                if self.defaults.bool(forKey: ModelSelection.enabledKey), !Self.isHostingTests {
+                if ModelSelection.isOnDeviceAIEnabled(self.defaults), !Self.isHostingTests {
                     self.seedDefaultsIfNeeded()
                 }
                 self.reload()

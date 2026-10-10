@@ -42,7 +42,7 @@ public final class LanguageModelService: ObservableObject {
     }
 
     public var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: ModelSelection.enabledKey)
+        ModelSelection.isOnDeviceAIEnabled()
     }
 
     /// Streams the model's answer for `request`. Cancelling the consuming task stops generation.

@@ -23,6 +23,11 @@ nonisolated public enum ModelSelection {
         ModelCatalog.model(defaults.string(forKey: speechModelKey)).flatMap { $0.isSpeechModel ? $0 : nil }
     }
 
+    /// Models may run: the AI Features master switch and "Enable on-device AI" are both on.
+    public static func isOnDeviceAIEnabled(_ defaults: UserDefaults = .standard) -> Bool {
+        AIFeatures.isOn(defaults) && defaults.bool(forKey: enabledKey)
+    }
+
     public static func identifiesSpeakers(_ defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: identifySpeakersKey) as? Bool ?? true
     }

@@ -82,8 +82,6 @@ struct brain_mdApp: App {
                 }
                 .keyboardShortcut("3", modifiers: [.command, .control])
 
-                Divider()
-
                 OpenAssistantChatButton()
             }
             
@@ -220,12 +218,16 @@ struct brain_mdApp: App {
     }
 }
 
-/// View › AI Chat (⇧⌘J). A view so it can read `openWindow` from the environment.
+/// View › AI Chat (⇧⌘J), hidden with the AI Features switch. A view so it can read `openWindow`.
 private struct OpenAssistantChatButton: View {
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(AIFeatures.key) private var showsAIFeatures = true
 
     var body: some View {
-        Button("AI Chat") { openWindow(id: AssistantChatView.windowID) }
-            .keyboardShortcut("j", modifiers: [.command, .shift])
+        if showsAIFeatures {
+            Divider()
+            Button("AI Chat") { openWindow(id: AssistantChatView.windowID) }
+                .keyboardShortcut("j", modifiers: [.command, .shift])
+        }
     }
 }

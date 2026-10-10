@@ -99,6 +99,10 @@ Apple Speech uses **SpeechTranscriber**, the long-form model built for meetings,
 
 The Transcription Language setting applies to Apple Speech and Whisper (which otherwise might translate). Nemotron, Parakeet, Orukeet, Voxtral and Gemma detect the language themselves. Nemotron, Parakeet and Orukeet cover 25 European languages including Dutch, Voxtral 13, Whisper 99.
 
+## Turning AI off
+
+**Settings › General › AI Features › Show AI features** is a master switch for people who just want a notes app. Off hides the ✨ menu (skills, Explain Screen, AI Chat), View › AI Chat (⇧⌘J), the meeting record button, the model download indicator, the Skills folder in the sidebar and the Local AI & Voice settings. Turning it off also stops a recording in progress (the transcript so far stays in the note), cancels model downloads, stops a chat answer and unloads the model. Nothing is deleted: models, skill files and AI settings return when it's switched back on. It's on by default. The MCP server isn't affected; it has its own setting.
+
 ## Setup
 
 **Settings › Local AI & Voice**

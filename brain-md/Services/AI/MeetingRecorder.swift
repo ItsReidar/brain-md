@@ -41,7 +41,7 @@ public final class MeetingRecorder: ObservableObject {
         SpeechEngine.resolve(
             selectedSpeechModel: ModelSelection.speechModel(defaults),
             activeLanguageModel: ModelSelection.languageModel(defaults),
-            isAIEnabled: defaults.bool(forKey: ModelSelection.enabledKey),
+            isAIEnabled: ModelSelection.isOnDeviceAIEnabled(defaults),
             isInstalled: { self.store.isInstalled($0) })
     }
 
