@@ -72,7 +72,8 @@ struct ModelRow: View {
 
     private var badges: [String] {
         switch model.kind {
-        case .language(let vision, let audio): (vision ? ["Images"] : []) + (audio ? ["Speech"] : [])
+        case .language(let vision, let audio):
+            (model.isInstructionTuned ? [] : ["Base"]) + (vision ? ["Images"] : []) + (audio ? ["Speech"] : [])
         case .speech(_, let streaming): streaming ? ["Live"] : []
         case .diarizer(let maxSpeakers): ["Up to \(maxSpeakers)"]
         }

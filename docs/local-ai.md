@@ -130,12 +130,13 @@ Every model is an MLX conversion on Hugging Face, defined by one entry in `Servi
 | Model | Repository | Size | Images | Speech | Licence |
 |---|---|---|---|---|---|
 | Gemma 4 E4B (default) | `mlx-community/gemma-4-E4B-it-qat-4bit` | 6.8 GB | ✓ | ✓ | Apache-2.0 |
+| Gemma 4 E4B Base / E2B Base | `mlx-community/gemma-4-{e4b,e2b}-4bit` | 5.2 / 3.6 GB | ✓ |  | Apache-2.0 |
 | Gemma 4 12B | `mlx-community/gemma-4-12B-it-4bit` | 6.8 GB | ✓ |  | Apache-2.0 |
 | Qwen3.5 9B / 4B / 2B | `mlx-community/Qwen3.5-{9B,4B,2B}-MLX-4bit` | 6.0 / 3.1 / 1.7 GB | ✓ |  | Apache-2.0 |
 | Ministral 3 3B | `mlx-community/Ministral-3-3B-Instruct-2512-8bit` | 4.5 GB | ✓ |  | Apache-2.0 |
 | Mistral 7B v0.3 (4-bit / 8-bit) | `mlx-community/Mistral-7B-Instruct-v0.3-{4bit,8bit}` | 4.1 / 7.7 GB |  |  | Apache-2.0 |
 
-Vision-capable architectures load through mlx-swift-lm's VLM factory, Mistral 7B through the LLM factory. Gemma 4 E4B is the quantization-aware-trained 4-bit conversion; the "qat-mobile" export uses mixed 2/4-bit weights mlx-swift-lm can't load. Gemma 4 12B's audio path (`gemma4_unified`, mlx-swift-lm#400) isn't ported, so it doesn't transcribe.
+Vision-capable architectures load through mlx-swift-lm's VLM factory, Mistral 7B through the LLM factory. Gemma 4 E4B is the quantization-aware-trained 4-bit conversion; the "qat-mobile" export uses mixed 2/4-bit weights mlx-swift-lm can't load. The **Base** models are pretrained checkpoints, not instruction-tuned: they continue text and follow instructions loosely, so expect rougher summaries and chat. They have no chat template, so brain-md uses Gemma 4's own (`Vendor/ChatTemplates/gemma4.jinja`, from the instruct E4B at the pinned revision; the tokenizers' vocabularies are identical). A catalog entry names such a template with `fallbackChatTemplate`. Their checkpoints include the audio tower, but meetings never fall back to a base model, because it doesn't reliably transcribe on request. Gemma 4 12B's audio path (`gemma4_unified`, mlx-swift-lm#400) isn't ported, so it doesn't transcribe.
 
 ### Speech models
 

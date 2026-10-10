@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import MLXLMCommon
 import Testing
 @testable import brain_md
 
@@ -40,12 +41,45 @@ struct CatalogConfigCheckTests {
         switch model.kind {
         case .language:
             #expect(files.contains("tokenizer.json"), "\(model.id) has no tokenizer.json")
+            if model.fallbackChatTemplate == nil {
+                let tokenizerConfig = try await Self.json(
+                    "https://huggingface.co/\(model.repo)/resolve/\(model.revision)/tokenizer_config.json")
+                #expect(files.contains("chat_template.jinja") || tokenizerConfig["chat_template"] != nil,
+                        "\(model.id) has no chat template; give it a fallbackChatTemplate")
+            }
             #expect(type.map(Self.languageTypes.contains) == true, "\(model.id): \(type ?? "nil")")
         case .speech(let engine, _):
             #expect(Self.speechTypes[engine]?.contains(type) == true, "\(model.id): \(type ?? "nil")")
         case .diarizer(let maxSpeakers):
             #expect(type == "sortformer", "\(model.id): \(type ?? "nil")")
             #expect(config["num_speakers"] as? Int == maxSpeakers, "\(model.id)")
+        }
+    }
+
+    /// Base checkpoints have no chat template: the bundled one renders Gemma turns with their tokenizer.
+    @Test(arguments: ModelCatalog.languageModels.filter { $0.fallbackChatTemplate != nil })
+    func fallbackChatTemplateRendersWithTheModelsTokenizer(_ model: ModelDescriptor) async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for file in ["tokenizer.json", "tokenizer_config.json"] {
+            let url = URL(string: "https://huggingface.co/\(model.repo)/resolve/\(model.revision)/\(file)")!
+            try await URLSession.shared.data(from: url).0.write(to: folder.appendingPathComponent(file))
+        }
+        let template = try #require(ChatTemplates.template(named: model.fallbackChatTemplate!))
+        let tokenizer = try await TransformersTokenizerLoader(fallbackChatTemplate: template).load(from: folder)
+        let tokens = try tokenizer.applyChatTemplate(
+            messages: [["role": "system", "content": "Be brief."], ["role": "user", "content": "Hallo!"]],
+            tools: nil, additionalContext: nil)
+        let text = tokenizer.decode(tokenIds: tokens, skipSpecialTokens: false)
+        #expect(text.hasPrefix("<bos><|turn>system\nBe brief.<turn|>"), "\(text)")
+        #expect(text.contains("<|turn>user\nHallo!<turn|>"), "\(text)")
+        #expect(text.hasSuffix("<|turn>model\n"), "\(text)")
+        #expect(tokens.filter { $0 == 2 }.count == 1, "exactly one <bos>")
+        // Without the fallback the model couldn't chat at all.
+        #expect(throws: (any Error).self) {
+            try TransformersTokenizer(upstream: (tokenizer as! TransformersTokenizer).upstream)
+                .applyChatTemplate(messages: [["role": "user", "content": "Hi"]], tools: nil, additionalContext: nil)
         }
     }
 }

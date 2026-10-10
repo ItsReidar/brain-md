@@ -35,6 +35,11 @@ nonisolated public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     public let license: String
     /// Stop strings some chat templates need besides the tokenizer's end-of-sequence token.
     public var extraEOSTokens: [String] = []
+    /// False for base (pretrained) checkpoints: they continue text rather than follow instructions.
+    public var isInstructionTuned = true
+    /// A chat template bundled with the app (`Vendor/ChatTemplates/<name>.jinja`) for models whose
+    /// tokenizer has none, such as base checkpoints.
+    public var fallbackChatTemplate: String?
     public var downloadPatterns = ["*.safetensors", "*.json", "*.jinja", "*.txt", "*.model", "*.vocab"]
 
     public var isLanguageModel: Bool { if case .language = kind { true } else { false } }
@@ -68,6 +73,24 @@ nonisolated public enum ModelCatalog {
             revision: "0f35c6f6d386f7f74e628bd7c6526ce531212300",
             kind: .language(vision: true, audio: true), approximateBytes: 6_830_818_938,
             license: "Apache-2.0", extraEOSTokens: ["<turn|>"]),
+        ModelDescriptor(
+            id: "gemma-4-e4b-base", displayName: "Gemma 4 E4B Base",
+            summary: "Google · images · not instruction-tuned: continues text, follows instructions loosely",
+            repo: "mlx-community/gemma-4-e4b-4bit",
+            revision: "1560521ede4c3196854c19b6a77fcc2db8d4e289",
+            // Its checkpoint has the audio tower, but a base model doesn't reliably follow
+            // "transcribe this", so meetings never fall back to it.
+            kind: .language(vision: true, audio: false), approximateBytes: 5_249_794_027,
+            license: "Apache-2.0", extraEOSTokens: ["<turn|>"],
+            isInstructionTuned: false, fallbackChatTemplate: "gemma4"),
+        ModelDescriptor(
+            id: "gemma-4-e2b-base", displayName: "Gemma 4 E2B Base",
+            summary: "Google · images · smallest Gemma, not instruction-tuned",
+            repo: "mlx-community/gemma-4-e2b-4bit",
+            revision: "a280baf4aece348bd0f561ca43b9d47cc66d8498",
+            kind: .language(vision: true, audio: false), approximateBytes: 3_613_513_088,
+            license: "Apache-2.0", extraEOSTokens: ["<turn|>"],
+            isInstructionTuned: false, fallbackChatTemplate: "gemma4"),
         ModelDescriptor(
             id: "gemma-4-12b", displayName: "Gemma 4 12B",
             summary: "Google · images · highest quality, needs about 9 GB free",

@@ -76,6 +76,18 @@ struct ModelCatalogTests {
         }
     }
 
+    @Test func baseModelsShipABundledChatTemplate() throws {
+        let base = ModelCatalog.languageModels.filter { !$0.isInstructionTuned }
+        #expect(Set(base.map(\.id)) == ["gemma-4-e4b-base", "gemma-4-e2b-base"])
+        for model in base {
+            let name = try #require(model.fallbackChatTemplate, "\(model.id)")
+            let template = try #require(ChatTemplates.template(named: name), "\(name).jinja isn't in the app bundle")
+            #expect(template.contains("<|turn>") && template.contains("bos_token"))
+        }
+        // Base models never transcribe meetings, even though their checkpoints include the audio tower.
+        #expect(base.allSatisfy { !$0.supportsAudio })
+    }
+
     @Test func onlyGemma4E4BHearsAudio() {
         #expect(ModelCatalog.languageModels.filter(\.supportsAudio).map(\.id) == ["gemma-4-e4b-qat"])
     }

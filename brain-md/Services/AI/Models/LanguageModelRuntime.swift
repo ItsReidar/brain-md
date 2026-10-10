@@ -67,8 +67,13 @@ public final class LanguageModelRuntime: ObservableObject {
             directory: directory, defaultPrompt: "Describe the image in English",
             extraEOSTokens: Set(model.extraEOSTokens))
         let downloader = HubDownloader(client: HubClient(cache: store.hubCache))
+        let fallbackChatTemplate = try model.fallbackChatTemplate.map { name in
+            guard let template = ChatTemplates.template(named: name) else { throw LocalModelError.unknownModel(name) }
+            return template
+        }
         let task = Task {
-            var context = try await Self.loadContext(configuration, downloader: downloader)
+            var context = try await Self.loadContext(
+                configuration, downloader: downloader, fallbackChatTemplate: fallbackChatTemplate)
             context.processor = TextMaskDroppingProcessor(base: context.processor)
             return ModelContainer(context: context)
         }
@@ -85,15 +90,16 @@ public final class LanguageModelRuntime: ObservableObject {
     /// Vision-capable architectures load through the VLM factory, text-only ones (Mistral) through
     /// the LLM factory. Gemma 4's audio-capable copy is registered first.
     nonisolated static func loadContext(
-        _ configuration: ModelConfiguration, downloader: some Downloader
+        _ configuration: ModelConfiguration, downloader: some Downloader, fallbackChatTemplate: String? = nil
     ) async throws -> ModelContext {
         await BrainGemma4Registration.register()
+        let tokenizerLoader = TransformersTokenizerLoader(fallbackChatTemplate: fallbackChatTemplate)
         do {
             return try await VLMModelFactory.shared.load(
-                from: downloader, using: TransformersTokenizerLoader(), configuration: configuration)
+                from: downloader, using: tokenizerLoader, configuration: configuration)
         } catch ModelFactoryError.unsupportedModelType {
             return try await LLMModelFactory.shared.load(
-                from: downloader, using: TransformersTokenizerLoader(), configuration: configuration)
+                from: downloader, using: tokenizerLoader, configuration: configuration)
         }
     }
 
