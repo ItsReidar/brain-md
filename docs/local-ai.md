@@ -158,7 +158,7 @@ mlx-swift-lm 3.32.3 drops Gemma 4's `audio_tower` weights. brain-md carries an a
 ### Download, storage and memory
 
 - **Pinned revisions:** every download is pinned to a commit. swift-transformers still depends on yyjson 0.12.0 ([GHSA-f4vc-345x-4mvm](https://github.com/advisories/GHSA-f4vc-345x-4mvm)), which parses the models' JSON files, so only known file sets are ever parsed. Unpin once [huggingface/swift-transformers#392](https://github.com/huggingface/swift-transformers/pull/392) ships (`TODO` in `ModelCatalog`).
-- **Storage:** `~/Library/Application Support/brain-md/models`, in the Hugging Face cache layout. Speech models and Sortformer are also linked under `models/mlx-audio/`, where mlx-audio-swift looks, so they load offline at the pinned revision.
+- **Storage:** `~/Library/Application Support/brain-md/models`, in the Hugging Face cache layout. Speech models and Sortformer are also linked under `models/mlx-audio/`, where mlx-audio-swift looks, so they load offline at the pinned revision. That folder is real with one link per file: when mlx-audio can't list a model folder it deletes the model's cache entry, which would be the downloaded snapshot.
 - **Memory:** loading a language model checks that about 1.2× its size is free and fails with a clear message otherwise. It loads on first use and unloads after five idle minutes. A speech model loads when a recording starts.
 - **Speed** (Gemma 4 E4B, M2 Pro, `LanguageModelBenchmarkTests`): about 31 tokens/s generated and 550–730 tokens/s of prompt read; loading takes about 4 s. Follow-up chat messages reuse the conversation's KV cache (about 0.2 s to the first word). mlx-swift-lm 3.32.3's Gemma 4 processor attaches an all-ones attention mask to every prompt, which disables that reuse; `TextMaskDroppingProcessor` in `HubAdapters.swift` drops it for text-only prompts.
 - **Apple Silicon only:** MLX runs on Apple Silicon GPUs; on an Intel Mac only Apple Speech is available.
@@ -202,6 +202,7 @@ Unit tests cover prompts, the catalog, engine choice (all fallback cases), utter
 | `BRAINMD_SPEECH_INTEGRATION=1` | Apple Speech in English and Dutch | Ellen and Xander voices; downloads Apple's Dutch model once |
 | `BRAINMD_MLX_SPEECH_INTEGRATION=1` | Nemotron (English with live words, Dutch), Sortformer telling two voices apart, Gemma through the meeting pipeline, Nemotron vs Apple Speech latency | Downloads Nemotron 8-bit (0.76 GB) and Sortformer (0.24 GB) if missing |
 | `BRAINMD_QWEN_INTEGRATION=1` | Qwen3.5 2B chat, follow-up turn and image | Downloads Qwen3.5 2B (1.75 GB) if missing |
+| `BRAINMD_ORUKEET_DIR=<folder>` | A converted Orukeet transcribes English and Dutch before it's uploaded | Output of `convert_orukeet.py` |
 | `BRAINMD_CATALOG_CHECK=1` | Every catalog entry exists at its revision with safetensors and a supported `model_type` | Network; reads file lists and `config.json` only |
 | `BRAINMD_MODEL_BENCHMARK=1` | Language model speed | Gemma 4 E4B downloaded |
 
