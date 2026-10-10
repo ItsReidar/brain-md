@@ -97,7 +97,7 @@ With **Sortformer** downloaded and **Identify Speakers** on, call audio is diari
 
 Apple Speech uses **SpeechTranscriber**, the long-form model built for meetings, when it supports the language (English, French, German, Spanish and others), and falls back to **DictationTranscriber**, which supports more, including **Dutch** (`nl_BE` and `nl_NL`). A requested region the engines don't have maps to the language's main region (English in Belgium → `en_US`).
 
-The Transcription Language setting applies to Apple Speech and Whisper (which otherwise might translate). Nemotron, Parakeet, Voxtral and Gemma detect the language themselves. Nemotron, Parakeet and Orukeet cover 25 European languages including Dutch, Voxtral 13, Whisper 99.
+The Transcription Language setting applies to Apple Speech and Whisper (which otherwise might translate). Nemotron, Parakeet, Orukeet, Voxtral and Gemma detect the language themselves. Nemotron, Parakeet and Orukeet cover 25 European languages including Dutch, Voxtral 13, Whisper 99.
 
 ## Setup
 
@@ -143,13 +143,14 @@ Vision-capable architectures load through mlx-swift-lm's VLM factory, Mistral 7B
 |---|---|---|---|---|
 | Nemotron 3.5 Streaming (8-bit / full) | `mlx-community/nemotron-3.5-asr-streaming-0.6b{-8bit,}` | 0.76 / 1.3 GB | ✓ | NVIDIA Open Model License |
 | Parakeet TDT v3 | `mlx-community/parakeet-tdt-0.6b-v3` | 2.5 GB |  | CC-BY-4.0 |
+| Orukeet | `itsreidar/orukeet-mlx` | 1.3 GB |  | CC-BY-SA-4.0 |
 | Voxtral Mini Realtime | `mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit` | 3.1 GB | ✓ | Apache-2.0 |
 | Whisper Large v3 Turbo / Large v3 / Small / Base | `mlx-community/whisper-*-asr-fp16` | 1.6 / 3.1 / 0.49 / 0.15 GB |  | MIT / Apache-2.0 |
 | Sortformer (speaker identification) | `mlx-community/diar_streaming_sortformer_4spk-v2.1-fp16` | 0.24 GB | | NVIDIA Open Model License |
 
 Speech models run through [mlx-audio-swift](https://github.com/Blaizzy/mlx-audio-swift). Whisper uses the `-asr-fp16` repositories because the `-mlx` ones only ship `weights.npz`, which mlx-audio-swift doesn't load. mlx-audio-swift's streaming sessions aren't public in 0.1.5, so live words come from re-transcribing the open utterance (see [Speech engines](#speech-engines)).
 
-**Orukeet** (a Parakeet TDT v3 fine-tune, CC-BY-SA-4.0) has no MLX build yet. `scripts/models/convert_orukeet.py` converts it: it renames the Transformers export's tensors to the MLX Parakeet layout, checks all 697 names and shapes against `parakeet-tdt-0.6b-v3`, and writes a float16 model with the original licence and attribution. `uv run scripts/models/convert_orukeet.py --check-mapping` verifies the mapping from file headers only; without the flag it downloads the 2.5 GB source. Once the result is published on Hugging Face, it becomes a catalog entry with engine `parakeet`.
+**Orukeet** (Oruk AI's fine-tune of Parakeet TDT v3, CC-BY-SA-4.0) had no MLX build, so `itsreidar/orukeet-mlx` is a conversion made with `scripts/models/convert_orukeet.py`. The script renames the Transformers export's tensors to the MLX Parakeet layout, checks all 697 names and shapes against `parakeet-tdt-0.6b-v3`, and writes a float16 model with the original licence and attribution; it loads with engine `parakeet`. `uv run scripts/models/convert_orukeet.py --check-mapping` verifies the mapping from file headers only; without the flag it downloads the 2.5 GB source.
 
 ### Gemma 4 audio
 

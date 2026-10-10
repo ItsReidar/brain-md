@@ -145,6 +145,14 @@ nonisolated public enum ModelCatalog {
             kind: .speech(engine: "parakeet", streaming: false), approximateBytes: 2_509_044_141,
             license: "CC-BY-4.0"),
         ModelDescriptor(
+            id: "orukeet", displayName: "Orukeet",
+            summary: "Oruk AI · Parakeet v3 fine-tune, more accurate · sentence by sentence · 25 European languages",
+            // Converted with scripts/models/convert_orukeet.py from oruk/orukeet@b59c13a7.
+            repo: "itsreidar/orukeet-mlx",
+            revision: "17894066e1d148997bfc93a4d41c605ca1b0475d",
+            kind: .speech(engine: "parakeet", streaming: false), approximateBytes: 1_254_966_956,
+            license: "CC-BY-SA-4.0"),
+        ModelDescriptor(
             id: "voxtral-mini-realtime", displayName: "Voxtral Mini Realtime",
             summary: "Mistral AI · live words as people speak · 13 languages incl. Dutch",
             repo: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
