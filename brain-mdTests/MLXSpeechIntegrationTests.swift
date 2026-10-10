@@ -8,10 +8,10 @@ import Foundation
 import Testing
 @testable import brain_md
 
-/// Opt-in (`BRAINMD_SPEECH_INTEGRATION=1`): real speech models on `say` audio. Installs Nemotron
+/// Opt-in (`BRAINMD_MLX_SPEECH_INTEGRATION=1`): real speech models on `say` audio. Installs Nemotron
 /// 3.5 streaming 8-bit (0.76 GB) and Sortformer (0.24 GB) into the app's models folder if missing.
 @MainActor
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["BRAINMD_SPEECH_INTEGRATION"] == "1"))
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["BRAINMD_MLX_SPEECH_INTEGRATION"] == "1"))
 struct MLXSpeechIntegrationTests {
     static let nemotron = ModelCatalog.model("nemotron-3.5-streaming-8bit")!
     static let sortformer = ModelCatalog.model(ModelCatalog.defaultDiarizerID)!
