@@ -1333,66 +1333,145 @@ public struct AboutSettingsPane: View {
 // MARK: - 8. Local AI & Voice Settings Pane
 
 public struct LocalAISettingsPane: View {
-  @ObservedObject var modelManager = LocalModelManager.shared
-  @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
+  @ObservedObject private var runtime = LanguageModelRuntime.shared
+  @ObservedObject private var store = ModelStore.shared
+  @AppStorage(ModelSelection.enabledKey) private var isAIEnabled = false
+  @AppStorage(ModelSelection.languageModelKey) private var languageModelID = ModelCatalog.defaultLanguageModelID
+  @AppStorage(ModelSelection.speechModelKey) private var speechModelID = ""
+  @AppStorage(ModelSelection.identifySpeakersKey) private var identifySpeakers = true
   @AppStorage("ai_capture_system_audio") private var captureSystemAudio: Bool = true
   @AppStorage("ai_capture_microphone") private var captureMicrophone: Bool = true
   @AppStorage("ai_capture_screen_diagrams") private var captureScreenDiagrams: Bool = true
-  @State private var pendingDeletionBytes: Int64?
+  /// The model whose files are about to be deleted (confirmation dialog).
+  @State private var pendingDeletion: ModelDescriptor?
+  /// Bytes of all downloaded models, offered for deletion when on-device AI is turned off.
+  @State private var pendingDeletionOfAll: Int64?
   @AppStorage(MeetingTranscriber.localeDefaultsKey) private var transcriptionLocale = ""
   @State private var transcriptionLocales: [String] = []
-  @AppStorage(GemmaService.customInstructionsKey) private var customInstructions = ""
+  @AppStorage(LanguageModelService.customInstructionsKey) private var customInstructions = ""
   @ObservedObject private var skillLibrary = SkillLibrary.shared
 
   public init() {}
+
+  private var speechEngine: SpeechEngine {
+    SpeechEngine.resolve(
+      selectedSpeechModel: ModelCatalog.model(speechModelID),
+      activeLanguageModel: ModelSelection.languageModel(),
+      isAIEnabled: isAIEnabled, isInstalled: store.isInstalled)
+  }
+
+  private var diarizer: ModelDescriptor { ModelCatalog.model(ModelCatalog.defaultDiarizerID)! }
 
   public var body: some View {
     VStack(spacing: 20) {
       SettingsCard(
         title: "On-Device AI",
-        footer: "Gemma 4 E4B (4-bit, quantization-aware trained) runs on this Mac with MLX on Apple Silicon. "
-          + "It downloads once from Hugging Face; after that, notes never leave your Mac."
+        footer: "Models run on this Mac with MLX on Apple Silicon. Each downloads once from Hugging Face, "
+          + "pinned to a fixed version; after that, notes and audio never leave your Mac."
       ) {
         SettingsRow(
           title: "Enable on-device AI",
-          subtitle: "Summaries, action items, rewriting and screen explanations with Gemma 4",
+          subtitle: "Skills, chat, screen explanations and MLX meeting transcription",
           icon: "cpu"
         ) {
           Toggle("", isOn: Binding(get: { isAIEnabled }, set: setAIEnabled))
             .toggleStyle(.switch)
-            .disabled(!LocalModelManager.isSupportedHardware && !isAIEnabled)
-            .help(LocalModelManager.isSupportedHardware ? "" : LocalModelError.requiresAppleSilicon.errorDescription ?? "")
+            .disabled(!ModelStore.isSupportedHardware && !isAIEnabled)
+            .help(ModelStore.isSupportedHardware ? "" : LocalModelError.requiresAppleSilicon.errorDescription ?? "")
         }
-
-        Divider()
-
-        VStack(alignment: .leading, spacing: 10) {
-          HStack {
-            Text("mlx-community/gemma-4-E4B-it-qat-4bit")
-              .font(.system(size: 11, design: .monospaced))
-              .foregroundColor(.secondary)
-              .textSelection(.enabled)
-            Spacer()
-            statusBadge
-          }
-          modelDetails
-        }
-        .padding(16)
       }
       .confirmationDialog(
-        "Delete the Gemma 4 model files?",
-        isPresented: Binding(get: { pendingDeletionBytes != nil }, set: { if !$0 { pendingDeletionBytes = nil } }),
+        "Delete the downloaded models?",
+        isPresented: Binding(get: { pendingDeletionOfAll != nil }, set: { if !$0 { pendingDeletionOfAll = nil } }),
         titleVisibility: .visible
       ) {
-        Button("Delete \(Self.format(pendingDeletionBytes ?? 0))", role: .destructive) {
-          modelManager.removeModelCache()
-          pendingDeletionBytes = nil
+        Button("Delete \(Self.format(pendingDeletionOfAll ?? 0))", role: .destructive) {
+          for model in ModelCatalog.all where store.diskUsageBytes(of: model) > 0 { runtime.remove(model) }
+          pendingDeletionOfAll = nil
         }
-        Button("Keep Files", role: .cancel) { pendingDeletionBytes = nil }
+        Button("Keep Files", role: .cancel) { pendingDeletionOfAll = nil }
       } message: {
         Text("Keeping them lets you turn on-device AI back on without downloading again.")
       }
       .onAppear(perform: resumeDownloadIfNeeded)
+
+      SettingsCard(
+        title: "Language Model",
+        footer: "Used for skills, AI Chat and Explain Screen. One model is in memory at a time; "
+          + "it loads on first use and unloads after five idle minutes."
+      ) {
+        ForEach(Array(ModelCatalog.languageModels.enumerated()), id: \.element.id) { index, model in
+          if index > 0 { Divider().padding(.leading, 41) }
+          ModelRow(
+            model: model, isSelected: model.id == languageModelID,
+            onUse: { selectLanguageModel(model) }, onDelete: { pendingDeletion = $0 })
+        }
+      }
+      .disabled(!isAIEnabled)
+
+      SettingsCard(title: "Speech Recognition", footer: speechEngine.explanation) {
+        AppleSpeechRow(isSelected: ModelCatalog.model(speechModelID) == nil) { speechModelID = "" }
+        ForEach(ModelCatalog.speechModels) { model in
+          Divider().padding(.leading, 41)
+          ModelRow(
+            model: model, isSelected: model.id == speechModelID,
+            onUse: { speechModelID = model.id }, onDelete: { pendingDeletion = $0 })
+        }
+        Divider()
+        SettingsRow(
+          title: "Transcription Language",
+          subtitle: "Used by Apple Speech and Whisper; the other models recognise the language themselves",
+          icon: "character.bubble"
+        ) {
+          Picker("", selection: $transcriptionLocale) {
+            Text("System (\(Self.languageName(Locale.current.identifier)))").tag("")
+            ForEach(transcriptionLocales, id: \.self) { identifier in
+              Text(Self.languageName(identifier)).tag(identifier)
+            }
+          }
+          .labelsHidden()
+          .frame(width: 220)
+          .task {
+            transcriptionLocales = await MeetingTranscriber.supportedLocaleIdentifiers()
+              .sorted { Self.languageName($0) < Self.languageName($1) }
+          }
+        }
+      }
+
+      SettingsCard(
+        title: "Speaker Identification",
+        footer: "Labels up to four voices on the call as Speaker 1–4; your microphone is always “Me”. "
+          + "Without it, call audio is labelled “Them”."
+      ) {
+        ModelRow(
+          model: diarizer, isSelected: false, isSelectable: false,
+          onUse: {}, onDelete: { pendingDeletion = $0 })
+        Divider()
+        SettingsRow(
+          title: "Identify Speakers",
+          subtitle: store.isInstalled(diarizer) ? "Tell call participants apart in meeting notes"
+            : "Download Sortformer above to use this",
+          icon: "person.2.wave.2"
+        ) {
+          Toggle("", isOn: $identifySpeakers)
+            .toggleStyle(.switch)
+            .disabled(!store.isInstalled(diarizer))
+        }
+      }
+      .disabled(!isAIEnabled)
+      .confirmationDialog(
+        "Delete \(pendingDeletion?.displayName ?? "the model")?",
+        isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
+        titleVisibility: .visible
+      ) {
+        Button("Delete \(Self.format(pendingDeletion.map(store.diskUsageBytes) ?? 0))", role: .destructive) {
+          if let model = pendingDeletion { runtime.remove(model) }
+          pendingDeletion = nil
+        }
+        Button("Keep", role: .cancel) { pendingDeletion = nil }
+      } message: {
+        Text("You can download it again later.")
+      }
 
       instructionsAndSkills
 
@@ -1418,26 +1497,6 @@ public struct LocalAISettingsPane: View {
             .toggleStyle(.switch)
         }
 
-        Divider()
-
-        SettingsRow(
-          title: "Transcription Language",
-          subtitle: "Meetings are transcribed on this Mac; each language's speech model downloads once",
-          icon: "character.bubble"
-        ) {
-          Picker("", selection: $transcriptionLocale) {
-            Text("System (\(Self.languageName(Locale.current.identifier)))").tag("")
-            ForEach(transcriptionLocales, id: \.self) { identifier in
-              Text(Self.languageName(identifier)).tag(identifier)
-            }
-          }
-          .labelsHidden()
-          .frame(width: 220)
-          .task {
-            transcriptionLocales = await MeetingTranscriber.supportedLocaleIdentifiers()
-              .sorted { Self.languageName($0) < Self.languageName($1) }
-          }
-        }
 
         Divider()
 
@@ -1482,11 +1541,11 @@ public struct LocalAISettingsPane: View {
           .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.12)))
           .accessibilityLabel("Custom instructions")
           .onChange(of: customInstructions) { _, text in
-            if text.count > GemmaService.maxCustomInstructionsLength {
-              customInstructions = String(text.prefix(GemmaService.maxCustomInstructionsLength))
+            if text.count > LanguageModelService.maxCustomInstructionsLength {
+              customInstructions = String(text.prefix(LanguageModelService.maxCustomInstructionsLength))
             }
           }
-        Text("\(customInstructions.count) / \(GemmaService.maxCustomInstructionsLength.formatted())")
+        Text("\(customInstructions.count) / \(LanguageModelService.maxCustomInstructionsLength.formatted())")
           .font(.system(size: 11))
           .monospacedDigit()
           .foregroundColor(.secondary)
@@ -1554,17 +1613,25 @@ public struct LocalAISettingsPane: View {
       skillLibrary.seedDefaultsIfNeeded()
       resumeDownloadIfNeeded()
     } else {
-      modelManager.cancelDownload()
-      modelManager.unloadModel()
-      let bytes = modelManager.diskUsageBytes()
-      if bytes > 0 { pendingDeletionBytes = bytes }
+      for model in ModelCatalog.all { store.cancelDownload(model) }
+      runtime.unloadModel()
+      let bytes = ModelCatalog.all.reduce(Int64(0)) { $0 + store.diskUsageBytes(of: $1) }
+      if bytes > 0 { pendingDeletionOfAll = bytes }
     }
   }
 
-  /// Enabled but not installed (first enable, or a download interrupted by quitting): fetch it.
+  /// First enable (or a download interrupted by quitting): fetch the active language model.
   private func resumeDownloadIfNeeded() {
-    guard isAIEnabled, modelManager.state.status == .notDownloaded else { return }
-    modelManager.startDownload()
+    let model = ModelSelection.languageModel()
+    guard isAIEnabled, store.state(of: model).status == .notDownloaded,
+          !ModelCatalog.languageModels.contains(where: store.isInstalled) else { return }
+    store.startDownload(model)
+  }
+
+  private func selectLanguageModel(_ model: ModelDescriptor) {
+    guard model.id != languageModelID else { return }
+    runtime.unloadModel()
+    languageModelID = model.id
   }
 
   private static func languageName(_ identifier: String) -> String {
@@ -1575,69 +1642,5 @@ public struct LocalAISettingsPane: View {
     ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
   }
 
-  @ViewBuilder
-  private var modelDetails: some View {
-    let state = modelManager.state
-    switch state.status {
-    case .notDownloaded:
-      Text(isAIEnabled ? "Preparing download…" : "Not downloaded. Turning on-device AI on downloads the model.")
-        .font(.system(size: 12))
-        .foregroundColor(.secondary)
-    case .downloading:
-      ProgressView(value: state.progress)
-        .progressViewStyle(.linear)
-      HStack {
-        Text(state.totalBytes > 0
-          ? "\(Self.format(state.bytesDownloaded)) of \(Self.format(state.totalBytes)) (\(Int(state.progress * 100))%)"
-          : "Contacting Hugging Face…")
-          .font(.system(size: 11, weight: .medium, design: .monospaced))
-          .foregroundColor(.secondary)
-        Spacer()
-        Button("Cancel") { setAIEnabled(false) }
-          .buttonStyle(.bordered)
-      }
-    case .ready:
-      HStack {
-        Label("Installed · \(Self.format(state.totalBytes)) on disk", systemImage: "checkmark.circle.fill")
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(.secondary)
-        Spacer()
-        Button("Delete Model Files…", role: .destructive) {
-          pendingDeletionBytes = modelManager.diskUsageBytes()
-        }
-        .buttonStyle(.bordered)
-      }
-    case .error:
-      HStack(alignment: .top) {
-        Text(state.errorMessage ?? "The download failed.")
-          .font(.system(size: 12))
-          .foregroundColor(.red)
-          .fixedSize(horizontal: false, vertical: true)
-        Spacer()
-        Button("Retry") {
-          modelManager.checkExistingModel() // clears the error, keeps already-downloaded files
-          modelManager.startDownload()
-        }
-        .buttonStyle(.borderedProminent)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var statusBadge: some View {
-    let (label, icon, color): (String, String, Color) = switch modelManager.state.status {
-    case .notDownloaded: ("Not Installed", "arrow.down.circle", .secondary)
-    case .downloading: ("Downloading \(Int(modelManager.state.progress * 100))%", "arrow.down.circle.fill", .accentColor)
-    case .ready: (modelManager.isLoaded ? "Loaded" : "Ready", "checkmark.circle.fill", .green)
-    case .error: ("Download Failed", "exclamationmark.triangle.fill", .red)
-    }
-    Label(label, systemImage: icon)
-      .font(.system(size: 11, weight: .semibold))
-      .padding(.horizontal, 8)
-      .padding(.vertical, 3)
-      .background(color.opacity(0.15))
-      .foregroundColor(color)
-      .clipShape(Capsule())
-  }
 }
 

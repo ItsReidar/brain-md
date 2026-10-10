@@ -1,5 +1,5 @@
 //
-//  LocalModelManagerTests.swift
+//  ModelStoreTests.swift
 //  brain-mdTests
 //
 
@@ -9,7 +9,9 @@ import Testing
 @testable import brain_md
 
 @MainActor
-struct LocalModelManagerTests {
+struct ModelStoreTests {
+
+    static let gemma = ModelCatalog.model(ModelCatalog.defaultLanguageModelID)!
 
     private func makeDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -23,9 +25,9 @@ struct LocalModelManagerTests {
 
     @Test func onlyAppleSiliconLoadsTheModel() {
         #if arch(arm64)
-        #expect(LocalModelManager.isSupportedHardware)
+        #expect(ModelStore.isSupportedHardware)
         #else
-        #expect(!LocalModelManager.isSupportedHardware)
+        #expect(!ModelStore.isSupportedHardware)
         #endif
         #expect(LocalModelError.requiresAppleSilicon.errorDescription?.contains("Apple Silicon") == true)
     }
@@ -39,21 +41,54 @@ struct LocalModelManagerTests {
             {"weight_map": {"a": "model-00001-of-00002.safetensors", "b": "model-00002-of-00002.safetensors"}}
             """)
         try write("model-00001-of-00002.safetensors", in: directory, contents: "x")
-        #expect(!LocalModelManager.snapshotIsComplete(directory))
+        #expect(!ModelStore.snapshotIsComplete(directory, for: Self.gemma))
 
         try write("model-00002-of-00002.safetensors", in: directory, contents: "x")
-        #expect(LocalModelManager.snapshotIsComplete(directory))
+        #expect(ModelStore.snapshotIsComplete(directory, for: Self.gemma))
     }
 
     @Test func snapshotWithoutConfigOrTokenizerIsIncomplete() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try write("model.safetensors", in: directory, contents: "x")
-        #expect(!LocalModelManager.snapshotIsComplete(directory))
+        #expect(!ModelStore.snapshotIsComplete(directory, for: Self.gemma))
 
         try write("config.json", in: directory)
+        #expect(!ModelStore.snapshotIsComplete(directory, for: Self.gemma)) // language models need a tokenizer
         try write("tokenizer.json", in: directory)
-        #expect(LocalModelManager.snapshotIsComplete(directory))
+        #expect(ModelStore.snapshotIsComplete(directory, for: Self.gemma))
+    }
+
+    /// Speech models ship their own tokenizer formats (or none): config plus weights is enough.
+    @Test func speechSnapshotNeedsConfigAndWeightsOnly() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let parakeet = try #require(ModelCatalog.model("parakeet-tdt-v3"))
+        try write("config.json", in: directory)
+        #expect(!ModelStore.snapshotIsComplete(directory, for: parakeet))
+        try write("model.safetensors", in: directory, contents: "x")
+        #expect(ModelStore.snapshotIsComplete(directory, for: parakeet))
+    }
+
+    /// mlx-audio-swift finds speech models at `<cache>/mlx-audio/<org>_<name>`; the store links the
+    /// pinned snapshot there so they load offline at the pinned revision.
+    @Test func speechModelsAreLinkedWhereMLXAudioLooks() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ModelStore(modelsDirectory: directory)
+        let nemotron = try #require(ModelCatalog.model("nemotron-3.5-streaming-8bit"))
+        let snapshot = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: snapshot) }
+
+        try store.linkForMLXAudio(nemotron, snapshot: snapshot)
+        let link = directory.appendingPathComponent("mlx-audio/mlx-community_nemotron-3.5-asr-streaming-0.6b-8bit")
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == snapshot.path)
+        try store.linkForMLXAudio(nemotron, snapshot: snapshot) // relinking replaces it
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == snapshot.path)
+
+        try store.linkForMLXAudio(Self.gemma, snapshot: snapshot) // language models aren't linked
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("mlx-audio/mlx-community_gemma-4-E4B-it-qat-4bit").path))
     }
 
     /// Regression: the former placeholder reported "ready" for a 23-byte fake `model.bin`.
@@ -64,8 +99,8 @@ struct LocalModelManagerTests {
         try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
         try write("model.bin", in: legacy, contents: "Gemma 4 E4B MLX Weights")
 
-        let manager = LocalModelManager(modelsDirectory: directory)
-        #expect(manager.state.status == .notDownloaded)
+        let store = ModelStore(modelsDirectory: directory)
+        #expect(store.state(of: Self.gemma).status == .notDownloaded)
         #expect(!FileManager.default.fileExists(atPath: legacy.path))
     }
 
@@ -77,7 +112,7 @@ struct LocalModelManagerTests {
         try FileManager.default.createSymbolicLink(
             at: directory.appendingPathComponent("link"), withDestinationURL: blob)
 
-        let size = LocalModelManager.allocatedSize(of: directory)
+        let size = ModelStore.allocatedSize(of: directory)
         #expect(size >= 64 * 1024)
         #expect(size < 2 * 64 * 1024)
     }
@@ -85,32 +120,37 @@ struct LocalModelManagerTests {
     @Test func loadingWithoutDownloadThrowsNotDownloaded() async throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let manager = LocalModelManager(modelsDirectory: directory)
+        let runtime = LanguageModelRuntime(store: ModelStore(modelsDirectory: directory))
         await #expect(throws: LocalModelError.notDownloaded) {
-            _ = try await manager.loadModel()
+            _ = try await runtime.load(Self.gemma)
+        }
+        await #expect(throws: LocalModelError.unknownModel("parakeet-tdt-v3")) {
+            _ = try await runtime.load(ModelCatalog.model("parakeet-tdt-v3")!) // not a language model
         }
     }
 
     /// Opt-in: loads the real downloaded model. Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1 xcodebuild test …`.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["BRAINMD_MODEL_INTEGRATION"] == "1"))
     func downloadedModelLoadsAndAnswers() async throws {
-        let manager = LocalModelManager()
-        #expect(manager.state.status == .ready)
-        #expect(manager.state.totalBytes > 5_000_000_000)
+        let runtime = LanguageModelRuntime.shared
+        #expect(runtime.store.state(of: Self.gemma).status == .ready)
+        #expect(runtime.store.state(of: Self.gemma).totalBytes > 5_000_000_000)
 
-        let container = try await manager.loadModel()
-        #expect(manager.isLoaded)
+        let container = try await runtime.load(Self.gemma)
+        #expect(runtime.loadedModel == Self.gemma)
+        #expect(runtime.contextWindow == 131_072)
         let session = ChatSession(container, generateParameters: GenerateParameters(maxTokens: 20, temperature: 0))
         let answer = try await session.respond(to: "Reply with exactly one word: what is the capital of France?")
         #expect(answer.localizedCaseInsensitiveContains("paris"))
 
-        manager.unloadModel()
-        #expect(!manager.isLoaded)
-        #expect(manager.state.status == .ready) // unloading keeps the files
+        runtime.unloadModel()
+        #expect(!runtime.isLoaded)
+        #expect(runtime.contextWindow == nil)
+        #expect(runtime.store.state(of: Self.gemma).status == .ready) // unloading keeps the files
     }
 
     @Test func availableMemoryIsPositiveAndBounded() {
-        let available = LocalModelManager.availableMemoryBytes()
+        let available = ModelStore.availableMemoryBytes()
         #expect(available > 0)
         #expect(available <= Int64(ProcessInfo.processInfo.physicalMemory))
     }

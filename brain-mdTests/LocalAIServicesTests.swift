@@ -8,7 +8,7 @@ import XCTest
 
 final class LocalAIServicesTests: XCTestCase {
 
-    // MARK: - ModelDownloadState & LocalModelManager
+    // MARK: - ModelDownloadState & ModelStore
     func testModelDownloadStateAndTransitions() {
         let initialState = ModelDownloadState(
             status: .notDownloaded, progress: 0.0, bytesDownloaded: 0, totalBytes: 2_000_000_000,
@@ -17,22 +17,17 @@ final class LocalAIServicesTests: XCTestCase {
         XCTAssertEqual(initialState.status, .notDownloaded)
         XCTAssertEqual(initialState.progress, 0.0)
 
-        // Isolated folder: the default location holds the real downloaded model.
-        let manager = LocalModelManager(
+        // Isolated folder: the default location holds the real downloaded models.
+        let store = ModelStore(
             modelsDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
-        XCTAssertEqual(manager.state.status, .notDownloaded)
-
-        manager.updateProgress(bytesDownloaded: 1_000_000_000, totalBytes: 2_000_000_000)
-        XCTAssertEqual(manager.state.status, .downloading)
-        XCTAssertEqual(manager.state.progress, 0.5, accuracy: 0.001)
-
-        manager.completeDownload(localPath: "/tmp/models/gemma-4-e4b.bin")
-        XCTAssertEqual(manager.state.status, .ready)
-        XCTAssertEqual(manager.state.localPath, "/tmp/models/gemma-4-e4b.bin")
-
-        manager.removeModelCache()
-        XCTAssertEqual(manager.state.status, .notDownloaded)
-        XCTAssertNil(manager.state.localPath)
+        for model in ModelCatalog.all {
+            XCTAssertEqual(store.state(of: model).status, .notDownloaded, model.id)
+            XCTAssertEqual(store.state(of: model).modelIdentifier, model.repo)
+        }
+        let model = ModelCatalog.all[0]
+        store.remove(model)
+        XCTAssertEqual(store.state(of: model).status, .notDownloaded)
+        XCTAssertNil(store.state(of: model).localPath)
 
         let errorState = ModelDownloadState(
             status: .error, progress: 0.1, bytesDownloaded: 100, totalBytes: 1000,

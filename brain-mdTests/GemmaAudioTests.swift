@@ -51,7 +51,7 @@ struct GemmaAudioTests {
     func realGemmaTranscribesSpeech() async throws {
         let samples = try Self.spokenSamples(
             "The quarterly launch slips two weeks because the payment certification failed.", voice: "Samantha")
-        let container = try await LocalModelManager.shared.loadModel()
+        let container = try await TestModels.gemmaRuntime.loadModel()
         let session = ChatSession(
             container, generateParameters: GenerateParameters(maxTokens: 120, temperature: 0),
             processing: UserInput.Processing())

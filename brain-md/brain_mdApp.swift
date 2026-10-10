@@ -8,6 +8,9 @@ import SwiftUI
 @main
 struct brain_mdApp: App {
     init() {
+        // mlx-audio-swift loads some speech models through the default Hugging Face cache; point it at
+        // brain-md's models folder before anything loads.
+        ModelStore.configureDefaultCache()
         let args = CommandLine.arguments
         
         // Custom vault path argument (e.g. brain-md --vault /path/to/notes)
@@ -81,7 +84,7 @@ struct brain_mdApp: App {
 
                 Divider()
 
-                OpenGemmaChatButton()
+                OpenAssistantChatButton()
             }
             
             CommandMenu("Format") {
@@ -204,8 +207,8 @@ struct brain_mdApp: App {
             }
         }
         
-        Window("Gemma Chat", id: GemmaChatView.windowID) {
-            GemmaChatView(chat: .shared, vault: .shared)
+        Window("AI Chat", id: AssistantChatView.windowID) {
+            AssistantChatView(chat: .shared, vault: .shared)
         }
         .defaultSize(width: 520, height: 640)
 
@@ -217,12 +220,12 @@ struct brain_mdApp: App {
     }
 }
 
-/// View › Gemma Chat (⇧⌘J). A view so it can read `openWindow` from the environment.
-private struct OpenGemmaChatButton: View {
+/// View › AI Chat (⇧⌘J). A view so it can read `openWindow` from the environment.
+private struct OpenAssistantChatButton: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("Gemma Chat") { openWindow(id: GemmaChatView.windowID) }
+        Button("AI Chat") { openWindow(id: AssistantChatView.windowID) }
             .keyboardShortcut("j", modifiers: [.command, .shift])
     }
 }
