@@ -26,12 +26,12 @@ flowchart LR
 |---|---|---|
 | Skills | ✨ menu, and the chat's suggestions and **Skills** menu | Your saved prompts, as Markdown files in the vault (see [Instructions & Skills](#instructions--skills)). The defaults: Summarize Note, Extract Action Items, Polish & Rewrite, List the Open Questions and Suggest a Better Title |
 | Explain Screen | ✨ menu › Explain Screen | **Screen Under Pointer** captures that display (without brain-md's windows). **Choose Window, App or Display…** opens the macOS picker so you can pick exactly what to explain. The language model then explains the slide or diagram. Needs a model that sees images (all except Mistral 7B) |
-| Record a meeting | 🎙 toolbar button | Live transcript lines labelled **Me** and **Speaker 1–4** (or **Them** without speaker identification) with timestamps; minutes from the language model when you stop |
+| Record a meeting | 🎙 toolbar button | A live transcript in paragraphs labelled **Me** and **Speaker 1–4** (or **Them** without speaker identification), one timestamp per turn; minutes from the language model when you stop |
 | AI Chat | ✨ menu › AI Chat…, or View › AI Chat (⇧⌘J) | A conversation in its own window, optionally about the open note |
 
 The ✨ menu also has **AI Chat…** and **Manage Skills…** (opens Settings). Until a language model is downloaded and on-device AI is turned on, it shows only **Set Up On-Device AI…**.
 
-Model output always opens in a **review sheet** first. Nothing is written to a note until you choose Insert Below or Replace Note (which asks for confirmation). Meeting transcript lines are the exception: they are written to the open note as they're finalized, and switching notes stops the recording.
+Model output always opens in a **review sheet** first. Nothing is written to a note until you choose Insert Below or Replace Note (which asks for confirmation). Meeting transcript lines are the exception: they are written to the open note as they're finalized, and switching notes stops the recording. Consecutive sentences from the same speaker extend one paragraph with one timestamp (`TranscriptWriter`); a new paragraph starts when someone else speaks, after a pause of more than 30 s, or every two minutes of monologue. If you type below the transcript while recording, the next sentence starts a new paragraph, so your text is never overwritten. The minutes are drafted from the same paragraphs.
 
 Answers are in the note's language (in chat: the language you write in). Notes longer than about 8,000 tokens (32,000 characters) are truncated with a visible marker.
 

@@ -130,6 +130,13 @@ struct MLXSpeechIntegrationTests {
         #expect(speakers.allSatisfy { $0 != nil })
         #expect(speakers[0] == speakers[2])
         #expect(speakers[0] != speakers[1])
+
+        // Written to a note: one paragraph per turn, since the voices alternate.
+        var writer = TranscriptWriter()
+        var note = ""
+        for segment in run.finals { writer.write(segment, into: &note) }
+        try Self.report("note:\(note)")
+        #expect(note.split(separator: "\n").count == 3)
     }
 
     @Test func gemmaTranscribesThroughTheMeetingPipeline() async throws {

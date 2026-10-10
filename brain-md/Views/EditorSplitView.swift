@@ -708,15 +708,17 @@ public struct EditorSplitView: View {
             sampleRate: 16_000, channels: 1)
         let heading = "\n\n## Meeting transcript · \(Date().formatted(date: .abbreviated, time: .shortened))\n"
         var wroteHeading = false
+        var writer = TranscriptWriter()
         meetingRecorder.start(
             configuration: configuration,
             locale: AppleSpeechRecognizer.preferredLocale(),
-            onLine: { line in
+            onSegment: { segment in
                 if !wroteHeading {
                     vault.editorContent += heading
                     wroteHeading = true
                 }
-                vault.editorContent += "\n" + line
+                // Consecutive lines from one speaker extend their paragraph instead of adding a line.
+                writer.write(segment, into: &vault.editorContent)
                 vault.hasUnsavedChanges = true
             },
             onFinished: { segments, error in

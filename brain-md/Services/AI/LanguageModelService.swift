@@ -166,8 +166,7 @@ public final class LanguageModelService: ObservableObject {
     /// The user prompt for `request`. Pure, so the wording can be tested without loading the model.
     static func prompt(for request: RewriteRequest) throws -> String {
         let note = trimmed(request.sourceText)
-        let transcript = (request.transcripts ?? [])
-            .filter(\.isFinal)
+        let transcript = TranscriptWriter.paragraphs(request.transcripts ?? [])
             .map { "\($0.speakerLabel): \($0.text)" }
             .joined(separator: "\n")
 

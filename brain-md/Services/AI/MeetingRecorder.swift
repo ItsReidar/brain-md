@@ -56,12 +56,13 @@ public final class MeetingRecorder: ObservableObject {
         }
     }
 
-    /// Starts recording. `onLine` receives each final transcript line as Markdown; `onFinished`
-    /// gets every final segment (for meeting minutes) and the error that ended it, if any.
+    /// Starts recording. `onSegment` receives each final segment as it's recognized (write it with a
+    /// `TranscriptWriter`); `onFinished` gets every final segment (for meeting minutes) and the error
+    /// that ended it, if any.
     public func start(
         configuration: AudioCaptureConfiguration,
         locale: Locale,
-        onLine: @escaping (String) -> Void,
+        onSegment: @escaping (TranscriptionSegment) -> Void,
         onFinished: @escaping ([TranscriptionSegment], Error?) -> Void
     ) {
         guard !isRecording else { return }
@@ -92,7 +93,7 @@ public final class MeetingRecorder: ObservableObject {
                         liveText[segment.speaker] = nil
                         segments.append(segment)
                         status = nil
-                        onLine(Self.line(for: segment))
+                        onSegment(segment)
                     } else {
                         liveText[segment.speaker] = segment.text
                     }
