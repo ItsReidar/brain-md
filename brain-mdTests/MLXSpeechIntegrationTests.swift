@@ -16,19 +16,6 @@ struct MLXSpeechIntegrationTests {
     static let nemotron = ModelCatalog.model("nemotron-3.5-streaming-8bit")!
     static let sortformer = ModelCatalog.model(ModelCatalog.defaultDiarizerID)!
 
-    /// Downloads `model` at its pinned revision unless it's already installed.
-    static func install(_ model: ModelDescriptor, store: ModelStore = .shared) async throws {
-        store.refresh(model)
-        if store.isInstalled(model) { return }
-        store.startDownload(model)
-        while store.state(of: model).status == .downloading {
-            try await Task.sleep(for: .milliseconds(500))
-        }
-        let state = store.state(of: model)
-        #expect(state.status == .ready, "\(model.id): \(state.errorMessage ?? "")")
-        if state.status != .ready { throw LocalModelError.notDownloaded }
-    }
-
     /// One utterance per (voice, sentence), separated by `gap` seconds of silence, as 100 ms chunks
     /// of call audio.
     /// With `realTime`, chunks arrive at the pace a live call would deliver them.
@@ -104,7 +91,7 @@ struct MLXSpeechIntegrationTests {
     }
 
     @Test func nemotronTranscribesEnglishWithLiveWords() async throws {
-        try await Self.install(Self.nemotron)
+        try await TestModels.install(Self.nemotron)
         let recognizer = MLXSpeechRecognizer(model: Self.nemotron, store: .shared, diarizer: nil)
         let run = try await Self.run(recognizer, Self.callAudio([
             ("Samantha", "The quarterly launch slips two weeks because the payment certification failed."),
@@ -116,7 +103,7 @@ struct MLXSpeechIntegrationTests {
     }
 
     @Test func nemotronTranscribesDutch() async throws {
-        try await Self.install(Self.nemotron)
+        try await TestModels.install(Self.nemotron)
         let recognizer = MLXSpeechRecognizer(model: Self.nemotron, store: .shared, diarizer: nil)
         let run = try await Self.run(
             recognizer, Self.callAudio([("Ellen", "We plannen de demo op vrijdag in Antwerpen.")]), locale: "nl_BE")
@@ -125,8 +112,8 @@ struct MLXSpeechIntegrationTests {
     }
 
     @Test func sortformerTellsTwoVoicesApart() async throws {
-        try await Self.install(Self.nemotron)
-        try await Self.install(Self.sortformer)
+        try await TestModels.install(Self.nemotron)
+        try await TestModels.install(Self.sortformer)
         let diarizer = SpeakerDiarizer(model: Self.sortformer) {
             try await MainActor.run { try ModelStore.shared.ensureMLXAudioLink(Self.sortformer) }
         }
@@ -160,7 +147,7 @@ struct MLXSpeechIntegrationTests {
 
     /// Same audio through Apple Speech and Nemotron: time to the first final line and total time.
     @Test func benchmarkAgainstAppleSpeech() async throws {
-        try await Self.install(Self.nemotron)
+        try await TestModels.install(Self.nemotron)
         let lines: [(voice: String, sentence: String)] = [
             ("Samantha", "The quarterly launch slips two weeks because the payment certification failed."),
             ("Samantha", "We will ask the vendor for a new test environment before Friday."),

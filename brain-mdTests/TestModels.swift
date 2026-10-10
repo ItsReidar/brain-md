@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Testing
 @testable import brain_md
 
 /// Runtimes for tests, independent of the model the user picked in Settings.
@@ -22,5 +23,18 @@ enum TestModels {
     static func isolatedRuntime() -> LanguageModelRuntime {
         LanguageModelRuntime(store: ModelStore(
             modelsDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)))
+    }
+
+    /// Downloads `model` at its pinned revision unless it's already installed.
+    static func install(_ model: ModelDescriptor, store: ModelStore = .shared) async throws {
+        store.refresh(model)
+        if store.isInstalled(model) { return }
+        store.startDownload(model)
+        while store.state(of: model).status == .downloading {
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        let state = store.state(of: model)
+        #expect(state.status == .ready, "\(model.id): \(state.errorMessage ?? "")")
+        if state.status != .ready { throw LocalModelError.notDownloaded }
     }
 }
