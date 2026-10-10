@@ -10,7 +10,7 @@ This document details the architectural principles, component structure, state m
 1. **Presentation Layer (SwiftUI + AppKit)**: Reactive, declarative UI combined with targeted AppKit primitives for native window styling, split views, and keyboard acceleration.
 2. **Local Storage & Vault Engine**: Direct filesystem-backed document store with tree-building, real-time background file monitoring, and template resolution.
 3. **Model Context Protocol (MCP) Server**: Embedded JSON-RPC 2.0 engine exposing vault operations to local and network AI agents via HTTP/SSE and Standard I/O.
-4. **On-Device AI**: Gemma 4 E4B with MLX for skills, chat and screen explanations, plus Apple's SpeechAnalyzer for meeting transcription. Loaded only when used; see [On-Device AI & Meetings](local-ai.md).
+4. **On-Device AI**: a selectable MLX language model (Gemma 4, Qwen3.5, Ministral, Mistral) for skills, chat and screen explanations; meetings are transcribed by an MLX speech model, Gemma 4 E4B or Apple's SpeechAnalyzer, with Sortformer telling speakers apart. Models come from one catalog (`ModelCatalog`). Loaded only when used; see [On-Device AI & Meetings](local-ai.md).
 
 ```mermaid
 graph TD
@@ -26,15 +26,15 @@ graph TD
         Settings["SettingsView"]
         Highlighter["SyntaxHighlighter"]
         Mermaid["MermaidDiagramView"]
-        Chat["GemmaChatView (⇧⌘J)"]
+        Chat["AssistantChatView (⇧⌘J)"]
         ResultSheet["AIResultSheet (review before insert)"]
     end
 
     subgraph AI ["On-Device AI Layer"]
-        ModelManager["LocalModelManager (download, load, unload)"]
-        Gemma["GemmaService / GemmaChat (MLX ChatSession)"]
+        ModelManager["ModelCatalog → ModelStore (download) → LanguageModelRuntime (load, unload)"]
+        Gemma["LanguageModelService / AssistantChat (MLX ChatSession)"]
         Skills["SkillLibrary (vault Skills/*.md)"]
-        Meetings["MeetingRecorder → MeetingTranscriber (SpeechAnalyzer)"]
+        Meetings["MeetingRecorder → SpeechRecognizer (MLX speech / Gemma audio / SpeechAnalyzer) + SpeakerDiarizer"]
         Capture["AudioCaptureService / VisualCaptureService (ScreenCaptureKit)"]
     end
 
