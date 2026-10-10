@@ -168,7 +168,7 @@ public final class LanguageModelService: ObservableObject {
         let note = trimmed(request.sourceText)
         let transcript = (request.transcripts ?? [])
             .filter(\.isFinal)
-            .map { "\($0.speaker == .microphone ? "Me" : "Them"): \($0.text)" }
+            .map { "\($0.speakerLabel): \($0.text)" }
             .joined(separator: "\n")
 
         switch request.mode {

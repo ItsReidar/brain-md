@@ -43,19 +43,30 @@ public struct ScreenCaptureConfiguration: Equatable, Sendable {
     }
 }
 
-public struct TranscriptionSegment: Identifiable, Equatable, Sendable {
+nonisolated public struct TranscriptionSegment: Identifiable, Equatable, Sendable {
+    /// Where the audio came from: the call (system audio) or this Mac's microphone.
     public enum Speaker: String, Codable, Sendable {
         case systemAudio, microphone, unknown
     }
     public var id: UUID
     public var speaker: Speaker
+    /// Which voice on the call is talking (0-based), when speaker identification is on.
+    public var speakerIndex: Int?
     public var timestamp: Double, duration: Double
     public var text: String
     public var isFinal: Bool
 
-    public init(id: UUID = UUID(), speaker: Speaker = .unknown, timestamp: Double = 0.0, duration: Double = 0.0, text: String = "", isFinal: Bool = false) {
-        self.id = id; self.speaker = speaker; self.timestamp = timestamp
+    public init(id: UUID = UUID(), speaker: Speaker = .unknown, speakerIndex: Int? = nil, timestamp: Double = 0.0, duration: Double = 0.0, text: String = "", isFinal: Bool = false) {
+        self.id = id; self.speaker = speaker; self.speakerIndex = speakerIndex; self.timestamp = timestamp
         self.duration = duration; self.text = text; self.isFinal = isFinal
+    }
+
+    /// "Me" for the microphone; "Speaker 2" for an identified voice on the call; "Them" otherwise.
+    public var speakerLabel: String {
+        switch speaker {
+        case .microphone: "Me"
+        case .systemAudio, .unknown: speakerIndex.map { "Speaker \($0 + 1)" } ?? "Them"
+        }
     }
 }
 

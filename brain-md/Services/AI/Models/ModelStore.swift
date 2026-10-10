@@ -208,7 +208,7 @@ public final class ModelStore: ObservableObject {
     // MARK: - Hardware
 
     /// MLX needs an Apple Silicon GPU. The universal app's Intel slice builds, but must not load models.
-    public static var isSupportedHardware: Bool {
+    nonisolated public static var isSupportedHardware: Bool {
         #if arch(arm64)
         true
         #else

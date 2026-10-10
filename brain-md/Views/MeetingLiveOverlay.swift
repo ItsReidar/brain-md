@@ -27,7 +27,7 @@ struct MeetingLiveOverlay: View {
             }
             ForEach([TranscriptionSegment.Speaker.systemAudio, .microphone], id: \.self) { speaker in
                 if let text = recorder.liveText[speaker] {
-                    Text("\(speaker == .microphone ? "Me" : "Them"): \(text)")
+                    Text("\(TranscriptionSegment(speaker: speaker).speakerLabel): \(text)")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                         .lineLimit(2)

@@ -710,7 +710,7 @@ public struct EditorSplitView: View {
         var wroteHeading = false
         meetingRecorder.start(
             configuration: configuration,
-            locale: MeetingTranscriber.preferredLocale(),
+            locale: AppleSpeechRecognizer.preferredLocale(),
             onLine: { line in
                 if !wroteHeading {
                     vault.editorContent += heading

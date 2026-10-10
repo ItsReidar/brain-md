@@ -1346,7 +1346,7 @@ public struct LocalAISettingsPane: View {
   @State private var pendingDeletion: ModelDescriptor?
   /// Bytes of all downloaded models, offered for deletion when on-device AI is turned off.
   @State private var pendingDeletionOfAll: Int64?
-  @AppStorage(MeetingTranscriber.localeDefaultsKey) private var transcriptionLocale = ""
+  @AppStorage(AppleSpeechRecognizer.localeDefaultsKey) private var transcriptionLocale = ""
   @State private var transcriptionLocales: [String] = []
   @AppStorage(LanguageModelService.customInstructionsKey) private var customInstructions = ""
   @ObservedObject private var skillLibrary = SkillLibrary.shared
@@ -1432,7 +1432,7 @@ public struct LocalAISettingsPane: View {
           .labelsHidden()
           .frame(width: 220)
           .task {
-            transcriptionLocales = await MeetingTranscriber.supportedLocaleIdentifiers()
+            transcriptionLocales = await AppleSpeechRecognizer.supportedLocaleIdentifiers()
               .sorted { Self.languageName($0) < Self.languageName($1) }
           }
         }

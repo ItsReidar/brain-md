@@ -16,12 +16,44 @@ public final class MeetingRecorder: ObservableObject {
     @Published public private(set) var liveText: [TranscriptionSegment.Speaker: String] = [:]
     @Published public private(set) var status: String?
 
+    /// The engine the current (or last) recording used, for the overlay.
+    @Published public private(set) var engine: SpeechEngine?
+
     private let capture: AudioCaptureService
-    private let transcriber = MeetingTranscriber()
+    private let store: ModelStore
+    private let runtime: LanguageModelRuntime
+    private let defaults: UserDefaults
     private var task: Task<Void, Never>?
 
-    public init(capture: AudioCaptureService = .shared) {
+    public init(
+        capture: AudioCaptureService = .shared, store: ModelStore = .shared,
+        runtime: LanguageModelRuntime = .shared, defaults: UserDefaults = .standard
+    ) {
         self.capture = capture
+        self.store = store
+        self.runtime = runtime
+        self.defaults = defaults
+    }
+
+    /// Picks the engine from what's installed right now: a speech model, else a language model that
+    /// can hear, else Apple Speech.
+    func resolveEngine() -> SpeechEngine {
+        SpeechEngine.resolve(
+            selectedSpeechModel: ModelSelection.speechModel(defaults),
+            activeLanguageModel: ModelSelection.languageModel(defaults),
+            isAIEnabled: defaults.bool(forKey: ModelSelection.enabledKey),
+            isInstalled: { self.store.isInstalled($0) })
+    }
+
+    /// Sortformer for call audio, when it's installed, turned on, and an MLX engine is transcribing.
+    func makeDiarizer(for engine: SpeechEngine, capturesCall: Bool) -> SpeakerDiarizer? {
+        guard capturesCall, engine != .appleSpeech, ModelSelection.identifiesSpeakers(defaults),
+              let model = ModelCatalog.model(ModelCatalog.defaultDiarizerID), store.isInstalled(model)
+        else { return nil }
+        let store = store
+        return SpeakerDiarizer(model: model) {
+            try await MainActor.run { try store.ensureMLXAudioLink(model) }
+        }
     }
 
     /// Starts recording. `onLine` receives each final transcript line as Markdown; `onFinished`
@@ -47,8 +79,13 @@ public final class MeetingRecorder: ObservableObject {
                 var speakers: Set<TranscriptionSegment.Speaker> = []
                 if configuration.captureSystemAudio { speakers.insert(.systemAudio) }
                 if configuration.captureMicrophone { speakers.insert(.microphone) }
-                let results = transcriber.transcribe(audio, locale: locale, speakers: speakers) { message in
-                    Task { @MainActor in self.status = message }
+                let engine = resolveEngine()
+                self.engine = engine
+                let diarizer = makeDiarizer(for: engine, capturesCall: speakers.contains(.systemAudio))
+                let recognizer = SpeechRecognizerFactory.make(
+                    for: engine, store: store, runtime: runtime, diarizer: diarizer)
+                let results = recognizer.transcribe(audio, locale: locale, sources: speakers) { message in
+                    Task { @MainActor in self.status = message.isEmpty ? nil : message }
                 }
                 for try await segment in results {
                     if segment.isFinal {
@@ -79,9 +116,9 @@ public final class MeetingRecorder: ObservableObject {
         Task { await capture.stop() }
     }
 
-    /// One transcript line, e.g. `- **Them** [03:12] We slip two weeks.`
+    /// One transcript line, e.g. `- **Speaker 2** [03:12] We slip two weeks.`
     static func line(for segment: TranscriptionSegment) -> String {
-        let speaker = segment.speaker == .microphone ? "Me" : "Them"
+        let speaker = segment.speakerLabel
         let seconds = max(0, Int(segment.timestamp.rounded(.down)))
         let stamp = String(format: "%02d:%02d", seconds / 60, seconds % 60)
         return "- **\(speaker)** [\(stamp)] \(segment.text)"
