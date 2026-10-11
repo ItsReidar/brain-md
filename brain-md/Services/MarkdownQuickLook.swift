@@ -16,6 +16,14 @@ nonisolated enum MarkdownQuickLook {
         let html: String
         /// Local images referenced by the HTML as `cid:<key>`.
         let images: [String: URL]
+
+        /// The HTML with the given attached images replaced by their alt text, for images the
+        /// sandboxed extension couldn't read.
+        func html(withoutImages keys: Set<String>) -> String {
+            keys.reduce(html) { html, key in
+                MarkdownQuickLook.replaceImages(in: html, matching: "cid:" + NSRegularExpression.escapedPattern(for: key))
+            }
+        }
     }
 
     static let lightThemeID = "github-light"
@@ -33,8 +41,11 @@ nonisolated enum MarkdownQuickLook {
             return block
         }
         let bodyHTML = MarkdownHTMLRenderer.renderBodyHTML(blocks: blocks, footnotes: document.footnotes, noteURL: fileURL)
-        let (html, images) = embedLocalImages(
+        let (embedded, images) = embedLocalImages(
             in: MarkdownHTMLRenderer.renderFrontmatterHTML(frontmatter) + "\n" + bodyHTML)
+        // Remote images would be blocked and missing files can't load; show their alt text instead
+        // of a broken image. Only attached (`cid:`) and inline (`data:`) images remain.
+        let html = replaceImages(in: embedded, matching: #"(?!cid:|data:)[^"]*"#)
         let page = """
             <!DOCTYPE html>
             <html lang="en">
@@ -65,6 +76,7 @@ nonisolated enum MarkdownQuickLook {
             + MarkdownHTMLRenderer.generateCSS(theme: dark, contentWidth: contentWidth)
             + "\n}\n"
             + ".copy-button { display: none !important; }\n"
+            + ".ql-image-placeholder { opacity: 0.65; font-style: italic; }\n"
     }
 
     /// Replaces `<img src="file://…">` with `cid:` references and returns the files to attach.
@@ -82,6 +94,16 @@ nonisolated enum MarkdownQuickLook {
             result.replaceSubrange(Range(match.range, in: result) ?? whole, with: "src=\"cid:\(key)\"")
         }
         return (result, images)
+    }
+
+    /// Replaces `<img>` tags whose whole `src` matches `sourcePattern` with their alt text.
+    static func replaceImages(in html: String, matching sourcePattern: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"<img src="(?:"# + sourcePattern + #")" alt="([^"]*)"[^>]*>"#)
+        else { return html }
+        return regex.stringByReplacingMatches(
+            in: html, range: NSRange(html.startIndex..., in: html),
+            withTemplate: "<span class=\"ql-image-placeholder\">🖼 $1</span>")
     }
 
     /// Undoes `MarkdownHTMLRenderer.escapeHTML` for an attribute value.

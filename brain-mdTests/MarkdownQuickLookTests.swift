@@ -40,6 +40,8 @@ struct MarkdownQuickLookTests {
         #expect(html.contains("default-src 'none'"))
         #expect(!MarkdownQuickLook.contentSecurityPolicy.contains("http"))
         #expect(html.contains("@media (prefers-color-scheme: dark)"))
+        #expect(!html.contains("example.com/pixel.png"))
+        #expect(html.contains("🖼 remote"))
         #expect(html.contains(".copy-button { display: none !important; }"))
     }
 
@@ -65,7 +67,13 @@ struct MarkdownQuickLookTests {
         let attached = try #require(preview.images.values.first)
         #expect(attached.lastPathComponent == "chart one.png")
         #expect(!preview.html.contains("file://"))
+        // Images the extension can't read show their alt text.
+        let key = try #require(preview.images.keys.first)
+        let fallback = preview.html(withoutImages: [key])
+        #expect(!fallback.contains("src=\"cid:"))
+        #expect(fallback.contains("🖼 Chart") && fallback.contains("🖼 again"))
         #expect(preview.html.components(separatedBy: "src=\"cid:").count - 1 == 2) // both references
+        #expect(preview.html.contains("🖼 missing")) // a file that doesn't exist
     }
 
     /// Regression: paragraphs, lists, tables and alerts rendered inline images without the note's
