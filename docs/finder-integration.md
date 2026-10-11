@@ -1,6 +1,6 @@
 # Finder Integration
 
-Brain.md opens Markdown files from Finder and previews them in Quick Look.
+Brain.md opens Markdown files from Finder and the terminal, and previews them in Quick Look.
 
 ## Opening Markdown files
 
@@ -16,6 +16,22 @@ Brain.md registers for the Markdown type (`net.daringfireball.markdown`: `.md`, 
 ### Making Brain.md the default
 
 **Settings › General › Markdown Files** shows which app Finder currently opens Markdown files with, and **Make Brain.md the Default** changes it (macOS asks you to confirm). Brain.md registers with the `Default` handler rank, so it never takes over without that confirmation when you've already chosen another app. You can also use Finder's **Get Info › Open with › Change All**.
+
+### From the terminal
+
+The `brain` command opens files in Brain.md, the same way Finder does:
+
+```bash
+brain notes.md ~/Desktop/todo.md
+```
+
+A file that doesn't exist yet is created empty first, so `brain new.md` starts a new note (its folder must exist). If you close it without writing anything (switch notes or quit), Brain.md moves it to the Trash. Only files `brain` created are trashed: it marks them with the `itsreidar.brain-md.new` extended attribute, and the first save drops the mark. `brain` on its own just opens the app. Homebrew installs the command with the app. Without Homebrew, link it yourself:
+
+```bash
+ln -s /Applications/brain-md.app/Contents/Resources/brain /usr/local/bin/brain
+```
+
+The command is a short shell script (`brain-md/Resources/brain`) that runs `open -b itsreidar.brain-md`, so it reaches the installed app through Launch Services.
 
 ## Quick Look preview
 
@@ -35,6 +51,7 @@ If another app's Quick Look extension also handles Markdown (MarkEdit, QLMarkdow
 |---|---|
 | `Config/brain-md-Info.plist` | Document type and Markdown type declaration, merged into the generated Info.plist |
 | `brain-md/Services/ExternalFiles.swift` | Opening files from Finder, outside-the-vault notes, Add to Vault, default-app helpers, app delegate |
+| `brain-md/Resources/brain` | The `brain` terminal command, linked by the Homebrew cask's `binary` stanza |
 | `brain-md/Services/MarkdownQuickLook.swift` | Static Quick Look HTML: light and dark styles, Mermaid as code, image attachments and placeholders |
 | `brain-md-QuickLook/PreviewProvider.swift` | The Quick Look preview extension (data-based HTML preview) |
 
