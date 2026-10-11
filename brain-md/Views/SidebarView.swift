@@ -8,6 +8,8 @@ import AppKit
 
 public struct SidebarView: View {
     @ObservedObject var vault: VaultManager
+    /// This window's note, highlighted in the lists.
+    @ObservedObject var session: EditorSession
     @AppStorage(AIFeatures.key) private var showsAIFeatures = true
     @AppStorage("sidebar_search_by_meaning") private var searchByMeaning = false
     @ObservedObject private var semanticSearch = SemanticSearch.shared
@@ -24,8 +26,9 @@ public struct SidebarView: View {
     @State private var isRootDropTargeted = false
     @State private var isTagsExpanded = true
     
-    public init(vault: VaultManager, showingMCPModal: Binding<Bool>) {
+    public init(vault: VaultManager, session: EditorSession, showingMCPModal: Binding<Bool>) {
         self.vault = vault
+        self.session = session
         self._showingMCPModal = showingMCPModal
     }
     
@@ -236,9 +239,9 @@ public struct SidebarView: View {
     private func treeRow(_ item: NoteItem, folderIcon: String? = nil) -> some View {
         ItemRowView(
             item: item,
-            selectedItem: vault.selectedItem,
+            selectedItem: session.selectedItem,
             onSelect: { selected in
-                vault.openNote(selected)
+                vault.perform(on: session) { vault.openNote(selected) }
             },
             onRename: { target in
                 renamingItem = target
@@ -412,7 +415,7 @@ public struct SidebarView: View {
                 List(results) { res in
                     Button(action: {
                         if let item = findItem(path: res.relativePath, in: vault.rootItems) {
-                            vault.openNote(item)
+                            vault.perform(on: session) { vault.openNote(item) }
                         }
                     }) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -579,16 +582,16 @@ public struct SidebarView: View {
                 } else {
                     ForEach(matchingNotes) { note in
                         Button(action: {
-                            vault.openNote(note)
+                            vault.perform(on: session) { vault.openNote(note) }
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "doc.text")
-                                    .foregroundColor(vault.selectedItem?.id == note.id ? .accentColor : .secondary)
+                                    .foregroundColor(session.selectedItem?.id == note.id ? .accentColor : .secondary)
                                     .font(.system(size: 12))
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(note.displayName)
-                                        .font(.system(size: 12.5, weight: vault.selectedItem?.id == note.id ? .semibold : .regular))
-                                        .foregroundColor(vault.selectedItem?.id == note.id ? .accentColor : .primary)
+                                        .font(.system(size: 12.5, weight: session.selectedItem?.id == note.id ? .semibold : .regular))
+                                        .foregroundColor(session.selectedItem?.id == note.id ? .accentColor : .primary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
                                     Text(note.relativePath)
@@ -603,7 +606,7 @@ public struct SidebarView: View {
                             .padding(.vertical, 5)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(vault.selectedItem?.id == note.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                                    .fill(session.selectedItem?.id == note.id ? Color.accentColor.opacity(0.15) : Color.clear)
                             )
                         }
                         .buttonStyle(.plain)

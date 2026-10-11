@@ -109,10 +109,11 @@ enum MarkdownFiles {
         url.isFileURL && NoteItem.markdownExtensions.contains(url.pathExtension.lowercased())
     }
 
-    /// Opens the first Markdown file among `urls` (the editor shows one note at a time).
+    /// Opens each Markdown file among `urls` in a tab of its own.
     static func open(_ urls: [URL], vault: VaultManager = .shared) {
-        guard let url = urls.first(where: isMarkdown) else { return }
-        vault.openFile(at: url)
+        for url in urls where isMarkdown(url) {
+            vault.openFileInTab(url)
+        }
     }
 
     /// The app Finder opens Markdown files with.
@@ -132,14 +133,31 @@ enum MarkdownFiles {
 
 /// Receives files opened from Finder (double-click, Open With, drag onto the Dock icon).
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func application(_ application: NSApplication, open urls: [URL]) {
+    /// Takes the "open documents" event before SwiftUI does: SwiftUI would also open (and close) a
+    /// window of its own for each file, next to the tab Brain.md opens.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self, andSelector: #selector(openDocuments(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEOpenDocuments))
+    }
+
+    @objc private func openDocuments(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
+        guard let list = event.paramDescriptor(forKeyword: keyDirectObject) else { return }
+        // A single file arrives as the descriptor itself, several as a list (indexed from 1).
+        let urls = list.numberOfItems == 0
+            ? [list.fileURLValue].compactMap { $0 }
+            : (1...list.numberOfItems).compactMap { list.atIndex($0)?.fileURLValue }
         MarkdownFiles.open(urls)
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        let vault = VaultManager.shared
-        for item in vault.tabs where !(vault.hasUnsavedChanges && item.url == vault.selectedItem?.url) {
-            vault.trashIfUnwritten(item.url)
-        }
+    /// Runs before the windows close, so the tab list is saved as it was.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        VaultManager.shared.prepareForTermination()
+        return .terminateNow
+    }
+
+    /// The tab bar's + button.
+    @objc func newWindowForTab(_ sender: Any?) {
+        VaultManager.shared.openWindowHandler?(NoteWindowRequest(path: nil))
     }
 }
