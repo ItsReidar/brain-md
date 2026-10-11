@@ -47,6 +47,8 @@ graph TD
 
 ### 1. General Settings
 
+- **AI Features › Show AI features**: Master switch for every AI feature (skills, AI Chat, Explain Screen, meeting recording, models and the Local AI & Voice pane). Off hides them without deleting anything; see [On-Device AI & Meetings](local-ai.md#turning-ai-off).
+- **Markdown Files › Default app for Markdown**: Shows which app Finder opens `.md` files with, and **Make Brain.md the Default** asks macOS to switch to Brain.md; see [Finder Integration](finder-integration.md).
 - **New Note Title Format**:
   - Presets: `Untitled`, `Date (YYYY-MM-DD)`, `Daily Journal`.
   - **Custom…**: Revealing a text field with a live evaluated preview badge (`Preview: Note - 2026-09-18.md`) and clickable token pills (`{date}`, `{time}`, `{year}`, `{month}`, `{day}`).
