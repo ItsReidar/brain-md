@@ -12,6 +12,7 @@ nonisolated public enum ModelSelection {
     public static let languageModelKey = "ai_language_model"
     /// Empty means no ASR model: speech falls back to the language model or Apple Speech.
     public static let speechModelKey = "ai_speech_model"
+    public static let embeddingModelKey = "ai_embedding_model"
     public static let identifySpeakersKey = "ai_identify_speakers"
 
     public static func languageModel(_ defaults: UserDefaults = .standard) -> ModelDescriptor {
@@ -24,6 +25,12 @@ nonisolated public enum ModelSelection {
     }
 
     /// Models may run: the AI Features master switch and "Enable on-device AI" are both on.
+    /// The search-by-meaning model picked in Settings, or the default.
+    public static func embeddingModel(_ defaults: UserDefaults = .standard) -> ModelDescriptor {
+        ModelCatalog.model(defaults.string(forKey: embeddingModelKey)).flatMap { $0.isEmbeddingModel ? $0 : nil }
+            ?? ModelCatalog.model(ModelCatalog.defaultEmbeddingModelID)!
+    }
+
     public static func isOnDeviceAIEnabled(_ defaults: UserDefaults = .standard) -> Bool {
         AIFeatures.isOn(defaults) && defaults.bool(forKey: enabledKey)
     }

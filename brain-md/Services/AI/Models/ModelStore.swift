@@ -244,7 +244,7 @@ public final class ModelStore: ObservableObject {
             fileManager.fileExists(atPath: directory.appendingPathComponent(name).path)
         }
         guard exists("config.json") else { return false }
-        if model.isLanguageModel, !exists("tokenizer.json") { return false }
+        if model.isLanguageModel || model.isEmbeddingModel, !exists("tokenizer.json") { return false }
 
         let index = directory.appendingPathComponent("model.safetensors.index.json")
         if let data = try? Data(contentsOf: index),
