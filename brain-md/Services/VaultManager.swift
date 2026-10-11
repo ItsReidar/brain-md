@@ -570,6 +570,28 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
 
+    /// Applies `edit` to the note at `url`: the editor while that note is open, otherwise the file
+    /// itself. A meeting transcript keeps finishing after you switch notes, and must stay in its note.
+    public func editNote(at url: URL, _ edit: (inout String) -> Void) {
+        if selectedItem?.url == url {
+            edit(&editorContent)
+            hasUnsavedChanges = true
+            return
+        }
+        do {
+            var content = try String(contentsOf: url, encoding: .utf8)
+            edit(&content)
+            if let relativePath = relativePathInVault(url) {
+                try writeFile(relativePath: relativePath, content: content)
+            } else {
+                try content.write(to: url, atomically: true, encoding: .utf8)
+                logActivity(action: "Updated File", detail: url.path, isError: false)
+            }
+        } catch {
+            logActivity(action: "Save Failed", detail: "\(url.lastPathComponent): \(error.localizedDescription)", isError: true)
+        }
+    }
+
     public func promptNewNote() {
         let defaultTitle = NoteTemplateEngine.resolveTitle(from: .standard)
         newNotePromptDefaultName = generateUniqueNotePath(baseName: defaultTitle)

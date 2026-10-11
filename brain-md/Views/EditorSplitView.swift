@@ -748,6 +748,8 @@ public struct EditorSplitView: View {
             meetingRecorder.stop()
             return
         }
+        // Transcription finishes after a note switch stops the recording; those lines stay in this note.
+        guard let noteURL = vault.selectedItem?.url else { return }
         let configuration = AudioCaptureConfiguration(
             captureSystemAudio: captureSystemAudio, captureMicrophone: captureMicrophone,
             sampleRate: 16_000, channels: 1)
@@ -760,13 +762,14 @@ public struct EditorSplitView: View {
             configuration: configuration,
             locale: AppleSpeechRecognizer.preferredLocale(),
             onSegment: { segment in
-                if !wroteHeading {
-                    vault.editorContent += heading
-                    wroteHeading = true
+                vault.editNote(at: noteURL) { content in
+                    if !wroteHeading {
+                        content += heading
+                        wroteHeading = true
+                    }
+                    // Consecutive lines from one speaker extend their paragraph instead of adding a line.
+                    writer.write(segment, into: &content)
                 }
-                // Consecutive lines from one speaker extend their paragraph instead of adding a line.
-                writer.write(segment, into: &vault.editorContent)
-                vault.hasUnsavedChanges = true
             },
             onFinished: { segments, error in
                 vault.isAutosaveSuspended = false
