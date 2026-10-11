@@ -149,17 +149,7 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
         ]
         textView.typingAttributes[NSAttributedString.Key.ligature] = 0
         
-        if textView.string != text {
-            context.coordinator.isUpdating = true
-            let selectedRanges = textView.selectedRanges
-            textView.string = text
-            if let first = selectedRanges.first?.rangeValue, first.location + first.length <= (text as NSString).length {
-                textView.setSelectedRange(first)
-            }
-            context.coordinator.applyHighlighting(to: textView, theme: currentTheme, fontSize: fontSize, fontDesign: fontDesign)
-            textView.adjustFrameToFitContent()
-            context.coordinator.isUpdating = false
-        } else {
+        if !context.coordinator.showText(text, in: textView) {
             // Re-highlight if theme or font configuration changed
             if context.coordinator.lastThemeId != currentTheme.id ||
                context.coordinator.lastFontSize != fontSize ||
@@ -206,9 +196,13 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
         
         private var pendingTextSyncTask: Task<Void, Never>?
         private var pendingHighlightTask: Task<Void, Never>?
+        /// The binding's text as of the last sync in either direction. While the binding still holds
+        /// it, the text view differs only by typing that hasn't synced yet.
+        private var syncedText: String
         
         init(_ parent: MacMarkdownEditorView) {
             self.parent = parent
+            self.syncedText = parent.text
         }
         
         deinit {
@@ -225,6 +219,7 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
             pendingTextSyncTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 90_000_000)
                 guard let self = self, !Task.isCancelled else { return }
+                self.syncedText = currentString
                 if self.parent.text != currentString {
                     self.parent.text = currentString
                 }
@@ -239,10 +234,33 @@ public struct MacMarkdownEditorView: NSViewRepresentable {
             }
         }
         
+        /// Puts the binding's `text` into the editor when it changed from outside (another note opened,
+        /// a transcript line). Returns whether it did. A redraw before typing syncs leaves the editor
+        /// alone, and an outside change drops the pending sync so it can't write the old text over it.
+        @discardableResult
+        func showText(_ text: String, in textView: MarkdownNSTextView) -> Bool {
+            guard text != syncedText else { return false }
+            syncedText = text
+            pendingTextSyncTask?.cancel()
+            pendingTextSyncTask = nil
+            guard textView.string != text else { return false }
+            isUpdating = true
+            let selectedRanges = textView.selectedRanges
+            textView.string = text
+            if let first = selectedRanges.first?.rangeValue, first.location + first.length <= (text as NSString).length {
+                textView.setSelectedRange(first)
+            }
+            applyHighlighting(to: textView, theme: parent.currentTheme, fontSize: parent.fontSize, fontDesign: parent.fontDesign)
+            textView.adjustFrameToFitContent()
+            isUpdating = false
+            return true
+        }
+
         func flushPendingSync(from textView: NSTextView) {
             pendingTextSyncTask?.cancel()
             pendingTextSyncTask = nil
             let currentString = textView.string
+            syncedText = currentString
             if parent.text != currentString {
                 parent.text = currentString
             }
