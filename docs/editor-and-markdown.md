@@ -50,7 +50,8 @@ Right-click a note in the sidebar and choose **Open in New Tab**, or ⌘-click i
 - The editor shows one note at a time, and the active tab is always the note shown (`VaultManager.tabs` and `selectedItem`, in `Services/NoteTabs.swift`).
 - Picking a note normally (sidebar click, Quick Switcher, a link) replaces the active tab, like a browser tab following a link.
 - Switching tabs saves the note you leave. Closing the active tab shows the next tab, or the previous one if it was last.
-- A tab whose note was deleted or moved is dropped when you click it. Switching vaults closes all tabs.
+- A tab whose note was deleted or moved is dropped when you click it.
+- Open tabs and the active one are remembered per vault (UserDefaults key `open_tabs`) and come back when you relaunch or switch back to the vault. Notes that no longer exist are skipped.
 - A file created by the `brain` command and left empty is trashed when its tab closes, not when you switch away from it.
 
 ### Spotlight Quick Switcher (`QuickSwitcherModalView` - `⌘O`)

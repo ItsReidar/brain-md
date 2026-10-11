@@ -65,12 +65,21 @@ private final class VaultFileMonitor: @unchecked Sendable {
 
 @MainActor
 public final class VaultManager: ObservableObject, VaultManaging {
-    public static let shared = VaultManager()
+    public static let shared: VaultManager = {
+        let vault = VaultManager()
+        vault.tabsDefaults = .standard
+        vault.restoreTabs()
+        return vault
+    }()
     
     @Published public var vaultURL: URL
     @Published public var rootItems: [NoteItem] = []
     /// Notes open in tabs, in order; the one shown is `selectedItem` (see NoteTabs.swift).
-    @Published public var tabs: [NoteItem] = []
+    @Published public var tabs: [NoteItem] = [] {
+        didSet { saveTabs() }
+    }
+    /// Where the open tabs are remembered between launches; nil (as in tests) remembers nothing.
+    var tabsDefaults: UserDefaults?
     @Published public var selectedItem: NoteItem? {
         didSet {
             if oldValue?.url != selectedItem?.url { selectedItemChanged(from: oldValue) }
@@ -498,6 +507,12 @@ public final class VaultManager: ObservableObject, VaultManaging {
     }
     
     public func selectNote(byRelativePath path: String) {
+        if let item = noteItem(atRelativePath: path) {
+            selectNote(item)
+        }
+    }
+
+    func noteItem(atRelativePath path: String) -> NoteItem? {
         func findIn(items: [NoteItem]) -> NoteItem? {
             for item in items {
                 if item.relativePath == path { return item }
@@ -507,9 +522,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
             }
             return nil
         }
-        if let item = findIn(items: rootItems) {
-            selectNote(item)
-        }
+        return findIn(items: rootItems)
     }
     
     public func generateUniqueNotePath(baseName: String = "Untitled") -> String {
@@ -1150,14 +1163,19 @@ public final class VaultManager: ObservableObject, VaultManaging {
     
     public func setVaultURL(_ newURL: URL) {
         stopFileWatcher()
-        vaultURL = newURL.standardized.resolvingSymlinksInPath()
-        UserDefaults.standard.set(vaultURL.path, forKey: userDefaultsVaultKey)
+        // Close the old vault's tabs without forgetting them, then reopen the new vault's.
+        let defaults = tabsDefaults
+        tabsDefaults = nil
         tabs = []
         selectedItem = nil
         editorContent = ""
         editorTitle = ""
+        vaultURL = newURL.standardized.resolvingSymlinksInPath()
+        UserDefaults.standard.set(vaultURL.path, forKey: userDefaultsVaultKey)
         refreshFiles()
         startFileWatcher()
+        tabsDefaults = defaults
+        restoreTabs()
         logActivity(action: "Switched Vault", detail: vaultURL.path, isError: false)
     }
     

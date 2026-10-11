@@ -125,4 +125,52 @@ struct NoteTabsTests {
         #expect(names(vault) == ["A"])
         #expect(vault.selectedItem?.relativePath == "A.md")
     }
+
+    @Test func openTabsComeBackAfterARelaunch() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "brainmd-tests-tabs-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let outside = root.appendingPathComponent("outside.md")
+        try "# Outside".write(to: outside, atomically: true, encoding: .utf8)
+
+        vault.tabsDefaults = defaults
+        vault.selectNote(try note(vault, "A"))
+        vault.openInNewTab(try note(vault, "B"))
+        vault.openFile(at: outside) // replaces B's tab
+        vault.openInNewTab(try note(vault, "C"))
+        vault.showTab(vault.tabs[1])
+        #expect(names(vault) == ["A", "outside", "C"])
+
+        try FileManager.default.removeItem(at: vaultURL.appendingPathComponent("C.md")) // gone by next launch
+        let relaunched = VaultManager(customVaultURL: vaultURL)
+        relaunched.tabsDefaults = defaults
+        relaunched.restoreTabs()
+        #expect(names(relaunched) == ["A", "outside"])
+        #expect(relaunched.selectedItem?.isExternal == true)
+        #expect(relaunched.editorContent == "# Outside")
+
+        // Another vault keeps its own tabs; this one's are untouched.
+        let otherURL = root.appendingPathComponent("Other")
+        try FileManager.default.createDirectory(at: otherURL, withIntermediateDirectories: true)
+        try "# D".write(to: otherURL.appendingPathComponent("D.md"), atomically: true, encoding: .utf8)
+        let other = VaultManager(customVaultURL: otherURL)
+        other.tabsDefaults = defaults
+        other.restoreTabs()
+        #expect(other.tabs.isEmpty)
+        other.selectNote(byRelativePath: "D.md")
+        let again = VaultManager(customVaultURL: vaultURL)
+        again.tabsDefaults = defaults
+        again.restoreTabs()
+        #expect(names(again) == ["A", "outside"])
+    }
+
+    @Test func withoutDefaultsNothingIsRemembered() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        vault.selectNote(try note(vault, "A"))
+        vault.restoreTabs() // no defaults: a no-op
+        #expect(names(vault) == ["A"])
+    }
 }
