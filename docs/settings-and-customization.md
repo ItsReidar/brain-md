@@ -56,7 +56,7 @@ graph TD
   - Presets: `Heading Only`, `Date & Heading`, `Daily Journal`, `Meeting Notes`, `Blank`.
   - **Custom…**: Revealing an embedded monospace `TextEditor` input window supporting dynamic token replacement (`{{title}}`, `{{date}}`, `{{time}}`) and a "Reset to Default Template" button.
 - **Start MCP Server at Launch**: Toggle to automatically boot the local HTTP/SSE server on application startup.
-- **Auto-Save Delay**: Configurable debounce intervals (`0.5s` Instant, `1.0s` Normal, `3.0s` Relaxed).
+- **Auto-Save Delay**: How long typing must pause before the open note is saved (`0.5s` Instant, `1.0s` Normal (default), `3.0s` Relaxed). Applies to vault notes and to files opened from Finder; see [Auto-Save](vault-management.md#auto-save).
 - **Background File Watcher**: Real-time detection of external edits made by Obsidian, Git, or VS Code.
 
 ---

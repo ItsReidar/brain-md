@@ -8,7 +8,7 @@ Brain.md registers for the Markdown type (`net.daringfireball.markdown`: `.md`, 
 
 - **A file inside the vault** opens as that note, exactly as if you'd picked it in the sidebar.
 - **A file anywhere else** opens in the same editor and preview. A bar above the editor says it's outside your vault and where it is, with **Show in Finder** and **Add to Vault**.
-  - **Save (⌘S)** writes back to the file itself; the vault isn't touched.
+  - **Save (⌘S)** and auto-save write back to the file itself; the vault isn't touched.
   - **Add to Vault** copies the file, including unsaved edits, into the vault root (with a unique name if one exists) and opens the copy. The original keeps its last saved contents.
   - Switching to a vault note saves the outside file first, like any note.
   - Relative images next to the file show in the preview. Outside files aren't watched for changes by other apps, and wikilinks resolve only within the vault.
