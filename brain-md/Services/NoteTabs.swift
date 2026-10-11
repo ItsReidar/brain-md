@@ -6,9 +6,19 @@
 //  always `selectedItem`. Picking a note normally replaces the active tab; "Open in New Tab" adds one.
 //
 
+import AppKit
 import Foundation
 
 extension VaultManager {
+    /// A click on a note in a list: ⌘-click opens it in a new tab, a plain click in the current one.
+    public func openNote(_ item: NoteItem, inNewTab: Bool = NSEvent.modifierFlags.contains(.command)) {
+        if inNewTab, item.isMarkdown {
+            openInNewTab(item)
+        } else {
+            selectNote(item)
+        }
+    }
+
     /// Opens `item` in a tab of its own, or switches to its tab if it's already open.
     public func openInNewTab(_ item: NoteItem) {
         if !tabs.contains(where: { $0.url == item.url }) { tabs.append(item) }

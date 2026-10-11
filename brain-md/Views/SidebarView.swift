@@ -238,7 +238,7 @@ public struct SidebarView: View {
             item: item,
             selectedItem: vault.selectedItem,
             onSelect: { selected in
-                vault.selectNote(selected)
+                vault.openNote(selected)
             },
             onRename: { target in
                 renamingItem = target
@@ -412,7 +412,7 @@ public struct SidebarView: View {
                 List(results) { res in
                     Button(action: {
                         if let item = findItem(path: res.relativePath, in: vault.rootItems) {
-                            vault.selectNote(item)
+                            vault.openNote(item)
                         }
                     }) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -579,7 +579,7 @@ public struct SidebarView: View {
                 } else {
                     ForEach(matchingNotes) { note in
                         Button(action: {
-                            vault.selectNote(note)
+                            vault.openNote(note)
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "doc.text")
@@ -724,11 +724,7 @@ private struct ItemRowView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                if item.isMarkdown, NSEvent.modifierFlags.contains(.command) {
-                    VaultManager.shared.openInNewTab(item)
-                } else {
-                    onSelect(item)
-                }
+                onSelect(item)
             }
             .draggable(item.relativePath) {
                 dragPreview(icon: item.iconName, text: item.displayName)

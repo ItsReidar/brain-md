@@ -45,7 +45,7 @@ The dual-pane Split View features an interactive, high-precision draggable split
 
 ### Note Tabs
 
-Right-click a note in the sidebar and choose **Open in New Tab**, or ⌘-click it, to keep the current note open and show the other one next to it. Once two or more notes are open, a tab bar above the editor lists them, each tab named after its note; click a tab to switch, or its **×** (or ⌘W) to close it. With a single note open, ⌘W closes the window as usual.
+Right-click a note in the sidebar and choose **Open in New Tab**, or ⌘-click it (in the sidebar, search results, a tag's note list or the Quick Switcher), to keep the current note open and show the other one next to it. Once two or more notes are open, a tab bar above the editor lists them, each tab named after its note; click a tab to switch, or its **×** (or ⌘W) to close it. With a single note open, ⌘W closes the window as usual.
 
 - The editor shows one note at a time, and the active tab is always the note shown (`VaultManager.tabs` and `selectedItem`, in `Services/NoteTabs.swift`).
 - Picking a note normally (sidebar click, Quick Switcher, a link) replaces the active tab, like a browser tab following a link.
