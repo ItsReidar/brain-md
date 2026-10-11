@@ -29,10 +29,13 @@ brain-md/
 │   ├── settings-and-customization.md # System settings & templates
 │   ├── 3d-graph-view.md           # SceneKit brain graph & layout model
 │   ├── local-ai.md                # Models, skills, chat & meeting transcription
+│   ├── finder-integration.md      # Opening files from Finder & Quick Look
 │   ├── releasing.md               # DMG, signing & Homebrew cask
 │   ├── release-notes/             # Per-version notes used by publish.sh
 │   └── development-and-testing.md # This guide
 ├── scripts/release/               # package.sh & publish.sh (see releasing.md)
+├── scripts/models/                # Model conversion (convert_orukeet.py)
+├── Config/                        # Info.plist keys merged into the app's generated Info.plist
 ├── packaging/homebrew/            # Cask template
 ├── brain-md.xcodeproj             # Xcode project package
 ├── brain-md/                      # Main application source code
@@ -90,6 +93,7 @@ brain-md/
 │   │   ├── mermaid.min.js         # Bundled offline Mermaid.js engine
 │   │   └── TerminalThemes.swift   # Built-in color theme definitions
 │   └── Assets.xcassets/           # App icon set & color assets
+├── brain-md-QuickLook/            # Finder Quick Look preview extension (shares the app's renderer)
 ├── brain-mdTests/                 # Unit test suite (Swift Testing)
 └── brain-mdUITests/               # Automated UI integration tests
 ```
@@ -176,7 +180,12 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `MeetingTranscriptionTests` | Sample-buffer conversion, level meter mapping, transcript line format, transcription language default, locale matching (`nl_BE`, `nl` → `nl_NL`, `en_BE` → `en_US`). |
 | `SpeechRecognitionTests` | Engine choice (speech model, Gemma 4 E4B, Apple Speech; AI off or Intel), catalog integrity (unique ids, 40-character revisions, mlx-audio engine types), utterance cutting (pauses, live-word windows, max length, clicks, chunk-size independence), speaker timelines, "Me" / "Speaker N" / "Them" labels in note lines and minutes, per-engine settings. |
 | `TranscriptWriterTests` | Transcript paragraphs: same speaker joins one timestamp, speaker changes, "Them" grouping, 30-second pauses, two-minute monologues, text typed after the transcript is kept, edits earlier in the note, out-of-order segments, minutes use the same paragraphs. |
+| `TranscriptNoteTests` | Transcript lines stay in the note the recording started in: written to its file after a note switch (vault notes and files from Finder), back in the editor when you return to it. |
 | `AIFeaturesTests` | The AI Features master switch: on by default, overrides on-device AI without forgetting it, keeps meetings on Apple Speech while off, stops a recording and unloads the model. |
+| `ExternalFilesTests` | Markdown files from Finder: outside files open in the editor, vault files open as their note, saving writes back to the outside file, switching notes saves it first, Add to Vault copies edits and leaves the original, only Markdown opens, vault-relative paths. |
+| `AutosaveTests` | Debounced auto-save: saves after the delay and not before, each edit restarts it, outside files save to themselves, a pending save doesn't fire for the next note, waits while suspended (meeting transcript) and saves when resumed, delay read from Settings with a 1 s default. |
+| `EditorTextSyncTests` | Editor ↔ binding sync: a keystroke not yet synced can't overwrite the next note, a redraw before the sync keeps the keystroke, typing still syncs and outside changes still show. |
+| `MarkdownQuickLookTests` | Quick Look HTML: static rendering without scripts, network blocked by the content security policy, dark mode styles, Mermaid as code, local images attached and their alt-text fallback; regression for inline images in paragraphs, lists, tables and alerts. |
 | `GemmaAudioTests` / `BrainGemma4AudioPortTests` | The ported Gemma 4 audio encoder: feature shapes, encoder output, weight mapping; opt-in real transcription. |
 | `MLXSpeechIntegrationTests`, `AlternativeLanguageModelTests`, `CatalogConfigCheckTests` | Opt-in real speech models, Qwen3.5 and catalog network checks; see [On-Device AI & Meetings](local-ai.md#testing). |
 | Opt-in real-model and speech tests | Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1` or `TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1`; see [On-Device AI & Meetings](local-ai.md#testing). |

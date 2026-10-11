@@ -134,6 +134,7 @@ To achieve butter-smooth 120 FPS typing responsiveness on Apple Silicon ProMotio
 2. **Debounced Preview Synchronization (~90ms)**:
    - Keystrokes in `MarkdownNSTextView` do not trigger synchronous document re-parsing or SwiftUI preview view-tree recreations. Document synchronization to `@Binding var text` is debounced by 90ms.
    - Any pending sync is immediately flushed on Save (`⌘S`) or when the editor resigns first responder.
+   - A redraw before the sync leaves the typed text alone. A change from outside (opening another note, a transcript line) drops the pending sync, so it can't write the previous text over the new content.
 3. **Coalesced Syntax Highlighting Pass (~40ms)**:
    - Regular-expression evaluation across the document runs with a 40ms debounce, ensuring keystroke latency stays under `1ms` for seamless 120 FPS input.
 

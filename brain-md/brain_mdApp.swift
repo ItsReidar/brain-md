@@ -7,6 +7,9 @@ import SwiftUI
 
 @main
 struct brain_mdApp: App {
+    /// Receives Markdown files opened from Finder.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         // mlx-audio-swift loads some speech models through the default Hugging Face cache; point it at
         // brain-md's models folder before anything loads.

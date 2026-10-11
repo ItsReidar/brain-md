@@ -528,6 +528,10 @@ public final class VaultManager: ObservableObject, VaultManaging {
     
     public func saveCurrentNote() {
         guard let current = selectedItem, !current.isDirectory, current.isMarkdown else { return }
+        if current.isExternal {
+            saveExternalFile(current)
+            return
+        }
         do {
             try writeFile(relativePath: current.relativePath, content: editorContent)
             hasUnsavedChanges = false
@@ -536,6 +540,58 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
     
+    // MARK: - Auto-Save
+
+    static let autosaveDelayKey = "autosave_debounce_seconds"
+
+    /// Set while something else is writing into the note (a meeting transcript); auto-save waits
+    /// until it's cleared and `scheduleAutosave()` runs again.
+    public var isAutosaveSuspended = false
+    private var autosaveTask: Task<Void, Never>?
+
+    /// The Auto-Save Delay from Settings (General › Auto-Save & Synchronization), 1 s by default.
+    var autosaveDelay: TimeInterval {
+        let seconds = UserDefaults.standard.double(forKey: Self.autosaveDelayKey)
+        return seconds > 0 ? seconds : 1.0
+    }
+
+    /// Saves the open note once edits have paused for `delay` (the Auto-Save Delay by default).
+    /// Each call restarts the wait. Nothing is saved if another note was opened meanwhile (opening
+    /// a note already saves the previous one), there are no unsaved changes, or auto-save is suspended.
+    public func scheduleAutosave(after delay: TimeInterval? = nil) {
+        autosaveTask?.cancel()
+        let noteURL = selectedItem?.url
+        let delay = delay ?? autosaveDelay
+        autosaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled, !self.isAutosaveSuspended, self.hasUnsavedChanges,
+                  noteURL != nil, self.selectedItem?.url == noteURL else { return }
+            self.saveCurrentNote()
+        }
+    }
+
+    /// Applies `edit` to the note at `url`: the editor while that note is open, otherwise the file
+    /// itself. A meeting transcript keeps finishing after you switch notes, and must stay in its note.
+    public func editNote(at url: URL, _ edit: (inout String) -> Void) {
+        if selectedItem?.url == url {
+            edit(&editorContent)
+            hasUnsavedChanges = true
+            return
+        }
+        do {
+            var content = try String(contentsOf: url, encoding: .utf8)
+            edit(&content)
+            if let relativePath = relativePathInVault(url) {
+                try writeFile(relativePath: relativePath, content: content)
+            } else {
+                try content.write(to: url, atomically: true, encoding: .utf8)
+                logActivity(action: "Updated File", detail: url.path, isError: false)
+            }
+        } catch {
+            logActivity(action: "Save Failed", detail: "\(url.lastPathComponent): \(error.localizedDescription)", isError: true)
+        }
+    }
+
     public func promptNewNote() {
         let defaultTitle = NoteTemplateEngine.resolveTitle(from: .standard)
         newNotePromptDefaultName = generateUniqueNotePath(baseName: defaultTitle)

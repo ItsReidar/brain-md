@@ -15,6 +15,9 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
     public let modifiedAt: Date
     public let size: Int64
     public var tags: [String]
+    /// A Markdown file opened from Finder that lives outside the vault. `relativePath` is then its
+    /// absolute path, and it's saved straight to `url`.
+    public var isExternal = false
     
     public init(
         name: String,
@@ -36,6 +39,9 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
         self.tags = tags
     }
     
+    /// Extensions of the Markdown type (`net.daringfireball.markdown`) brain-md opens from Finder.
+    public static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mkdn"]
+
     public static let supportedImageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "gif", "webp", "svg", "tiff", "tif", "bmp", "heic", "ico"
     ]
@@ -43,7 +49,7 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
     public var isMarkdown: Bool {
         guard !isDirectory else { return false }
         let ext = url.pathExtension.lowercased()
-        return ext == "md" || ext == "markdown" || ext == "txt"
+        return Self.markdownExtensions.contains(ext) || ext == "txt"
     }
     
     public var isImage: Bool {

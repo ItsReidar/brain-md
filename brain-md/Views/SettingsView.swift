@@ -367,6 +367,54 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
 
 // MARK: - 1. General Settings Pane
 
+/// Settings › General › Markdown Files: make brain-md the app Finder opens `.md` files with.
+struct MarkdownDefaultAppCard: View {
+  @State private var defaultAppName: String?
+  @State private var isDefault = false
+  @State private var errorMessage: String?
+
+  var body: some View {
+    SettingsCard(
+      title: "Markdown Files",
+      footer: errorMessage
+        ?? "Double-clicking a .md file opens it in Brain.md. Files outside your vault open in the editor with an Add to Vault button."
+    ) {
+      SettingsRow(
+        title: "Default app for Markdown",
+        subtitle: isDefault ? "Brain.md opens Markdown files" : "Currently \(defaultAppName ?? "no app")",
+        icon: "doc.text"
+      ) {
+        if isDefault {
+          Image(systemName: "checkmark.circle.fill")
+            .foregroundStyle(.green)
+            .accessibilityLabel("Brain.md is the default")
+        } else {
+          Button("Make Brain.md the Default") {
+            Task {
+              do {
+                try await MarkdownFiles.makeBrainMDDefault()
+                errorMessage = nil
+              } catch {
+                errorMessage = "macOS didn't change the default: \(error.localizedDescription)"
+              }
+              refresh()
+            }
+          }
+        }
+      }
+    }
+    .onAppear(perform: refresh)
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+  }
+
+  private func refresh() {
+    isDefault = MarkdownFiles.isBrainMDDefault
+    defaultAppName = MarkdownFiles.defaultApplicationURL.map {
+      FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "")
+    }
+  }
+}
+
 public struct GeneralSettingsPane: View {
   @AppStorage("note_title_format") private var noteTitleFormat: String = "untitled"
   @AppStorage("note_title_custom_format") private var customTitleFormat: String = "{date} Note"
@@ -402,6 +450,8 @@ public struct GeneralSettingsPane: View {
             .accessibilityLabel("Show AI features")
         }
       }
+
+      MarkdownDefaultAppCard()
 
       SettingsCard(title: "Startup & New Notes") {
         // 1. Note Title Format

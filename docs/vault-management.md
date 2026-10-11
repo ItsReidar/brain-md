@@ -115,6 +115,16 @@ When a note or folder is moved or renamed, `VaultManager` preserves the active s
 
 ---
 
+## Auto-Save
+
+Edits are saved automatically once you stop typing for the **Auto-Save Delay** (Settings › General › Auto-Save & Synchronization: 0.5 s, 1 s by default, or 3 s). Every edit restarts the wait. `⌘S` still saves immediately.
+
+- The note goes through `VaultManager.saveCurrentNote()`, so a file opened from Finder outside the vault is written back to itself, as with `⌘S`.
+- Opening another note already saves the previous one; a pending auto-save is dropped if the open note has changed by the time it fires.
+- While a meeting is being recorded, auto-save waits: the transcript is written into the note every few seconds and saved once the recording finishes.
+
+---
+
 ## Live Background File Synchronization
 
 To maintain full interoperability with external tools like Obsidian, Git, or VS Code, `VaultManager` embeds `VaultFileMonitor`:

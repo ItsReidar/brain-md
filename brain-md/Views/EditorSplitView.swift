@@ -70,6 +70,11 @@ public struct EditorSplitView: View {
                         editorHeader(item: selected)
                         
                         Divider()
+
+                        if selected.isExternal {
+                            externalFileBar(item: selected)
+                            Divider()
+                        }
                         
                         // Editor & Preview Content Area
                     GeometryReader { geo in
@@ -89,6 +94,7 @@ public struct EditorSplitView: View {
                                         set: {
                                             vault.editorContent = $0
                                             vault.hasUnsavedChanges = true
+                                            vault.scheduleAutosave()
                                         }
                                     ),
                                     onSave: {
@@ -144,6 +150,7 @@ public struct EditorSplitView: View {
                                     set: {
                                         vault.editorContent = $0
                                         vault.hasUnsavedChanges = true
+                                        vault.scheduleAutosave()
                                     }
                                 ),
                                 onSave: {
@@ -263,13 +270,47 @@ public struct EditorSplitView: View {
     
     // MARK: - Editor Header
     
+    /// Shown for a Markdown file opened from Finder that isn't in the vault.
+    private func externalFileBar(item: NoteItem) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder.badge.questionmark")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Outside your vault:")
+                .font(.system(size: 12, weight: .medium))
+            Text((item.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(item.url.path)
+            Spacer(minLength: 8)
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
+            Button("Add to Vault") {
+                do {
+                    let path = try vault.addExternalFileToVault()
+                    showBubble(message: "Added to your vault as \(path)")
+                } catch {
+                    showBubble(message: error.localizedDescription)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .help("Copy this file, with your edits, into the vault and open the copy")
+        }
+        .controlSize(.small)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.accentColor.opacity(0.08))
+        .accessibilityElement(children: .contain)
+    }
+
     private func editorHeader(item: NoteItem) -> some View {
         HStack(spacing: 12) {
             // Note Title & Unsaved Indicator
             HStack(spacing: 6) {
                 Image(systemName: "doc.text")
                     .foregroundColor(.accentColor)
-                Text(item.relativePath)
+                Text(item.isExternal ? item.name : item.relativePath)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 
@@ -707,25 +748,32 @@ public struct EditorSplitView: View {
             meetingRecorder.stop()
             return
         }
+        // Transcription finishes after a note switch stops the recording; those lines stay in this note.
+        guard let noteURL = vault.selectedItem?.url else { return }
         let configuration = AudioCaptureConfiguration(
             captureSystemAudio: captureSystemAudio, captureMicrophone: captureMicrophone,
             sampleRate: 16_000, channels: 1)
         let heading = "\n\n## Meeting transcript · \(Date().formatted(date: .abbreviated, time: .shortened))\n"
         var wroteHeading = false
         var writer = TranscriptWriter()
+        // The transcript lands every few seconds; save it once the recording ends, not after each line.
+        vault.isAutosaveSuspended = true
         meetingRecorder.start(
             configuration: configuration,
             locale: AppleSpeechRecognizer.preferredLocale(),
             onSegment: { segment in
-                if !wroteHeading {
-                    vault.editorContent += heading
-                    wroteHeading = true
+                vault.editNote(at: noteURL) { content in
+                    if !wroteHeading {
+                        content += heading
+                        wroteHeading = true
+                    }
+                    // Consecutive lines from one speaker extend their paragraph instead of adding a line.
+                    writer.write(segment, into: &content)
                 }
-                // Consecutive lines from one speaker extend their paragraph instead of adding a line.
-                writer.write(segment, into: &vault.editorContent)
-                vault.hasUnsavedChanges = true
             },
             onFinished: { segments, error in
+                vault.isAutosaveSuspended = false
+                vault.scheduleAutosave()
                 if let error {
                     showBubble(message: error.localizedDescription)
                 } else if segments.isEmpty {

@@ -16,6 +16,7 @@
 		D0A1000000000000000000C7 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B7 /* MLXAudioSTT */; };
 		D0A1000000000000000000C8 /* MLXAudioVAD in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B8 /* MLXAudioVAD */; };
 		D0A1000000000000000000C9 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B9 /* MLXAudioCore */; };
+		D0B200000000000000000051 /* brain-md-QuickLook.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D0B20000000000000000000A /* brain-md-QuickLook.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -33,12 +34,34 @@
 			remoteGlobalIDString = D09200E9305B825300CC84D2;
 			remoteInfo = "brain-md";
 		};
+		D0B200000000000000000041 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D09200E2305B825300CC84D2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D0B200000000000000000020;
+			remoteInfo = "brain-md-QuickLook";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D0B200000000000000000050 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D0B200000000000000000051 /* brain-md-QuickLook.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		D09200EA305B825300CC84D2 /* brain-md.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "brain-md.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D09200F9305B825500CC84D2 /* brain-mdTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "brain-mdTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0920103305B825500CC84D2 /* brain-mdUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "brain-mdUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D0B20000000000000000000A /* brain-md-QuickLook.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "brain-md-QuickLook.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -56,6 +79,28 @@
 			);
 			target = D0920102305B825500CC84D2 /* brain-mdUITests */;
 		};
+		D0B20000000000000000000C /* Exceptions for "brain-md-QuickLook" folder in "brain-md-QuickLook" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D0B200000000000000000020 /* brain-md-QuickLook */;
+		};
+		D0B20000000000000000000D /* Exceptions for "brain-md" folder in "brain-md-QuickLook" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Models/Frontmatter.swift,
+				Models/TerminalTheme.swift,
+				Resources/TerminalThemes.swift,
+				Services/MarkdownQuickLook.swift,
+				Services/ScrollSyncCoordinator.swift,
+				Services/SyntaxHighlighter.swift,
+				Services/ThemeManager.swift,
+				Views/MarkdownPreviewView.swift,
+				Views/MermaidDiagramView.swift,
+			);
+			target = D0B200000000000000000020 /* brain-md-QuickLook */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -64,6 +109,7 @@
 			exceptions = (
 				D04DBD02306BEAEF004067B7 /* Exceptions for "brain-md" folder in "brain-mdTests" target */,
 				D04DBD03306BEAEF004067B7 /* Exceptions for "brain-md" folder in "brain-mdUITests" target */,
+				D0B20000000000000000000D /* Exceptions for "brain-md" folder in "brain-md-QuickLook" target */,
 			);
 			path = "brain-md";
 			sourceTree = "<group>";
@@ -76,6 +122,14 @@
 		D0920106305B825500CC84D2 /* brain-mdUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "brain-mdUITests";
+			sourceTree = "<group>";
+		};
+		D0B20000000000000000000B /* brain-md-QuickLook */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D0B20000000000000000000C /* Exceptions for "brain-md-QuickLook" folder in "brain-md-QuickLook" target */,
+			);
+			path = "brain-md-QuickLook";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -111,6 +165,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D0B200000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -119,6 +180,7 @@
 			children = (
 				D09200EC305B825300CC84D2 /* brain-md */,
 				D09200FC305B825500CC84D2 /* brain-mdTests */,
+				D0B20000000000000000000B /* brain-md-QuickLook */,
 				D0920106305B825500CC84D2 /* brain-mdUITests */,
 				D09200EB305B825300CC84D2 /* Products */,
 			);
@@ -130,6 +192,7 @@
 				D09200EA305B825300CC84D2 /* brain-md.app */,
 				D09200F9305B825500CC84D2 /* brain-mdTests.xctest */,
 				D0920103305B825500CC84D2 /* brain-mdUITests.xctest */,
+				D0B20000000000000000000A /* brain-md-QuickLook.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -144,10 +207,12 @@
 				D09200E6305B825300CC84D2 /* Sources */,
 				D09200E7305B825300CC84D2 /* Frameworks */,
 				D09200E8305B825300CC84D2 /* Resources */,
+				D0B200000000000000000050 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D0B200000000000000000040 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D09200EC305B825300CC84D2 /* brain-md */,
@@ -214,6 +279,28 @@
 			productReference = D0920103305B825500CC84D2 /* brain-mdUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		D0B200000000000000000020 /* brain-md-QuickLook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D0B200000000000000000030 /* Build configuration list for PBXNativeTarget "brain-md-QuickLook" */;
+			buildPhases = (
+				D0B200000000000000000010 /* Sources */,
+				D0B200000000000000000011 /* Frameworks */,
+				D0B200000000000000000012 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D0B20000000000000000000B /* brain-md-QuickLook */,
+			);
+			name = "brain-md-QuickLook";
+			packageProductDependencies = (
+			);
+			productName = "brain-md-QuickLook";
+			productReference = D0B20000000000000000000A /* brain-md-QuickLook.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -234,6 +321,9 @@
 					D0920102305B825500CC84D2 = {
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = D09200E9305B825300CC84D2;
+					};
+					D0B200000000000000000020 = {
+						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -261,6 +351,7 @@
 				D09200E9305B825300CC84D2 /* brain-md */,
 				D09200F8305B825500CC84D2 /* brain-mdTests */,
 				D0920102305B825500CC84D2 /* brain-mdUITests */,
+				D0B200000000000000000020 /* brain-md-QuickLook */,
 			);
 		};
 /* End PBXProject section */
@@ -281,6 +372,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D0920101305B825500CC84D2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D0B200000000000000000012 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -311,6 +409,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D0B200000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -323,6 +428,11 @@
 			isa = PBXTargetDependency;
 			target = D09200E9305B825300CC84D2 /* brain-md */;
 			targetProxy = D0920104305B825500CC84D2 /* PBXContainerItemProxy */;
+		};
+		D0B200000000000000000040 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D0B200000000000000000020 /* brain-md-QuickLook */;
+			targetProxy = D0B200000000000000000041 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -477,6 +587,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/brain-md-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Brain.md;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -530,6 +641,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/brain-md-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Brain.md;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -640,6 +752,71 @@
 			};
 			name = Release;
 		};
+		D0B200000000000000000031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RJH868AZ6W;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "brain-md-QuickLook/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Brain.md Quick Look";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "itsreidar.brain-md.QuickLook";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D0B200000000000000000032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = RJH868AZ6W;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "brain-md-QuickLook/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Brain.md Quick Look";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "itsreidar.brain-md.QuickLook";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -675,6 +852,15 @@
 			buildConfigurations = (
 				D0920114305B825500CC84D2 /* Debug */,
 				D0920115305B825500CC84D2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D0B200000000000000000030 /* Build configuration list for PBXNativeTarget "brain-md-QuickLook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0B200000000000000000031 /* Debug */,
+				D0B200000000000000000032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

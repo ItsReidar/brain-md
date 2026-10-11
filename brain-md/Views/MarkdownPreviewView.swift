@@ -1871,7 +1871,7 @@ public enum MarkdownHTMLRenderer {
                 let anchor = id ?? slugify(title)
                 out += "<h6 id=\"\(anchor)\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</h6>\n"
             case .alert(let type, let text):
-                out += renderAlertHTML(type: type, text: text) + "\n"
+                out += renderAlertHTML(type: type, text: text, noteURL: noteURL, vaultURL: vaultURL) + "\n"
             case .codeBlock(let lang, let code):
                 out += renderCodeBlockHTML(lang: lang, code: code) + "\n"
             case .mermaidDiagram(let code):
@@ -1884,7 +1884,7 @@ public enum MarkdownHTMLRenderer {
                 out += """
                 <div class="task-list-item">
                   <input type="checkbox" class="task-checkbox" \(checkedAttr) disabled />
-                  <span class="\(doneClass)">\(renderInline(text))</span>
+                  <span class="\(doneClass)">\(renderInline(text, noteURL: noteURL, vaultURL: vaultURL))</span>
                 </div>\n
                 """
             case .listItem(let ordered, let number, let text, let indent):
@@ -1894,24 +1894,24 @@ public enum MarkdownHTMLRenderer {
                 out += """
                 <div class="list-item" style="padding-left: \(padding)px;">
                   <span class="list-bullet">\(bullet)</span>
-                  <span class="list-content">\(renderInline(text))</span>
+                  <span class="list-content">\(renderInline(text, noteURL: noteURL, vaultURL: vaultURL))</span>
                 </div>\n
                 """
             case .table(let headers, let alignments, let rows):
-                out += renderTableHTML(headers: headers, alignments: alignments, rows: rows) + "\n"
+                out += renderTableHTML(headers: headers, alignments: alignments, rows: rows, noteURL: noteURL, vaultURL: vaultURL) + "\n"
             case .collapsible(let summary, let content):
                 let (title, _) = MarkdownPreviewView.parseHeadingTextAndID(summary)
                 let innerDoc = MarkdownPreviewView.parseDocument(content)
                 out += "<details class=\"markdown-details\">\n"
-                out += "<summary class=\"markdown-summary\">\(renderInline(title))</summary>\n"
+                out += "<summary class=\"markdown-summary\">\(renderInline(title, noteURL: noteURL, vaultURL: vaultURL))</summary>\n"
                 out += "<div class=\"markdown-details-body\">\n"
                 out += renderBodyHTML(blocks: innerDoc.blocks, footnotes: innerDoc.footnotes)
                 out += "</div>\n</details>\n"
             case .definitionList(let term, let definitions):
                 out += "<dl class=\"markdown-dl\">\n"
-                out += "<dt class=\"markdown-dt\">\(renderInline(term))</dt>\n"
+                out += "<dt class=\"markdown-dt\">\(renderInline(term, noteURL: noteURL, vaultURL: vaultURL))</dt>\n"
                 for def in definitions {
-                    out += "<dd class=\"markdown-dd\">\(renderInline(def))</dd>\n"
+                    out += "<dd class=\"markdown-dd\">\(renderInline(def, noteURL: noteURL, vaultURL: vaultURL))</dd>\n"
                 }
                 out += "</dl>\n"
             case .rawHTML(let html):
@@ -1919,7 +1919,7 @@ public enum MarkdownHTMLRenderer {
             case .horizontalRule:
                 out += "<hr class=\"markdown-hr\" />\n"
             case .paragraph(let text):
-                out += "<p>\(renderInline(text))</p>\n"
+                out += "<p>\(renderInline(text, noteURL: noteURL, vaultURL: vaultURL))</p>\n"
             }
         }
         
@@ -1930,7 +1930,7 @@ public enum MarkdownHTMLRenderer {
             out += "<ol class=\"footnotes-list\">\n"
             for fn in footnotes {
                 out += "<li id=\"fn-\(escapeHTML(fn.id))\">"
-                out += "<span>\(renderInline(fn.text))</span> "
+                out += "<span>\(renderInline(fn.text, noteURL: noteURL, vaultURL: vaultURL))</span> "
                 out += "<a href=\"#fnref-\(escapeHTML(fn.id))\" class=\"footnote-backref\" title=\"Jump back to reference\">↩</a>"
                 out += "</li>\n"
             }
@@ -1975,14 +1975,16 @@ public enum MarkdownHTMLRenderer {
     
     // MARK: - Component Renderers
     
-    public static func renderTableHTML(headers: [String], alignments: [TextAlignment], rows: [[String]]) -> String {
+    public static func renderTableHTML(
+        headers: [String], alignments: [TextAlignment], rows: [[String]], noteURL: URL? = nil, vaultURL: URL? = nil
+    ) -> String {
         var out = "<div class=\"table-container\"><table class=\"markdown-table\">\n"
         if !headers.isEmpty {
             out += "<thead>\n<tr>\n"
             for (idx, h) in headers.enumerated() {
                 let align = idx < alignments.count ? alignments[idx] : .leading
                 let alignStr = align == .center ? "center" : (align == .trailing ? "right" : "left")
-                out += "<th style=\"text-align: \(alignStr);\">\(renderInline(h))</th>\n"
+                out += "<th style=\"text-align: \(alignStr);\">\(renderInline(h, noteURL: noteURL, vaultURL: vaultURL))</th>\n"
             }
             out += "</tr>\n</thead>\n"
         }
@@ -1993,7 +1995,7 @@ public enum MarkdownHTMLRenderer {
                 for (idx, cell) in row.enumerated() {
                     let align = idx < alignments.count ? alignments[idx] : .leading
                     let alignStr = align == .center ? "center" : (align == .trailing ? "right" : "left")
-                    out += "<td style=\"text-align: \(alignStr);\">\(renderInline(cell))</td>\n"
+                    out += "<td style=\"text-align: \(alignStr);\">\(renderInline(cell, noteURL: noteURL, vaultURL: vaultURL))</td>\n"
                 }
                 out += "</tr>\n"
             }
@@ -2042,7 +2044,7 @@ public enum MarkdownHTMLRenderer {
         """
     }
     
-    public static func renderAlertHTML(type: AlertType, text: String) -> String {
+    public static func renderAlertHTML(type: AlertType, text: String, noteURL: URL? = nil, vaultURL: URL? = nil) -> String {
         let iconSVG = alertIconSVG(for: type)
         return """
         <div class="markdown-alert markdown-alert-\(type.rawValue.lowercased())">
@@ -2050,7 +2052,7 @@ public enum MarkdownHTMLRenderer {
             <span class="markdown-alert-icon">\(iconSVG)</span>
             <span>\(type.title)</span>
           </div>
-          <div class="markdown-alert-content">\(renderInline(text))</div>
+          <div class="markdown-alert-content">\(renderInline(text, noteURL: noteURL, vaultURL: vaultURL))</div>
         </div>
         """
     }
