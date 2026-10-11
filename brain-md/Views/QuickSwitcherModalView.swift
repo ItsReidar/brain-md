@@ -202,7 +202,7 @@ public struct QuickSwitcherModalView: View {
     }
     
     private func selectAndOpen(_ item: QuickSwitcherItem) {
-        vault.selectNote(byRelativePath: item.relativePath)
+        if let note = vault.noteItem(atRelativePath: item.relativePath) { vault.openNote(note) }
         dismiss()
     }
     

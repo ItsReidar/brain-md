@@ -173,4 +173,15 @@ struct NoteTabsTests {
         vault.restoreTabs() // no defaults: a no-op
         #expect(names(vault) == ["A"])
     }
+
+    @Test func commandClickOpensANewTabAndAPlainClickReplacesTheCurrentOne() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        vault.openNote(try note(vault, "A"), inNewTab: false)
+        vault.openNote(try note(vault, "B"), inNewTab: true)
+        #expect(names(vault) == ["A", "B"])
+        vault.openNote(try note(vault, "C"), inNewTab: false)
+        #expect(names(vault) == ["A", "C"])
+        #expect(vault.selectedItem?.relativePath == "C.md")
+    }
 }
