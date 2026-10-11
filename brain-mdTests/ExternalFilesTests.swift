@@ -98,6 +98,12 @@ struct ExternalFilesTests {
         #expect(!MarkdownFiles.isMarkdown(URL(string: "https://example.com/a.md")!))
     }
 
+    @Test func theBrainCommandShipsInTheApp() throws {
+        let script = try #require(Bundle.main.url(forResource: "brain", withExtension: nil))
+        #expect(FileManager.default.isExecutableFile(atPath: script.path))
+        #expect(try String(contentsOf: script, encoding: .utf8).contains("open -b \(Bundle.main.bundleIdentifier!)"))
+    }
+
     @Test func relativePathsOnlyForFilesInsideTheVault() throws {
         let vault = try setUp()
         defer { try? FileManager.default.removeItem(at: root) }

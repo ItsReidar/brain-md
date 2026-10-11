@@ -1,0 +1,7 @@
+#!/bin/sh
+# Opens Markdown files in Brain.md from the terminal: brain [file ...]
+# Homebrew links this as `brain`; files inside the vault open as their note.
+if [ $# -eq 0 ]; then
+    exec open -b itsreidar.brain-md
+fi
+exec open -b itsreidar.brain-md -- "$@"

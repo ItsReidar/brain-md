@@ -17,6 +17,7 @@ cask "brain-md" do
   depends_on macos: :tahoe
 
   app "brain-md.app"
+  binary "#{appdir}/brain-md.app/Contents/Resources/brain"
 
   # Never touches the notes vault (defaults to ~/Documents); only app-owned state.
   zap trash: [
