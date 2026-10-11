@@ -4,7 +4,7 @@ Brain.md opens Markdown files from Finder and the terminal, and previews them in
 
 ## Opening Markdown files
 
-Brain.md registers for the Markdown type (`net.daringfireball.markdown`: `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`), so it appears in Finder's **Open With** menu. Double-click, Open With and dropping a file on the Dock icon all go through the app delegate (`AppDelegate` in `Services/ExternalFiles.swift`).
+Brain.md registers for the Markdown type (`net.daringfireball.markdown`: `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`), so it appears in Finder's **Open With** menu. Double-click, Open With and dropping a file on the Dock icon all go through the app delegate (`AppDelegate` in `Services/ExternalFiles.swift`), which takes the "open documents" event itself so SwiftUI doesn't also open a window for it. Each file opens in a tab of its own; a file that's already open brings its tab to the front, and an empty window is reused.
 
 - **A file inside the vault** opens as that note, exactly as if you'd picked it in the sidebar.
 - **A file anywhere else** opens in the same editor and preview. A bar above the editor says it's outside your vault and where it is, with **Show in Finder** and **Add to Vault**.
@@ -25,7 +25,7 @@ The `brain` command opens files in Brain.md, the same way Finder does:
 brain notes.md ~/Desktop/todo.md
 ```
 
-A file that doesn't exist yet is created empty first, so `brain new.md` starts a new note (its folder must exist). If you close it without writing anything (close its tab, switch to another note in the same tab, or quit), Brain.md moves it to the Trash. Only files `brain` created are trashed: it marks them with the `itsreidar.brain-md.new` extended attribute, and the first save drops the mark. `brain` on its own just opens the app. Homebrew installs the command with the app. Without Homebrew, link it yourself:
+A file that doesn't exist yet is created empty first, so `brain new.md` starts a new note (its folder must exist). If no tab shows it any more and nothing was written to it (you closed its tab, picked another note in that tab, or quit), Brain.md moves it to the Trash. Only files `brain` created are trashed: it marks them with the `itsreidar.brain-md.new` extended attribute, and the first save drops the mark. `brain` on its own just opens the app. Homebrew installs the command with the app. Without Homebrew, link it yourself:
 
 ```bash
 ln -s /Applications/brain-md.app/Contents/Resources/brain /usr/local/bin/brain

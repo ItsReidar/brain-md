@@ -356,8 +356,8 @@ final class MarkdownNSTextView: NSTextView {
         ) { [weak self] notification in
             guard let self = self,
                   let element = notification.object as? MarkdownFormatElement else { return }
-            // Only apply if view is attached to a window
-            guard self.window != nil else { return }
+            // Only the frontmost editor window applies it, not every tab.
+            guard self.window?.isMainWindow == true else { return }
             self.applyFormatElement(element)
         }
     }

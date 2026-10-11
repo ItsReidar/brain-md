@@ -74,21 +74,41 @@ public final class VaultManager: ObservableObject, VaultManaging {
     
     @Published public var vaultURL: URL
     @Published public var rootItems: [NoteItem] = []
-    /// Notes open in tabs, in order; the one shown is `selectedItem` (see NoteTabs.swift).
-    @Published public var tabs: [NoteItem] = [] {
-        didSet { saveTabs() }
-    }
+
+    // MARK: Editor windows (see NoteTabs.swift)
+
+    /// Every open editor window's session, the frontmost one included.
+    var sessions: [EditorSession] = []
+    /// The frontmost editor window's session: the note MCP, AI Chat and the menus act on.
+    @Published public internal(set) var activeSession = EditorSession()
+    /// Set while an operation targets a session that isn't the frontmost one.
+    var editingOverride: EditorSession?
+    var editing: EditorSession { editingOverride ?? activeSession }
     /// Where the open tabs are remembered between launches; nil (as in tests) remembers nothing.
     var tabsDefaults: UserDefaults?
-    @Published public var selectedItem: NoteItem? {
-        didSet {
-            if oldValue?.url != selectedItem?.url { selectedItemChanged(from: oldValue) }
-        }
+    /// Opens a note window; set by the first window, since only views can open windows.
+    var openWindowHandler: ((NoteWindowRequest) -> Void)?
+    var pendingTabPaths: [String] = []
+    var pendingActivePath: String?
+    var isTerminating = false
+
+    public var selectedItem: NoteItem? {
+        get { editing.selectedItem }
+        set { editing.selectedItem = newValue }
     }
-    @Published public var editorContent: String = ""
-    @Published public var editorTitle: String = ""
+    public var editorContent: String {
+        get { editing.editorContent }
+        set { editing.editorContent = newValue }
+    }
+    public var editorTitle: String {
+        get { editing.editorTitle }
+        set { editing.editorTitle = newValue }
+    }
+    public var hasUnsavedChanges: Bool {
+        get { editing.hasUnsavedChanges }
+        set { editing.hasUnsavedChanges = newValue }
+    }
     @Published public var searchQuery: String = ""
-    @Published public var hasUnsavedChanges: Bool = false
     @Published public var recentActivities: [ActivityLog] = []
     @Published public var totalNotesCount: Int = 0
     @Published public var allTags: [String: Int] = [:]
@@ -113,6 +133,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
         
         self.vaultURL = defaultVault.standardized.resolvingSymlinksInPath()
+        register(activeSession)
         setupVaultDirectory()
         refreshFiles()
         startFileWatcher()
@@ -398,12 +419,11 @@ public final class VaultManager: ObservableObject, VaultManaging {
             selectedTag = nil
         }
         
-        if let current = selectedItem {
-            let stillExists = fm.fileExists(atPath: current.url.path)
-            if !stillExists {
-                selectedItem = nil
-                editorContent = ""
-                editorTitle = ""
+        for session in sessions {
+            if let current = session.selectedItem, !fm.fileExists(atPath: current.url.path) {
+                session.selectedItem = nil
+                session.editorContent = ""
+                session.editorTitle = ""
             }
         }
     }
@@ -565,8 +585,10 @@ public final class VaultManager: ObservableObject, VaultManaging {
 
     /// Set while something else is writing into the note (a meeting transcript); auto-save waits
     /// until it's cleared and `scheduleAutosave()` runs again.
-    public var isAutosaveSuspended = false
-    private var autosaveTask: Task<Void, Never>?
+    public var isAutosaveSuspended: Bool {
+        get { editing.isAutosaveSuspended }
+        set { editing.isAutosaveSuspended = newValue }
+    }
 
     /// The Auto-Save Delay from Settings (General › Auto-Save & Synchronization), 1 s by default.
     var autosaveDelay: TimeInterval {
@@ -578,23 +600,25 @@ public final class VaultManager: ObservableObject, VaultManaging {
     /// Each call restarts the wait. Nothing is saved if another note was opened meanwhile (opening
     /// a note already saves the previous one), there are no unsaved changes, or auto-save is suspended.
     public func scheduleAutosave(after delay: TimeInterval? = nil) {
-        autosaveTask?.cancel()
-        let noteURL = selectedItem?.url
+        let session = editing
+        session.autosaveTask?.cancel()
+        let noteURL = session.selectedItem?.url
         let delay = delay ?? autosaveDelay
-        autosaveTask = Task { [weak self] in
+        // Saves the window that was typed in, even if another tab is in front by then.
+        session.autosaveTask = Task { [weak self, weak session] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            guard let self, !Task.isCancelled, !self.isAutosaveSuspended, self.hasUnsavedChanges,
-                  noteURL != nil, self.selectedItem?.url == noteURL else { return }
-            self.saveCurrentNote()
+            guard let self, let session, !Task.isCancelled, !session.isAutosaveSuspended, session.hasUnsavedChanges,
+                  noteURL != nil, session.selectedItem?.url == noteURL else { return }
+            self.perform(on: session) { self.saveCurrentNote() }
         }
     }
 
     /// Applies `edit` to the note at `url`: the editor while that note is open, otherwise the file
     /// itself. A meeting transcript keeps finishing after you switch notes, and must stay in its note.
     public func editNote(at url: URL, _ edit: (inout String) -> Void) {
-        if selectedItem?.url == url {
-            edit(&editorContent)
-            hasUnsavedChanges = true
+        if let session = session(showing: url) {
+            edit(&session.editorContent)
+            session.hasUnsavedChanges = true
             return
         }
         do {
@@ -737,10 +761,10 @@ public final class VaultManager: ObservableObject, VaultManaging {
         
         do {
             try FileManager.default.removeItem(at: fileURL)
-            if selectedItem?.relativePath == relativePath {
-                selectedItem = nil
-                editorContent = ""
-                editorTitle = ""
+            for session in sessions where session.selectedItem?.relativePath == relativePath {
+                session.selectedItem = nil
+                session.editorContent = ""
+                session.editorTitle = ""
             }
             refreshFiles()
             logActivity(action: "Deleted Note", detail: relativePath, isError: false)
@@ -908,26 +932,20 @@ public final class VaultManager: ObservableObject, VaultManaging {
             return
         }
         
-        // Flush unsaved changes if this note is currently open
-        if selectedItem?.relativePath == oldRelativePath && hasUnsavedChanges {
-            saveCurrentNote()
-        }
-        
-        let selectedWasInside = isDir.boolValue && selectedItem?.relativePath.hasPrefix(oldRelativePath + "/") == true
-        let oldSelectedPath = selectedItem?.relativePath
+        // Flush unsaved changes in every window, so none are lost when its note moves
+        saveAllNotes()
+        let shown = notesShown()
         
         do {
             try FileManager.default.moveItem(at: oldURL, to: newURL)
             let newRelPath = relativePath(of: newURL, relativeTo: vaultURL)
             refreshFiles()
             
-            if !isDir.boolValue {
+            // A renamed note opens in the front tab, unless a tab already shows it.
+            if !isDir.boolValue, !shown.contains(where: { $0.1 == oldRelativePath }) {
                 selectNote(byRelativePath: newRelPath)
-            } else if selectedWasInside, let oldSelected = oldSelectedPath {
-                let suffix = String(oldSelected.dropFirst(oldRelativePath.count))
-                let updatedSelected = newRelPath + suffix
-                selectNote(byRelativePath: updatedSelected)
             }
+            follow(shown, from: oldRelativePath, to: newRelPath)
             logActivity(action: "Renamed", detail: "\(oldRelativePath) -> \(targetName)", isError: false)
         } catch {
             throw BrainError.writeFailed(path: oldRelativePath, reason: error.localizedDescription)
@@ -990,26 +1008,20 @@ public final class VaultManager: ObservableObject, VaultManaging {
             }
         }
         
-        if hasUnsavedChanges {
-            saveCurrentNote()
-        }
+        saveAllNotes()
         
         do {
             let isSourceDirectory = (try? sourceURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            let selectedWasInside = selectedItem?.relativePath.hasPrefix(sourceRelativePath + "/") == true
-            let oldSelectedPath = selectedItem?.relativePath
+            let shown = notesShown()
             
             try fm.moveItem(at: sourceURL, to: targetURL)
             let newRelPath = relativePath(of: targetURL, relativeTo: vaultURL)
             refreshFiles()
             
-            if !isSourceDirectory {
+            if !isSourceDirectory, !shown.contains(where: { $0.1 == sourceRelativePath }) {
                 selectNote(byRelativePath: newRelPath)
-            } else if selectedWasInside, let oldSelected = oldSelectedPath {
-                let suffix = String(oldSelected.dropFirst(sourceRelativePath.count))
-                let updatedSelected = newRelPath + suffix
-                selectNote(byRelativePath: updatedSelected)
             }
+            follow(shown, from: sourceRelativePath, to: newRelPath)
             
             logActivity(
                 action: "Moved Item",
@@ -1166,7 +1178,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         // Close the old vault's tabs without forgetting them, then reopen the new vault's.
         let defaults = tabsDefaults
         tabsDefaults = nil
-        tabs = []
+        closeOtherSessions()
         selectedItem = nil
         editorContent = ""
         editorTitle = ""

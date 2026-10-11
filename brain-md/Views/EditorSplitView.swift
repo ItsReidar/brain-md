@@ -25,6 +25,8 @@ public enum ViewMode: String, CaseIterable, Identifiable {
 
 public struct EditorSplitView: View {
     @ObservedObject var vault: VaultManager
+    /// This window's note; `vault` acts on the frontmost window, which is this one while you use it.
+    @ObservedObject var session: EditorSession
     @State private var viewMode: ViewMode = .split
     @AppStorage("editor_sync_scroll") private var syncPreviewScroll: Bool = true
     @AppStorage("editor_split_ratio") private var splitRatio: Double = 0.5
@@ -51,18 +53,18 @@ public struct EditorSplitView: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     
-    public init(vault: VaultManager) {
+    public init(vault: VaultManager, session: EditorSession) {
         self.vault = vault
+        self.session = session
     }
+
+    /// Menu commands go to the frontmost window only, not to every tab.
+    private var isFrontmost: Bool { vault.activeSession === session }
     
     public var body: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
-                if vault.tabs.count > 1 {
-                    noteTabBar
-                    Divider()
-                }
-                if let selected = vault.selectedItem {
+                if let selected = session.selectedItem {
                     if selected.isAttachment {
                         AttachmentDetailView(
                             item: selected,
@@ -94,15 +96,15 @@ public struct EditorSplitView: View {
                             HStack(spacing: 0) {
                                 MarkdownEditorView(
                                     text: Binding(
-                                        get: { vault.editorContent },
+                                        get: { session.editorContent },
                                         set: {
-                                            vault.editorContent = $0
-                                            vault.hasUnsavedChanges = true
-                                            vault.scheduleAutosave()
+                                            session.editorContent = $0
+                                            session.hasUnsavedChanges = true
+                                            vault.perform(on: session) { vault.scheduleAutosave() }
                                         }
                                     ),
                                     onSave: {
-                                        vault.saveCurrentNote()
+                                        vault.perform(on: session) { vault.saveCurrentNote() }
                                         showBubble(message: "Note saved")
                                     },
                                     onImageDroppedOrPasted: { data, filename in
@@ -110,7 +112,7 @@ public struct EditorSplitView: View {
                                             let result = try vault.saveAttachment(
                                                 data: data,
                                                 suggestedFileName: filename,
-                                                noteURL: vault.selectedItem?.url
+                                                noteURL: session.selectedItem?.url
                                             )
                                             showBubble(message: "Image added")
                                             return result.markdownReference
@@ -138,8 +140,8 @@ public struct EditorSplitView: View {
                                 )
                                 
                                 MarkdownPreviewView(
-                                    markdown: vault.editorContent,
-                                    noteURL: vault.selectedItem?.url,
+                                    markdown: session.editorContent,
+                                    noteURL: session.selectedItem?.url,
                                     vaultURL: vault.vaultURL,
                                     onTagSelected: { tag in
                                         vault.selectedTag = tag
@@ -150,15 +152,15 @@ public struct EditorSplitView: View {
                         case .editor:
                             MarkdownEditorView(
                                 text: Binding(
-                                    get: { vault.editorContent },
+                                    get: { session.editorContent },
                                     set: {
-                                        vault.editorContent = $0
-                                        vault.hasUnsavedChanges = true
-                                        vault.scheduleAutosave()
+                                        session.editorContent = $0
+                                        session.hasUnsavedChanges = true
+                                        vault.perform(on: session) { vault.scheduleAutosave() }
                                     }
                                 ),
                                 onSave: {
-                                    vault.saveCurrentNote()
+                                    vault.perform(on: session) { vault.saveCurrentNote() }
                                     showBubble(message: "Note saved")
                                 },
                                 onImageDroppedOrPasted: { data, filename in
@@ -166,7 +168,7 @@ public struct EditorSplitView: View {
                                         let result = try vault.saveAttachment(
                                             data: data,
                                             suggestedFileName: filename,
-                                            noteURL: vault.selectedItem?.url
+                                            noteURL: session.selectedItem?.url
                                         )
                                         showBubble(message: "Image added")
                                         return result.markdownReference
@@ -178,8 +180,8 @@ public struct EditorSplitView: View {
                             )
                         case .preview:
                             MarkdownPreviewView(
-                                markdown: vault.editorContent,
-                                noteURL: vault.selectedItem?.url,
+                                markdown: session.editorContent,
+                                noteURL: session.selectedItem?.url,
                                 vaultURL: vault.vaultURL,
                                 onTagSelected: { tag in
                                     vault.selectedTag = tag
@@ -230,23 +232,23 @@ public struct EditorSplitView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExportCurrentNoteAsPDF"))) { _ in
-            if let item = vault.selectedItem, !item.isDirectory {
+            if isFrontmost, let item = session.selectedItem, !item.isDirectory {
                 exportPreviewAsPDF(item: item)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SetViewModeSplit"))) { _ in
-            viewMode = .split
+            if isFrontmost { viewMode = .split }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SetViewModeEditor"))) { _ in
-            viewMode = .editor
+            if isFrontmost { viewMode = .editor }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SetViewModePreview"))) { _ in
-            viewMode = .preview
+            if isFrontmost { viewMode = .preview }
         }
         .onAppear {
             scrollSync.isSyncEnabled = syncPreviewScroll
         }
-        .onChange(of: vault.selectedItem?.id) { _, _ in
+        .onChange(of: session.selectedItem?.id) { _, _ in
             if meetingRecorder.isRecording {
                 meetingRecorder.stop()
                 showBubble(message: "Recording stopped: you switched notes")
@@ -256,13 +258,13 @@ public struct EditorSplitView: View {
             AIResultSheet(
                 request: request,
                 onInsert: { result in
-                    vault.editorContent += "\n\n" + result + "\n"
-                    vault.hasUnsavedChanges = true
+                    session.editorContent += "\n\n" + result + "\n"
+                    session.hasUnsavedChanges = true
                     showBubble(message: "Inserted below")
                 },
                 onReplace: { result in
-                    vault.editorContent = result + "\n"
-                    vault.hasUnsavedChanges = true
+                    session.editorContent = result + "\n"
+                    session.hasUnsavedChanges = true
                     showBubble(message: "Note replaced")
                 }
             )
@@ -292,7 +294,7 @@ public struct EditorSplitView: View {
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
             Button("Add to Vault") {
                 do {
-                    let path = try vault.addExternalFileToVault()
+                    let path = try vault.perform(on: session) { try vault.addExternalFileToVault() }
                     showBubble(message: "Added to your vault as \(path)")
                 } catch {
                     showBubble(message: error.localizedDescription)
@@ -308,39 +310,6 @@ public struct EditorSplitView: View {
         .accessibilityElement(children: .contain)
     }
 
-    /// The open notes, once there's more than one; each tab is named after its note.
-    private var noteTabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
-                ForEach(vault.tabs, id: \.url) { tab in
-                    let isActive = tab.url == vault.selectedItem?.url
-                    HStack(spacing: 6) {
-                        Button(tab.displayName) { vault.showTab(tab) }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12, weight: isActive ? .semibold : .regular))
-                            .foregroundStyle(isActive ? Color.accentColor : Color.primary)
-                            .lineLimit(1)
-                            .accessibilityAddTraits(isActive ? .isSelected : [])
-                        Button { vault.closeTab(tab) } label: {
-                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .help("Close Tab")
-                        .accessibilityLabel("Close \(tab.displayName)")
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(isActive ? Color.accentColor.opacity(0.15) : Color.clear))
-                    .help(tab.isExternal ? tab.url.path : tab.relativePath)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-        }
-        .background(CloseTabShortcut(vault: vault))
-    }
-
     private func editorHeader(item: NoteItem) -> some View {
         HStack(spacing: 12) {
             // Note Title & Unsaved Indicator
@@ -351,7 +320,7 @@ public struct EditorSplitView: View {
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 
-                if vault.hasUnsavedChanges {
+                if session.hasUnsavedChanges {
                     Circle()
                         .fill(Color.orange)
                         .frame(width: 7, height: 7)
@@ -383,7 +352,7 @@ public struct EditorSplitView: View {
             
             // Note Stats (Words, Chars, Read Time)
             HStack(spacing: 10) {
-                let words = countWords(vault.editorContent)
+                let words = countWords(session.editorContent)
                 let minutes = max(1, words / 200)
                 
                 Text("\(words) words")
@@ -607,7 +576,7 @@ public struct EditorSplitView: View {
             .background(
                 Group {
                     Button("") {
-                        vault.saveCurrentNote()
+                        vault.perform(on: session) { vault.saveCurrentNote() }
                         showBubble(message: "Note saved")
                     }
                     .keyboardShortcut("s", modifiers: .command)
@@ -640,13 +609,13 @@ public struct EditorSplitView: View {
     
     private func copyMarkdownContent() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(vault.editorContent, forType: .string)
+        NSPasteboard.general.setString(session.editorContent, forType: .string)
         showBubble(message: "File contents copied")
     }
     
     private func downloadFile(item: NoteItem) {
         // Save current modifications first
-        vault.saveCurrentNote()
+        vault.perform(on: session) { vault.saveCurrentNote() }
         
         let savePanel = NSSavePanel()
         savePanel.title = "Download Note"
@@ -666,7 +635,7 @@ public struct EditorSplitView: View {
         
         let writeOperation: (URL) -> Void = { targetURL in
             do {
-                try self.vault.editorContent.write(to: targetURL, atomically: true, encoding: .utf8)
+                try self.session.editorContent.write(to: targetURL, atomically: true, encoding: .utf8)
                 self.showBubble(message: "File downloaded")
             } catch {
                 self.showBubble(message: "Download failed")
@@ -687,7 +656,7 @@ public struct EditorSplitView: View {
     }
     
     private func exportPreviewAsPDF(item: NoteItem) {
-        vault.saveCurrentNote()
+        vault.perform(on: session) { vault.saveCurrentNote() }
         
         let savePanel = NSSavePanel()
         savePanel.title = "Export Preview as PDF"
@@ -712,10 +681,10 @@ public struct EditorSplitView: View {
             Task { @MainActor in
                 do {
                     try await PDFExportService.shared.exportPDF(
-                        markdown: self.vault.editorContent,
+                        markdown: self.session.editorContent,
                         theme: ThemeManager.shared.currentTheme,
                         to: targetURL,
-                        noteURL: self.vault.selectedItem?.url,
+                        noteURL: self.session.selectedItem?.url,
                         vaultURL: self.vault.vaultURL
                     )
                     self.showBubble(message: "PDF exported successfully")
@@ -786,7 +755,7 @@ public struct EditorSplitView: View {
             return
         }
         // Transcription finishes after a note switch stops the recording; those lines stay in this note.
-        guard let noteURL = vault.selectedItem?.url else { return }
+        guard let noteURL = session.selectedItem?.url else { return }
         let configuration = AudioCaptureConfiguration(
             captureSystemAudio: captureSystemAudio, captureMicrophone: captureMicrophone,
             sampleRate: 16_000, channels: 1)
@@ -794,7 +763,8 @@ public struct EditorSplitView: View {
         var wroteHeading = false
         var writer = TranscriptWriter()
         // The transcript lands every few seconds; save it once the recording ends, not after each line.
-        vault.isAutosaveSuspended = true
+        let session = session
+        session.isAutosaveSuspended = true
         meetingRecorder.start(
             configuration: configuration,
             locale: AppleSpeechRecognizer.preferredLocale(),
@@ -809,8 +779,8 @@ public struct EditorSplitView: View {
                 }
             },
             onFinished: { segments, error in
-                vault.isAutosaveSuspended = false
-                vault.scheduleAutosave()
+                session.isAutosaveSuspended = false
+                vault.perform(on: session) { vault.scheduleAutosave() }
                 if let error {
                     showBubble(message: error.localizedDescription)
                 } else if segments.isEmpty {
@@ -848,13 +818,13 @@ public struct EditorSplitView: View {
     }
 
     private func runSkill(_ skill: Skill) {
-        let note = vault.editorContent
+        let note = session.editorContent
         aiRequest = AIResultRequest(title: skill.name) { LanguageModelService.shared.stream(skill, noteText: note) }
     }
 
     /// Lets the user pick a window, app or display with the system picker, then has the model explain it.
     private func explainChosenContent() {
-        let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
+        let request = RewriteRequest(mode: .explainDiagram, sourceText: session.editorContent)
         Task {
             do {
                 guard let capture = try await VisualCaptureService(
@@ -873,7 +843,7 @@ public struct EditorSplitView: View {
 
     /// Captures the screen (without brain-md's windows), then has the model explain it in the review sheet.
     private func explainScreen() {
-        let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
+        let request = RewriteRequest(mode: .explainDiagram, sourceText: session.editorContent)
         showBubble(message: "Capturing your screen…")
         Task {
             do {
@@ -1177,18 +1147,3 @@ public struct AttachmentDetailView: View {
 }
 
 
-/// ⌘W closes the active tab. It lives in the editor window, which gets key equivalents before the
-/// menu bar, and only while tabs are shown; otherwise ⌘W closes the window as usual.
-struct CloseTabShortcut: View {
-    @ObservedObject var vault: VaultManager
-
-    var body: some View {
-        Button("Close Tab") {
-            if let tab = vault.tabs.first(where: { $0.url == vault.selectedItem?.url }) { vault.closeTab(tab) }
-        }
-        .keyboardShortcut("w", modifiers: .command)
-        .opacity(0)
-        .frame(width: 0, height: 0)
-        .accessibilityHidden(true)
-    }
-}

@@ -45,14 +45,15 @@ The dual-pane Split View features an interactive, high-precision draggable split
 
 ### Note Tabs
 
-Right-click a note in the sidebar and choose **Open in New Tab**, or ⌘-click it (in the sidebar, search results, a tag's note list or the Quick Switcher), to keep the current note open and show the other one next to it. Once two or more notes are open, a tab bar above the editor lists them, each tab named after its note; click a tab to switch, or its **×** (or ⌘W) to close it. With a single note open, ⌘W closes the window as usual.
+Notes open in native macOS tabs. Right-click a note in the sidebar and choose **Open in New Tab**, or ⌘-click it (in the sidebar, search results, a tag's note list or the Quick Switcher). **File › New Tab** (⌘T) or the tab bar's **+** opens an empty tab. Each tab is named after its note; ⌘W closes it, and you can drag tabs to reorder them, merge them, or pull one out into a window of its own.
 
-- The editor shows one note at a time, and the active tab is always the note shown (`VaultManager.tabs` and `selectedItem`, in `Services/NoteTabs.swift`).
-- Picking a note normally (sidebar click, Quick Switcher, a link) replaces the active tab, like a browser tab following a link.
-- Switching tabs saves the note you leave. Closing the active tab shows the next tab, or the previous one if it was last.
-- A tab whose note was deleted or moved is dropped when you click it.
-- Open tabs and the active one are remembered per vault (UserDefaults key `open_tabs`) and come back when you relaunch or switch back to the vault. Notes that no longer exist are skipped.
-- A file created by the `brain` command and left empty is trashed when its tab closes, not when you switch away from it.
+- Every tab is a window with its own note and unsaved edits (`EditorSession`, `Services/EditorSession.swift`). `VaultManager`'s editor properties (`selectedItem`, `editorContent`, …) act on the frontmost window, `activeSession`, which is what MCP, AI Chat and the menus use (`Services/NoteTabs.swift`).
+- Picking a note normally (sidebar click, Quick Switcher, a link) replaces the note in the current tab. Opening a note that's already open in a tab brings that tab to the front.
+- Switching tabs keeps each tab's edits; auto-save saves the tab you typed in even when another tab is in front. Closing a tab saves it.
+- Renaming, moving or deleting a note updates every tab that shows it.
+- Menu commands (formatting, view modes, Export PDF, Quick Open) act on the frontmost tab only.
+- Open tabs and the front one are remembered per vault (UserDefaults key `open_tabs`) and come back when you relaunch or switch back to the vault. Notes that no longer exist are skipped. macOS window restoration is off for Brain.md's windows, so it doesn't reopen tabs twice.
+- A file created by the `brain` command and left empty is trashed when no tab shows it any more.
 
 ### Spotlight Quick Switcher (`QuickSwitcherModalView` - `⌘O`)
 

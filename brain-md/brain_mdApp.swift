@@ -39,9 +39,12 @@ struct brain_mdApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        // Each window is a native tab with its own note; the value is the note it opens with.
+        WindowGroup(for: NoteWindowRequest.self) { $request in
+            ContentView(request: request)
         }
+        // Brain.md reopens the tabs itself (VaultManager.restoreTabs), per vault.
+        .restorationBehavior(.disabled)
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
@@ -50,6 +53,8 @@ struct brain_mdApp: App {
                     VaultManager.shared.promptNewNote()
                 }
                 .keyboardShortcut("n", modifiers: .command)
+
+                NewTabButton()
                 
                 Button("Quick Open Note...") {
                     NotificationCenter.default.post(name: NSNotification.Name("OpenQuickSwitcher"), object: nil)
@@ -212,6 +217,8 @@ struct brain_mdApp: App {
             AssistantChatView(chat: .shared, vault: .shared)
         }
         .defaultSize(width: 520, height: 640)
+        // A restored chat window would stop SwiftUI from opening the editor window at launch.
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView(vault: VaultManager.shared)
@@ -232,5 +239,15 @@ private struct OpenAssistantChatButton: View {
             Button("AI Chat") { openWindow(id: AssistantChatView.windowID) }
                 .keyboardShortcut("j", modifiers: [.command, .shift])
         }
+    }
+}
+
+/// File › New Tab (⌘T): an empty note window, opened as a tab. A view so it can read `openWindow`.
+private struct NewTabButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("New Tab") { openWindow(value: NoteWindowRequest(path: nil)) }
+            .keyboardShortcut("t", modifiers: .command)
     }
 }
