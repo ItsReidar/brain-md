@@ -126,6 +126,13 @@ public final class LanguageModelRuntime: ObservableObject {
     /// Deletes a model's files, unloading it first if it's in memory.
     public func remove(_ model: ModelDescriptor) {
         if loadedModel == model || loadTask?.model == model { unloadModel() }
+        if model.isEmbeddingModel {
+            // Its index is useless without it.
+            Task {
+                await EmbeddingRuntime.shared.unload()
+                await SemanticIndex.shared.delete(modelID: model.id)
+            }
+        }
         store.remove(model)
     }
 }

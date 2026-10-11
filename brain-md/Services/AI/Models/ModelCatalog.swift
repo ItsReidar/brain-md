@@ -19,6 +19,16 @@ nonisolated public struct ModelDescriptor: Identifiable, Hashable, Sendable {
         case speech(engine: String, streaming: Bool)
         /// Tells speakers apart (Sortformer).
         case diarizer(maxSpeakers: Int)
+        /// Turns text into vectors for search by meaning (MLXEmbedders). The prefixes are the
+        /// model's own instructions for queries and documents.
+        case embedding(pooling: EmbeddingPooling, queryPrefix: String, documentPrefix: String, multilingual: Bool)
+    }
+
+    /// How an embedding model turns per-token states into one vector.
+    public enum EmbeddingPooling: Hashable, Sendable {
+        /// The model pools, projects and normalises itself (EmbeddingGemma).
+        case model
+        case mean, cls, last
     }
 
     /// Stable key stored in settings; never rename an existing one.
@@ -46,6 +56,7 @@ nonisolated public struct ModelDescriptor: Identifiable, Hashable, Sendable {
     public var isLanguageModel: Bool { if case .language = kind { true } else { false } }
     public var isSpeechModel: Bool { if case .speech = kind { true } else { false } }
     public var isDiarizer: Bool { if case .diarizer = kind { true } else { false } }
+    public var isEmbeddingModel: Bool { if case .embedding = kind { true } else { false } }
     public var supportsVision: Bool { if case .language(let vision, _) = kind { vision } else { false } }
     public var supportsAudio: Bool { if case .language(_, let audio) = kind { audio } else { false } }
 
@@ -61,6 +72,9 @@ nonisolated public struct ModelDescriptor: Identifiable, Hashable, Sendable {
         public static let speechToText = Capability(label: "Speech to Text", symbol: "waveform")
         public static let live = Capability(label: "Live", symbol: "dot.radiowaves.left.and.right")
         public static let base = Capability(label: "Base", symbol: "square.stack.3d.down.right")
+        public static let search = Capability(label: "Search", symbol: "magnifyingglass")
+        public static let multilingual = Capability(label: "Multilingual", symbol: "globe")
+        public static let english = Capability(label: "English", symbol: "character.book.closed")
         public static func speakers(_ count: Int) -> Capability {
             Capability(label: "Up to \(count) speakers", symbol: "person.2.wave.2")
         }
@@ -75,6 +89,8 @@ nonisolated public struct ModelDescriptor: Identifiable, Hashable, Sendable {
             [.speechToText] + (streaming ? [.live] : [])
         case .diarizer(let maxSpeakers):
             [.speakers(maxSpeakers)]
+        case .embedding(_, _, _, let multilingual):
+            [.search, multilingual ? .multilingual : .english]
         }
     }
 }
@@ -83,7 +99,9 @@ nonisolated public enum ModelCatalog {
     /// The model used until the user picks another; also the one brain-md 1.0–1.1 downloaded.
     public static let defaultLanguageModelID = "gemma-4-e4b-qat"
 
-    public static let all: [ModelDescriptor] = language + speech + diarizers
+    public static let defaultEmbeddingModelID = "embeddinggemma-300m"
+
+    public static let all: [ModelDescriptor] = language + speech + diarizers + embedding
 
     public static func model(_ id: ModelDescriptor.ID?) -> ModelDescriptor? {
         guard let id else { return nil }
@@ -92,6 +110,7 @@ nonisolated public enum ModelCatalog {
 
     public static var languageModels: [ModelDescriptor] { language }
     public static var speechModels: [ModelDescriptor] { speech }
+    public static var embeddingModels: [ModelDescriptor] { embedding }
 
     // MARK: - Language models
 
@@ -254,5 +273,51 @@ nonisolated public enum ModelCatalog {
             revision: "e23e6404bd9859e93edbf94a740eb1c7fc58f12e",
             kind: .diarizer(maxSpeakers: 4), approximateBytes: 236_114_032,
             license: "NVIDIA Open Model License"),
+    ]
+
+    // MARK: - Embedding models (search by meaning)
+
+    static let embedding: [ModelDescriptor] = [
+        ModelDescriptor(
+            id: "embeddinggemma-300m", displayName: "EmbeddingGemma 300M",
+            summary: "Google · 100+ languages incl. Dutch · small and accurate",
+            repo: "mlx-community/embeddinggemma-300m-4bit",
+            revision: "5d9ef074df3957afc5c77127f208fddbc3c54187",
+            // Runs on the vendored copy with bidirectional attention (Vendor/EmbeddingGemma).
+            kind: .embedding(pooling: .model, queryPrefix: "task: search result | query: ",
+                             documentPrefix: "title: none | text: ", multilingual: true),
+            approximateBytes: 212_491_172, license: "Gemma"),
+        ModelDescriptor(
+            id: "qwen3-embedding-0.6b", displayName: "Qwen3 Embedding 0.6B",
+            summary: "Alibaba · 100+ languages · strongest of these, a little larger",
+            repo: "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+            revision: "6c3ae70858513f1a78e9cdca3cae330d9075cd2a",
+            kind: .embedding(pooling: .last,
+                             queryPrefix: "Instruct: Given a search query, retrieve relevant notes\nQuery: ",
+                             documentPrefix: "", multilingual: true),
+            approximateBytes: 351_230_811, license: "Apache-2.0"),
+        ModelDescriptor(
+            id: "arctic-embed-l-v2", displayName: "Arctic Embed L v2.0",
+            summary: "Snowflake · 74 languages incl. Dutch · long notes",
+            repo: "mlx-community/snowflake-arctic-embed-l-v2.0-4bit",
+            revision: "430b52bb3dcb9ad2404b1ac2b60f2fdc00f26033",
+            kind: .embedding(pooling: .cls, queryPrefix: "query: ", documentPrefix: "", multilingual: true),
+            approximateBytes: 337_041_732, license: "Apache-2.0"),
+        ModelDescriptor(
+            id: "bge-small-en", displayName: "BGE Small v1.5",
+            summary: "BAAI · English only · tiny",
+            repo: "mlx-community/bge-small-en-v1.5-8bit",
+            revision: "17d007e0406e0e1bb23c046adbbeb01b681824d9",
+            kind: .embedding(pooling: .cls,
+                             queryPrefix: "Represent this sentence for searching relevant passages: ",
+                             documentPrefix: "", multilingual: false),
+            approximateBytes: 36_512_994, license: "MIT"),
+        ModelDescriptor(
+            id: "minilm-l6", displayName: "MiniLM L6 v2",
+            summary: "Sentence Transformers · English only · smallest and fastest",
+            repo: "mlx-community/all-MiniLM-L6-v2-4bit",
+            revision: "128ca2da88d925829a17fb5ddfdc86b42eb58fb2",
+            kind: .embedding(pooling: .mean, queryPrefix: "", documentPrefix: "", multilingual: false),
+            approximateBytes: 13_839_988, license: "Apache-2.0"),
     ]
 }

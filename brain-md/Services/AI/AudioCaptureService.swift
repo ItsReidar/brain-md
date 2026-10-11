@@ -11,6 +11,13 @@ import ScreenCaptureKit
 import os
 
 public enum AudioCaptureError: LocalizedError, Equatable {
+    /// macOS ties the permission to the exact app binary when it's signed ad hoc, so a grant made for
+    /// an earlier version still shows as on but no longer applies.
+    nonisolated static let screenRecordingHelp =
+        "Turn on brain-md in System Settings › Privacy & Security › Screen & System Audio Recording. "
+        + "If it's already on, it belongs to an earlier version: select brain-md, remove it with −, "
+        + "then quit and reopen Brain.md and allow it when asked."
+
     case nothingToCapture
     case microphoneDenied
     case screenRecordingDenied
@@ -23,8 +30,8 @@ public enum AudioCaptureError: LocalizedError, Equatable {
         case .microphoneDenied:
             "brain-md needs microphone access. Allow it in System Settings › Privacy & Security › Microphone."
         case .screenRecordingDenied:
-            "Capturing meeting audio needs Screen & System Audio Recording permission. Allow brain-md in "
-                + "System Settings › Privacy & Security, then try again."
+            "Capturing meeting audio needs Screen & System Audio Recording permission. "
+                + Self.screenRecordingHelp
         case .noDisplay:
             "No display was found to attach the audio capture to."
         }
@@ -69,6 +76,11 @@ public final class AudioCaptureService: NSObject, ObservableObject {
 
         if wantsMicrophone, !(await AVCaptureDevice.requestAccess(for: .audio)) {
             throw AudioCaptureError.microphoneDenied
+        }
+        // Listing shareable content without permission puts up the system dialog on every attempt;
+        // the request below asks at most once.
+        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+            throw AudioCaptureError.screenRecordingDenied
         }
         let content: SCShareableContent
         do {

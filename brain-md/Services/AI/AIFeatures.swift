@@ -31,6 +31,8 @@ enum AIFeatures {
         for model in ModelCatalog.all { store.cancelDownload(model) }
         chat.stop()
         runtime.unloadModel()
+        SemanticSearch.shared.reset()
+        Task { await EmbeddingRuntime.shared.unload() }
     }
 
     static func turnOn(defaults: UserDefaults = .standard) {

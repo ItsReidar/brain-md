@@ -633,8 +633,11 @@ struct brain_mdTests {
             == "Version 1.1 (Build 412)")
         #expect(AboutSettingsPane.versionText(["CFBundleShortVersionString": "1.1"]) == "Version 1.1")
         #expect(AboutSettingsPane.versionText([:]) == "Version ?")
-        let running = AboutSettingsPane.versionText(Bundle.main.infoDictionary ?? [:])
-        #expect(running.hasPrefix("Version 1.1"), "\(running)")
+        // The running app's own version, whatever the release is.
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        #expect(AboutSettingsPane.versionText(info).hasPrefix("Version \(version)"))
+        #expect(version != "?" && version != "1.0")
     }
 
     @Test func testSettingsDefaultsAndAppStorage() {

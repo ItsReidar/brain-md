@@ -1414,6 +1414,9 @@ public struct LocalAISettingsPane: View {
   @AppStorage(ModelSelection.enabledKey) private var isAIEnabled = false
   @AppStorage(ModelSelection.languageModelKey) private var languageModelID = ModelCatalog.defaultLanguageModelID
   @AppStorage(ModelSelection.speechModelKey) private var speechModelID = ""
+  @AppStorage(ModelSelection.embeddingModelKey) private var embeddingModelID = ModelCatalog.defaultEmbeddingModelID
+  /// Notes in the current vault's search index and its size on disk.
+  @State private var indexStats: (notes: Int, bytes: Int64)?
   @AppStorage(ModelSelection.identifySpeakersKey) private var identifySpeakers = true
   @AppStorage("ai_capture_system_audio") private var captureSystemAudio: Bool = true
   @AppStorage("ai_capture_microphone") private var captureMicrophone: Bool = true
@@ -1513,6 +1516,36 @@ public struct LocalAISettingsPane: View {
           }
         }
       }
+
+      SettingsCard(
+        title: "Semantic Search",
+        footer: "Search by meaning with the sparkle-magnifier button in the sidebar's search field. Notes are embedded on this Mac the first "
+          + "time you search, and only changed notes after that; the model unloads after a few idle minutes."
+      ) {
+        ForEach(ModelCatalog.embeddingModels) { model in
+          ModelRow(
+            model: model, isSelected: model.id == embeddingModelID,
+            onUse: { selectEmbeddingModel(model) }, onDelete: { pendingDeletion = $0 })
+          Divider().padding(.leading, 41)
+        }
+        SettingsRow(
+          title: "Search Index",
+          subtitle: indexStats.map { $0.notes == 0 ? "Not built yet: your first search builds it"
+            : "\($0.notes) notes · \(Self.format($0.bytes))" } ?? "…",
+          icon: "square.stack.3d.up"
+        ) {
+          Button("Rebuild Index") {
+            Task {
+              await SemanticIndex.shared.delete(modelID: embeddingModelID)
+              await refreshIndexStats()
+            }
+          }
+          .disabled((indexStats?.notes ?? 0) == 0)
+          .help("Forget the index; the next search embeds every note again")
+        }
+      }
+      .disabled(!isAIEnabled)
+      .task(id: embeddingModelID) { await refreshIndexStats() }
 
       SettingsCard(
         title: "Speaker Identification",
@@ -1683,6 +1716,17 @@ public struct LocalAISettingsPane: View {
     }
   }
 
+  private func selectEmbeddingModel(_ model: ModelDescriptor) {
+    guard model.id != embeddingModelID else { return }
+    embeddingModelID = model.id
+    SemanticSearch.shared.reset()
+    Task { await EmbeddingRuntime.shared.unload() }
+  }
+
+  private func refreshIndexStats() async {
+    indexStats = await SemanticIndex.shared.stats(vaultURL: VaultManager.shared.vaultURL, modelID: embeddingModelID)
+  }
+
   private func setAIEnabled(_ enabled: Bool) {
     isAIEnabled = enabled
     if enabled {
@@ -1691,6 +1735,8 @@ public struct LocalAISettingsPane: View {
     } else {
       for model in ModelCatalog.all { store.cancelDownload(model) }
       runtime.unloadModel()
+      SemanticSearch.shared.reset()
+      Task { await EmbeddingRuntime.shared.unload() }
       let bytes = ModelCatalog.all.reduce(Int64(0)) { $0 + store.diskUsageBytes(of: $1) }
       if bytes > 0 { pendingDeletionOfAll = bytes }
     }

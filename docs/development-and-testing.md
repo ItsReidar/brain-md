@@ -61,7 +61,9 @@ brain-md/
 │   │   └── AI/                    # On-device AI & meetings (see local-ai.md)
 │   │       ├── Models/            # ModelCatalog, ModelStore, ModelSelection, LanguageModelRuntime
 │   │       ├── Speech/            # Speech engines, utterance segmenter, Sortformer diarizer
+│   │       ├── Search/            # Search by meaning: embedding runtime, index, sidebar glue
 │   │       ├── Vendor/Gemma4Audio/ # Gemma 4 audio input ported from mlx-swift-lm#392
+│   │       ├── Vendor/EmbeddingGemma/ # EmbeddingGemma with bidirectional attention (mlx-swift-lm#654)
 │   │       ├── HubAdapters.swift  # Hugging Face/tokenizer bridges, KV-cache mask fix
 │   │       ├── LanguageModelService.swift # Prompts & streaming generation
 │   │       ├── AssistantChat.swift    # Free-form chat state & history replay
@@ -186,6 +188,9 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `AutosaveTests` | Debounced auto-save: saves after the delay and not before, each edit restarts it, outside files save to themselves, a pending save doesn't fire for the next note, waits while suspended (meeting transcript) and saves when resumed, delay read from Settings with a 1 s default. |
 | `EditorTextSyncTests` | Editor ↔ binding sync: a keystroke not yet synced can't overwrite the next note, a redraw before the sync keeps the keystroke, typing still syncs and outside changes still show. |
 | `MarkdownQuickLookTests` | Quick Look HTML: static rendering without scripts, network blocked by the content security policy, dark mode styles, Mermaid as code, local images attached and their alt-text fallback; regression for inline images in paragraphs, lists, tables and alerts. |
+| `SemanticSearchTests` | Search by meaning: passages split at headings and merged, front matter dropped, long paragraphs cut; the index ranks notes by their best passage, re-embeds only changed notes, forgets deleted ones, persists per vault and model; token truncation keeps the closing token; catalog entries; availability gates. |
+| `BrainEmbeddingGemmaMaskTests` / `BrainBidirectionalAttentionMaskTests` | Ported from mlx-swift-lm#654 for the vendored EmbeddingGemma: causal versus bidirectional attention, padding, sliding windows, padded batches matching single runs. They run on the GPU: the hardened app refuses the libraries MLX's CPU backend compiles at runtime. |
+| `EmbeddingIntegrationTests` | Opt-in real EmbeddingGemma 300M checks; see [On-Device AI & Meetings](local-ai.md#testing). |
 | `GemmaAudioTests` / `BrainGemma4AudioPortTests` | The ported Gemma 4 audio encoder: feature shapes, encoder output, weight mapping; opt-in real transcription. |
 | `MLXSpeechIntegrationTests`, `AlternativeLanguageModelTests`, `CatalogConfigCheckTests` | Opt-in real speech models, Qwen3.5 and catalog network checks; see [On-Device AI & Meetings](local-ai.md#testing). |
 | Opt-in real-model and speech tests | Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1` or `TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1`; see [On-Device AI & Meetings](local-ai.md#testing). |
@@ -199,7 +204,7 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
    - Avoid nonisolated references to actor properties in `deinit`.
 2. **Zero Runtime Dependencies**:
    - Do not introduce external package dependencies (via Swift Package Manager or CocoaPods) unless strictly necessary. `brain-md` relies on Apple's standard frameworks (`SwiftUI`, `AppKit`, `WebKit`, `Network`, `Foundation`).
-   - **Exception: on-device AI.** Running models needs MLX, so the app pins `mlx-swift-lm` 3.32.3, `mlx-swift` 0.32.3, `mlx-audio-swift` 0.1.5 (speech models and Sortformer, MIT), `swift-huggingface` 0.13.0 and `swift-transformers` 1.3.4 to exact versions (`Package.resolved` is committed). Check new versions for advisories before bumping; see [On-Device AI & Meetings](local-ai.md#download-storage-and-memory) for the open yyjson advisory.
+   - **Exception: on-device AI.** Running models needs MLX, so the app pins `mlx-swift-lm` 3.32.3, `mlx-swift` 0.32.3, `mlx-audio-swift` 0.1.5 (speech models and Sortformer, MIT; the app also links mlx-swift-lm's `MLXEmbedders` for search by meaning), `swift-huggingface` 0.13.0 and `swift-transformers` 1.3.4 to exact versions (`Package.resolved` is committed). Check new versions for advisories before bumping; see [On-Device AI & Meetings](local-ai.md#download-storage-and-memory) for the open yyjson advisory.
    - **Building MLX needs the Metal Toolchain:** `xcodebuild -downloadComponent MetalToolchain` (once per Xcode install).
 3. **Defensive Path Operations**:
    - Never use raw file paths without passing them through `resolveSecurePath(relativePath:)`.

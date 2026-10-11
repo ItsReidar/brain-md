@@ -29,7 +29,7 @@ Ad-hoc signatures change with every build, so macOS treats each update as a diff
 1. Open **Keychain Access** → **Keychain Access** menu → **Certificate Assistant** → **Create a Certificate…**
 2. Name: `Brain.md Self-Signed`, Identity Type: **Self-Signed Root**, Certificate Type: **Code Signing**, then **Create**.
 3. Confirm that it is listed: `security find-identity -p codesigning`.
-4. Package with it: `SIGN_IDENTITY="Brain.md Self-Signed" scripts/release/package.sh`.
+4. Package as usual: `package.sh` signs with `Brain.md Self-Signed` automatically when it's in your keychain (`SIGN_IDENTITY` overrides it; `SIGN_IDENTITY=-` signs ad hoc).
    If `codesign` reports that the certificate is not trusted, open it in Keychain Access and set **Trust > Code Signing** to **Always Trust**.
 
 Back up the certificate and its private key (File → Export Items… as `.p12`, password in your password manager). If you sign with a different certificate later, users have to re-grant permissions once.

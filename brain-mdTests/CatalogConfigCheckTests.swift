@@ -15,6 +15,8 @@ import Testing
 struct CatalogConfigCheckTests {
     /// Language architectures the catalog relies on, all registered in mlx-swift-lm 3.32.3.
     static let languageTypes: Set = ["gemma4", "gemma4_unified", "qwen3_5", "mistral3", "mistral"]
+    /// Embedding architectures MLXEmbedders 3.32.3 registers (`gemma3_text` runs on the vendored copy).
+    static let embeddingTypes: Set = ["gemma3_text", "qwen3", "xlm-roberta", "bert"]
     /// `model_type` values mlx-audio-swift 0.1.5 accepts per engine (Parakeet configs have none).
     static let speechTypes: [String: Set<String?>] = [
         "parakeet": [nil, "parakeet"],
@@ -53,6 +55,9 @@ struct CatalogConfigCheckTests {
         case .diarizer(let maxSpeakers):
             #expect(type == "sortformer", "\(model.id): \(type ?? "nil")")
             #expect(config["num_speakers"] as? Int == maxSpeakers, "\(model.id)")
+        case .embedding:
+            #expect(files.contains("tokenizer.json"), "\(model.id) has no tokenizer.json")
+            #expect(type.map(Self.embeddingTypes.contains) == true, "\(model.id): \(type ?? "nil")")
         }
     }
 

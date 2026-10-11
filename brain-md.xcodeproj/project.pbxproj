@@ -16,6 +16,7 @@
 		D0A1000000000000000000C7 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B7 /* MLXAudioSTT */; };
 		D0A1000000000000000000C8 /* MLXAudioVAD in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B8 /* MLXAudioVAD */; };
 		D0A1000000000000000000C9 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B9 /* MLXAudioCore */; };
+		D0A1000000000000000000CA /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000BA /* MLXEmbedders */; };
 		D0B200000000000000000051 /* brain-md-QuickLook.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D0B20000000000000000000A /* brain-md-QuickLook.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -145,6 +146,7 @@
 				D0A1000000000000000000C4 /* HuggingFace in Frameworks */,
 				D0A1000000000000000000C5 /* Tokenizers in Frameworks */,
 				D0A1000000000000000000C6 /* MLXLLM in Frameworks */,
+				D0A1000000000000000000CA /* MLXEmbedders in Frameworks */,
 				D0A1000000000000000000C7 /* MLXAudioSTT in Frameworks */,
 				D0A1000000000000000000C8 /* MLXAudioVAD in Frameworks */,
 				D0A1000000000000000000C9 /* MLXAudioCore in Frameworks */,
@@ -225,6 +227,7 @@
 				D0A1000000000000000000B4 /* HuggingFace */,
 				D0A1000000000000000000B5 /* Tokenizers */,
 				D0A1000000000000000000B6 /* MLXLLM */,
+				D0A1000000000000000000BA /* MLXEmbedders */,
 				D0A1000000000000000000B7 /* MLXAudioSTT */,
 				D0A1000000000000000000B8 /* MLXAudioVAD */,
 				D0A1000000000000000000B9 /* MLXAudioCore */,
@@ -955,6 +958,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D0A1000000000000000000A5 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
 			productName = MLXAudioCore;
+		};
+		D0A1000000000000000000BA /* MLXEmbedders */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0A1000000000000000000A1 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXEmbedders;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
