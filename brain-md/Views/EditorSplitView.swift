@@ -338,6 +338,7 @@ public struct EditorSplitView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
         }
+        .background(CloseTabShortcut(vault: vault))
     }
 
     private func editorHeader(item: NoteItem) -> some View {
@@ -1175,3 +1176,19 @@ public struct AttachmentDetailView: View {
     }
 }
 
+
+/// ⌘W closes the active tab. It lives in the editor window, which gets key equivalents before the
+/// menu bar, and only while tabs are shown; otherwise ⌘W closes the window as usual.
+struct CloseTabShortcut: View {
+    @ObservedObject var vault: VaultManager
+
+    var body: some View {
+        Button("Close Tab") {
+            if let tab = vault.tabs.first(where: { $0.url == vault.selectedItem?.url }) { vault.closeTab(tab) }
+        }
+        .keyboardShortcut("w", modifiers: .command)
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+}

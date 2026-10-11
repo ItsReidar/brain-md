@@ -3,7 +3,8 @@
 //  brain-mdTests
 //
 
-import Foundation
+import AppKit
+import SwiftUI
 import Testing
 @testable import brain_md
 
@@ -108,4 +109,20 @@ struct NoteTabsTests {
         try? FileManager.default.removeItem(at: trash.appendingPathComponent(new.lastPathComponent))
     }
 
+    @Test func commandWClosesTheActiveTabInTheEditorWindow() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        vault.selectNote(try note(vault, "A"))
+        vault.openInNewTab(try note(vault, "B"))
+
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: CloseTabShortcut(vault: vault))
+        window.layoutIfNeeded()
+        let commandW = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13))
+        #expect(window.performKeyEquivalent(with: commandW)) // handled here, so the menu's Close never sees it
+        #expect(names(vault) == ["A"])
+        #expect(vault.selectedItem?.relativePath == "A.md")
+    }
 }
