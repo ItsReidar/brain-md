@@ -6,9 +6,10 @@
 #   scripts/release/package.sh [--version 1.2.3] [--build-number N] [--sign-identity NAME]
 #
 # Signing:
-#   --sign-identity / SIGN_IDENTITY  "-" (default) signs ad hoc. Pass the name of a self-signed
-#                                    code-signing certificate from your keychain for a stable
-#                                    identity, so macOS privacy grants survive app updates.
+#   --sign-identity / SIGN_IDENTITY  Code-signing certificate to sign with. Defaults to
+#                                    "Brain.md Self-Signed" when it's in your keychain (a stable
+#                                    identity, so macOS privacy grants survive app updates),
+#                                    otherwise "-" (ad hoc). SIGN_IDENTITY=- forces ad hoc.
 #
 # Output (in dist/):
 #   brain-md-<version>.dmg, brain-md-<version>.dmg.sha256, brain-md.rb (Homebrew cask)
@@ -21,7 +22,12 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 
 version=""
 build_number=""
-sign_identity="${SIGN_IDENTITY:--}"
+default_identity="Brain.md Self-Signed"
+sign_identity="${SIGN_IDENTITY:-}"
+if [[ -z "$sign_identity" ]]; then
+    sign_identity="-"
+    security find-identity -p codesigning | grep -Fq "\"$default_identity\"" && sign_identity="$default_identity"
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
