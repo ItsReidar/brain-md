@@ -724,7 +724,11 @@ private struct ItemRowView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                onSelect(item)
+                if item.isMarkdown, NSEvent.modifierFlags.contains(.command) {
+                    VaultManager.shared.openInNewTab(item)
+                } else {
+                    onSelect(item)
+                }
             }
             .draggable(item.relativePath) {
                 dragPreview(icon: item.iconName, text: item.displayName)
@@ -769,6 +773,8 @@ private struct ItemRowView: View {
                     Button("Rename Attachment") { onRename(item) }
                     Button("Delete Attachment", role: .destructive) { onDelete(item) }
                 } else {
+                    Button("Open in New Tab") { VaultManager.shared.openInNewTab(item) }
+                    Divider()
                     Button("Rename Note") { onRename(item) }
                     Button("Delete Note", role: .destructive) { onDelete(item) }
                     Button("Reveal in Finder") {
