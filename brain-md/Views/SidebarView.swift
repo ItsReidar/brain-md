@@ -9,6 +9,9 @@ import AppKit
 public struct SidebarView: View {
     @ObservedObject var vault: VaultManager
     @AppStorage(AIFeatures.key) private var showsAIFeatures = true
+    @AppStorage("sidebar_search_by_meaning") private var searchByMeaning = false
+    @ObservedObject private var semanticSearch = SemanticSearch.shared
+    @ObservedObject private var modelStore = ModelStore.shared
     @ObservedObject var httpServer = MCPHTTPServer.shared
     @Binding var showingMCPModal: Bool
     
@@ -37,7 +40,8 @@ public struct SidebarView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                TextField("Search notes or content...", text: $vault.searchQuery)
+                TextField(isSearchingByMeaning ? "Search by meaning..." : "Search notes or content...",
+                          text: $vault.searchQuery)
                     .textFieldStyle(.plain)
                 if !vault.searchQuery.isEmpty {
                     Button(action: { vault.searchQuery = "" }) {
@@ -46,7 +50,19 @@ public struct SidebarView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                if canSearchByMeaning {
+                    Button(action: { searchByMeaning.toggle() }) {
+                        Image(systemName: "sparkle.magnifyingglass")
+                            .foregroundColor(searchByMeaning ? .accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(searchByMeaning ? "Search by words" : "Search by meaning: finds notes about your query, even without the same words")
+                    .accessibilityLabel("Search by meaning")
+                    .accessibilityValue(searchByMeaning ? "On" : "Off")
+                }
             }
+            .onChange(of: vault.searchQuery) { _, query in runSemanticSearch(query) }
+            .onChange(of: isSearchingByMeaning) { _, _ in runSemanticSearch(vault.searchQuery) }
             .padding(8)
             .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
             .cornerRadius(6)
@@ -320,10 +336,67 @@ public struct SidebarView: View {
     
     // MARK: - Search Results
     
+    /// The search model is downloaded and AI features are on.
+    private var canSearchByMeaning: Bool {
+        _ = modelStore.states // re-evaluate when downloads finish
+        return showsAIFeatures && semanticSearch.isAvailable
+    }
+
+    private var isSearchingByMeaning: Bool { searchByMeaning && canSearchByMeaning }
+
+    private func runSemanticSearch(_ query: String) {
+        if isSearchingByMeaning {
+            semanticSearch.search(query)
+        } else {
+            semanticSearch.reset()
+        }
+    }
+
     private var searchResultsList: some View {
-        let results = vault.searchNotes(query: vault.searchQuery)
-        return Group {
-            if results.isEmpty {
+        let results = isSearchingByMeaning ? semanticSearch.results : vault.searchNotes(query: vault.searchQuery)
+        return VStack(spacing: 0) {
+            if isSearchingByMeaning {
+                semanticSearchStatus
+            }
+            searchResults(results)
+        }
+    }
+
+    /// Indexing progress, or why search by meaning failed.
+    @ViewBuilder
+    private var semanticSearchStatus: some View {
+        if let progress = semanticSearch.progress {
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
+                Text("Indexing \(progress.done) of \(progress.total) notes…")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        } else if let message = semanticSearch.errorMessage {
+            Text(message)
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+        }
+    }
+
+    private func searchResults(_ results: [NoteSearchResult]) -> some View {
+        Group {
+            if results.isEmpty, isSearchingByMeaning, semanticSearch.isSearching {
+                VStack(spacing: 8) {
+                    Spacer()
+                    ProgressView()
+                    Text("Searching by meaning…")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if results.isEmpty {
                 VStack(spacing: 8) {
                     Spacer()
                     Image(systemName: "doc.text.magnifyingglass")
