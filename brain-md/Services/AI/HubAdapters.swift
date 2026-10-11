@@ -47,13 +47,18 @@ nonisolated struct HubDownloader: MLXLMCommon.Downloader {
 }
 
 nonisolated struct TransformersTokenizerLoader: MLXLMCommon.TokenizerLoader {
+    /// Used when the model's tokenizer has no chat template (base checkpoints).
+    var fallbackChatTemplate: String?
+
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
-        TransformersTokenizer(upstream: try await AutoTokenizer.from(modelFolder: directory))
+        TransformersTokenizer(
+            upstream: try await AutoTokenizer.from(modelFolder: directory), fallbackChatTemplate: fallbackChatTemplate)
     }
 }
 
 nonisolated struct TransformersTokenizer: MLXLMCommon.Tokenizer {
     let upstream: any Tokenizers.Tokenizer
+    var fallbackChatTemplate: String?
 
     func encode(text: String, addSpecialTokens: Bool) -> [Int] {
         upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
@@ -80,8 +85,18 @@ nonisolated struct TransformersTokenizer: MLXLMCommon.Tokenizer {
             return try upstream.applyChatTemplate(
                 messages: messages, tools: tools, additionalContext: additionalContext)
         } catch Tokenizers.TokenizerError.missingChatTemplate {
-            throw MLXLMCommon.TokenizerError.missingChatTemplate
+            guard let fallbackChatTemplate else { throw MLXLMCommon.TokenizerError.missingChatTemplate }
+            return try upstream.applyChatTemplate(
+                messages: messages, chatTemplate: .literal(fallbackChatTemplate), addGenerationPrompt: true,
+                truncation: false, maxLength: nil, tools: tools, additionalContext: additionalContext)
         }
+    }
+}
+
+/// Chat templates shipped with the app, for models whose tokenizer has none.
+nonisolated enum ChatTemplates {
+    static func template(named name: String, in bundle: Bundle = .main) -> String? {
+        bundle.url(forResource: name, withExtension: "jinja").flatMap { try? String(contentsOf: $0, encoding: .utf8) }
     }
 }
 

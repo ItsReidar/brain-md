@@ -1,5 +1,5 @@
 //
-//  MeetingTranscriber.swift
+//  AppleSpeechRecognizer.swift
 //  brain-md
 //
 
@@ -26,7 +26,7 @@ public enum TranscriptionError: LocalizedError, Equatable {
 
 /// Transcribes meeting audio on-device with Apple's SpeechAnalyzer. Each source gets its own
 /// analyzer, so lines are labelled by where the audio came from ("Them" or "Me").
-nonisolated public final class MeetingTranscriber: Sendable {
+nonisolated public final class AppleSpeechRecognizer: SpeechRecognizer {
     /// `@AppStorage` key for the transcription language; empty means the system language.
     public static let localeDefaultsKey = "ai_transcription_locale"
 
@@ -46,7 +46,7 @@ nonisolated public final class MeetingTranscriber: Sendable {
     public func transcribe(
         _ audio: AsyncStream<CapturedAudio>,
         locale requested: Locale,
-        speakers: Set<TranscriptionSegment.Speaker> = [.systemAudio, .microphone],
+        sources speakers: Set<TranscriptionSegment.Speaker> = [.systemAudio, .microphone],
         onPreparing: @escaping @Sendable (String) -> Void = { _ in }
     ) -> AsyncThrowingStream<TranscriptionSegment, Error> {
         AsyncThrowingStream { continuation in

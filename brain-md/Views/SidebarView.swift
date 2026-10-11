@@ -8,6 +8,7 @@ import AppKit
 
 public struct SidebarView: View {
     @ObservedObject var vault: VaultManager
+    @AppStorage(AIFeatures.key) private var showsAIFeatures = true
     @ObservedObject var httpServer = MCPHTTPServer.shared
     @Binding var showingMCPModal: Bool
     
@@ -254,7 +255,10 @@ public struct SidebarView: View {
                 }
 
                 // Folders brain-md manages (Skills, attachments) sit below the user's own folders.
-                let appItems = tree.app
+                // Skills are hidden (not deleted) while AI features are off.
+                let appItems = tree.app.filter {
+                    showsAIFeatures || $0.name.caseInsensitiveCompare(VaultManager.skillsFolderName) != .orderedSame
+                }
                 if !appItems.isEmpty {
                     sectionHeader("App Folders")
                     ForEach(appItems) { item in

@@ -34,7 +34,7 @@
 - **📊 Offline Mermaid Diagrams**: Interactive diagrams (flowcharts, sequence, class, state, git graphs) rendered completely offline via bundled `mermaid.min.js` with adaptive dark/light themes.
 - **🎨 112 Custom Themes (terminalcolors.com)**: Comprehensive catalog of 80 dark and 32 light themes across 36 iconic theme families (Catppuccin, Tokyo Night, Dracula, Gruvbox, Nord, Rosé Pine, GitHub, Ayu, Solarized, Zenbones, etc.). Powers real-time syntax highlighting, custom editor canvas styling, and live color swatch previews in Settings.
 - **⚙️ Modern macOS System Settings**: Native Ventura/Sonoma/Sequoia-style settings menu with custom note title formats (with dynamic tokens like `{date}`, `{time}`, `{year}`), customizable Markdown content templates, and configurable attachment folders.
-- **🎙️ On-Device AI & Meeting Assistant (Gemma 4 E4B)**: Optional Gemma 4 E4B (6.8 GB download) running on your Mac with MLX: summaries, action items, rewriting and screen explanations, always reviewed in a sheet before they touch a note, plus a free-form **Gemma Chat** window (⇧⌘J) that can use the open note as context. **Skills** (your own saved prompts, as Markdown files in the vault) fill the ✨ menu and the chat, and **custom instructions** in Settings apply to every request. Records meetings and transcribes system audio ("Them") and your microphone ("Me") on-device with Apple's SpeechAnalyzer, then drafts the minutes, in English, Dutch and the other languages Apple's on-device speech models support. Nothing leaves your Mac. See [On-Device AI & Meetings](docs/local-ai.md).
+- **🎙️ On-Device AI & Meeting Assistant (MLX)**: Pick a language model (Gemma 4 E4B, E2B or 12B, including base checkpoints, Qwen3.5 2B/4B/9B, Ministral 3, Mistral 7B) running on your Mac with MLX: summaries, action items, rewriting and screen explanations, always reviewed in a sheet before they touch a note, plus a free-form **AI Chat** window (⇧⌘J) that can use the open note as context. **Skills** (your own saved prompts, as Markdown files in the vault) fill the ✨ menu and the chat, and **custom instructions** in Settings apply to every request. Records meetings and transcribes them on-device with an MLX speech model (Nemotron, Parakeet, Orukeet, Voxtral, Whisper), Gemma 4 E4B or Apple's SpeechAnalyzer, labels your microphone "Me" and up to four voices on the call "Speaker 1–4" with Sortformer, then drafts the minutes, in English, Dutch and many other languages. Nothing leaves your Mac, and one switch in Settings › General hides every AI feature for a plain notes app. See [On-Device AI & Meetings](docs/local-ai.md).
 - **🔄 Live File Synchronization**: Automatic background file system watcher (`FSEvents` / `DispatchSource`) detects changes made by external editors in real time.
 - **🔒 Secure & Private**: Offline-by-default, path traversal protection, and optional MCP read-only guard.
 
@@ -53,14 +53,14 @@ graph TB
         Highlighter["Syntax Highlighter Engine"]
         Mermaid["Offline Mermaid Engine (WKWebView)"]
         Settings["macOS System Settings (SettingsView)"]
-        ChatWindow["Gemma Chat Window (GemmaChatView)"]
+        ChatWindow["AI Chat Window (AssistantChatView)"]
     end
 
     subgraph AI ["On-Device AI (MLX + Apple Speech)"]
-        ModelManager["LocalModelManager (Gemma 4 E4B)"]
-        Gemma["GemmaService & GemmaChat"]
+        ModelManager["ModelCatalog / ModelStore / LanguageModelRuntime"]
+        Gemma["LanguageModelService & AssistantChat"]
         Skills["SkillLibrary (Skills/*.md)"]
-        Meetings["MeetingRecorder (ScreenCaptureKit + SpeechAnalyzer)"]
+        Meetings["MeetingRecorder (ScreenCaptureKit + MLX speech / SpeechAnalyzer + Sortformer)"]
     end
 
     subgraph Storage ["Local Vault & Storage Engine"]
@@ -237,8 +237,8 @@ For full payload specifications, schema examples, and curl tests, see [MCP Serve
 | `⌘⌃1`       | Switch to Split View (Editor + Live Preview)             |
 | `⌘⌃2`       | Switch to Editor-Only View                               |
 | `⌘⌃3`       | Switch to Preview-Only View                              |
-| `⇧⌘J`       | Open the Gemma Chat window                               |
-| `⌘.`        | Stop a Gemma answer (chat or review sheet)               |
+| `⇧⌘J`       | Open the AI Chat window                                  |
+| `⌘.`        | Stop an AI answer (chat or review sheet)                 |
 | `⌘B` / `⌘I` | Bold / Italic                                            |
 | `⌘E` / `⌥⌘C`| Inline code / Code block                                 |
 | `⌘K`        | Insert a link                                            |
@@ -256,7 +256,7 @@ Explore the comprehensive technical guides in the [`docs/`](docs/) directory:
 - [**Model Context Protocol (MCP)**](docs/mcp-server.md): Protocol specifications, SSE transports, tool schemas, and AI agent configuration.
 - [**Settings & Customization**](docs/settings-and-customization.md): macOS Ventura-style settings architecture, token formatting, and custom Markdown templates.
 - [**Development & Testing**](docs/development-and-testing.md): Building, testing, benchmarking, and contributing to `brain.md`.
-- [**On-Device AI & Meetings**](docs/local-ai.md): Gemma 4 with MLX, review sheet, Gemma Chat, meeting transcription and languages, permissions and model details.
+- [**On-Device AI & Meetings**](docs/local-ai.md): language and speech models with MLX, review sheet, AI Chat, meeting transcription, speaker identification, languages, permissions and model details.
 - [**3D Visual Brain Graph**](docs/3d-graph-view.md): SceneKit rendering, force-directed layout and interaction model.
 - [**Releasing**](docs/releasing.md): Packaging, signing without a paid developer account, DMG and Homebrew cask distribution.
 

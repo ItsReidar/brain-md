@@ -1,5 +1,5 @@
 //
-//  GemmaService.swift
+//  LanguageModelService.swift
 //  brain-md
 //
 
@@ -9,7 +9,7 @@ import Foundation
 import MLXLMCommon
 import os
 
-public enum GemmaServiceError: LocalizedError, Equatable {
+public enum LanguageModelServiceError: LocalizedError, Equatable {
     case disabled
     case emptyInput
 
@@ -21,10 +21,10 @@ public enum GemmaServiceError: LocalizedError, Equatable {
     }
 }
 
-/// Runs note tasks against the on-device Gemma 4 model and streams the answer.
+/// Runs note tasks against the active on-device language model and streams the answer.
 /// The model loads on first use and unloads after `idleUnloadDelay` without requests.
-public final class GemmaService: ObservableObject {
-    public static let shared = GemmaService()
+public final class LanguageModelService: ObservableObject {
+    public static let shared = LanguageModelService()
 
     /// Long enough to keep the model warm across a burst of requests, short enough to give memory back.
     static let idleUnloadDelay: Duration = .seconds(300)
@@ -33,21 +33,21 @@ public final class GemmaService: ObservableObject {
 
     @Published public private(set) var isGenerating = false
 
-    private let modelManager: LocalModelManager
+    let runtime: LanguageModelRuntime
     private var idleUnloadTask: Task<Void, Never>?
-    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "brain-md", category: "Gemma")
+    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "brain-md", category: "LanguageModel")
 
-    public init(modelManager: LocalModelManager = .shared) {
-        self.modelManager = modelManager
+    public init(runtime: LanguageModelRuntime = .shared) {
+        self.runtime = runtime
     }
 
     public var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: LocalModelManager.enabledDefaultsKey)
+        ModelSelection.isOnDeviceAIEnabled()
     }
 
-    /// Streams Gemma's answer for `request`. Cancelling the consuming task stops generation.
+    /// Streams the model's answer for `request`. Cancelling the consuming task stops generation.
     public func stream(_ request: RewriteRequest, image: CGImage? = nil) -> AsyncThrowingStream<String, Error> {
-        // Validate before `generate` so an empty note never loads the 6.8 GB model.
+        // Validate before `generate` so an empty note never loads a multi-gigabyte model.
         let prompt: String
         do {
             prompt = try Self.prompt(for: request)
@@ -56,7 +56,7 @@ public final class GemmaService: ObservableObject {
         }
         return generate { container in
             // No pre-resize: ChatSession's 512×512 default would shrink screenshots before
-            // Gemma's own processor sizes them to its token budget, blurring slide text.
+            // the model's own processor sizes them to its token budget, blurring slide text.
             let session = ChatSession(
                 container,
                 instructions: Self.withCustomInstructions(Self.instructions),
@@ -67,7 +67,7 @@ public final class GemmaService: ObservableObject {
         }
     }
 
-    /// Streams Gemma's answer to a skill, with the note added when the skill uses it.
+    /// Streams the model's answer to a skill, with the note added when the skill uses it.
     public func stream(_ skill: Skill, noteText: String) -> AsyncThrowingStream<String, Error> {
         let prompt: String
         do {
@@ -93,14 +93,14 @@ public final class GemmaService: ObservableObject {
         AsyncThrowingStream { continuation in
             let task = Task { @MainActor in
                 do {
-                    guard self.isEnabled else { throw GemmaServiceError.disabled }
+                    guard self.isEnabled else { throw LanguageModelServiceError.disabled }
                     self.idleUnloadTask?.cancel()
                     self.isGenerating = true
                     defer {
                         self.isGenerating = false
                         self.scheduleIdleUnload()
                     }
-                    let container = try await self.modelManager.loadModel()
+                    let container = try await self.runtime.loadModel()
                     for try await chunk in try makeStream(container) {
                         continuation.yield(chunk)
                     }
@@ -119,7 +119,8 @@ public final class GemmaService: ObservableObject {
     /// Loads the model and generates one token, so the next request skips both the load (about
     /// 4 s) and the slower first pass on the GPU. Does nothing if the model is already loaded.
     public func prewarm() async {
-        guard isEnabled, !modelManager.isLoaded, !isGenerating else { return }
+        guard isEnabled, runtime.loadedModel != runtime.activeModel, runtime.isActiveModelInstalled,
+              !isGenerating else { return }
         let stream = generate { container in
             ChatSession(
                 container, generateParameters: GenerateParameters(maxTokens: 1, temperature: 0),
@@ -138,7 +139,7 @@ public final class GemmaService: ObservableObject {
         idleUnloadTask = Task { [weak self] in
             try? await Task.sleep(for: Self.idleUnloadDelay)
             guard !Task.isCancelled, let self, !self.isGenerating else { return }
-            self.modelManager.unloadModel()
+            self.runtime.unloadModel()
         }
     }
 
@@ -165,9 +166,8 @@ public final class GemmaService: ObservableObject {
     /// The user prompt for `request`. Pure, so the wording can be tested without loading the model.
     static func prompt(for request: RewriteRequest) throws -> String {
         let note = trimmed(request.sourceText)
-        let transcript = (request.transcripts ?? [])
-            .filter(\.isFinal)
-            .map { "\($0.speaker == .microphone ? "Me" : "Them"): \($0.text)" }
+        let transcript = TranscriptWriter.paragraphs(request.transcripts ?? [])
+            .map { "\($0.speakerLabel): \($0.text)" }
             .joined(separator: "\n")
 
         switch request.mode {
@@ -178,7 +178,7 @@ public final class GemmaService: ObservableObject {
                 sections or bullet points.\(note.isEmpty ? "" : "\n\nThe note it belongs to, for context:\n\n\(note)")
                 """
         case .summarizeMeeting:
-            guard !note.isEmpty || !transcript.isEmpty else { throw GemmaServiceError.emptyInput }
+            guard !note.isEmpty || !transcript.isEmpty else { throw LanguageModelServiceError.emptyInput }
             var parts = ["""
                 Summarize the following as meeting minutes with these sections: **Summary** (2–4 \
                 sentences), **Decisions**, **Action items** (a Markdown checklist with owners and \
@@ -189,7 +189,7 @@ public final class GemmaService: ObservableObject {
             if !transcript.isEmpty { parts.append("Transcript (\"Me\" is the note taker):\n\n\(transcript)") }
             return parts.joined(separator: "\n\n")
         case .extractActionItems:
-            guard !note.isEmpty else { throw GemmaServiceError.emptyInput }
+            guard !note.isEmpty else { throw LanguageModelServiceError.emptyInput }
             return """
                 List every action item in this note as a Markdown checklist (`- [ ] …`). Include the \
                 owner and due date when the note mentions them. If there are none, reply with \
@@ -200,7 +200,7 @@ public final class GemmaService: ObservableObject {
                 \(note)
                 """
         case .rewrite:
-            guard !note.isEmpty else { throw GemmaServiceError.emptyInput }
+            guard !note.isEmpty else { throw LanguageModelServiceError.emptyInput }
             return """
                 Rewrite this note so it reads clearly: fix grammar and spelling, tighten wording and \
                 improve structure. Keep every fact, link, code block, front matter and Markdown \

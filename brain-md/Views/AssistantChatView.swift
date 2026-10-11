@@ -1,19 +1,22 @@
 //
-//  GemmaChatView.swift
+//  AssistantChatView.swift
 //  brain-md
 //
 
 import SwiftUI
 
-/// The "Gemma Chat" window: a free-form conversation with the on-device model.
-struct GemmaChatView: View {
+/// The "AI Chat" window: a free-form conversation with the active on-device model.
+struct AssistantChatView: View {
+    /// Kept from 1.1 ("Gemma Chat") so macOS restores the window's size and position.
     static let windowID = "gemma-chat"
 
-    @ObservedObject var chat: GemmaChat
+    @ObservedObject var chat: AssistantChat
     @ObservedObject var vault: VaultManager
-    @ObservedObject private var modelManager = LocalModelManager.shared
+    @ObservedObject private var runtime = LanguageModelRuntime.shared
+    @AppStorage(ModelSelection.languageModelKey) private var languageModelID = ModelCatalog.defaultLanguageModelID
     @ObservedObject private var skillLibrary = SkillLibrary.shared
-    @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
+    @AppStorage(ModelSelection.enabledKey) private var isAIEnabled = false
+    @AppStorage(AIFeatures.key) private var showsAIFeatures = true
     @AppStorage("ai_chat_include_note") private var includeNote = true
     @Environment(\.openSettings) private var openSettings
     @State private var draft = ""
@@ -22,7 +25,12 @@ struct GemmaChatView: View {
     /// Readable line length on wide windows.
     private static let contentWidth: CGFloat = 720
 
-    private var isAvailable: Bool { isAIEnabled && modelManager.state.status == .ready }
+    private var isAvailable: Bool {
+        _ = languageModelID // re-evaluate when the active model changes
+        return showsAIFeatures && isAIEnabled && runtime.isActiveModelInstalled
+    }
+
+    private var modelName: String { runtime.activeModel.displayName }
 
     private var openNote: NoteItem? {
         guard let item = vault.selectedItem, item.isMarkdown else { return nil }
@@ -52,10 +60,11 @@ struct GemmaChatView: View {
                 .help("Start a new conversation")
             }
         }
+        .navigationSubtitle(isAvailable ? modelName : "")
         .onAppear { isInputFocused = true }
-        // Load and warm up Gemma while the user types, so the first answer starts sooner.
+        // Load and warm up the model while the user types, so the first answer starts sooner.
         .task(id: isAvailable) {
-            if isAvailable { await GemmaService.shared.prewarm() }
+            if isAvailable { await LanguageModelService.shared.prewarm() }
         }
     }
 
@@ -91,11 +100,11 @@ struct GemmaChatView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer(minLength: 24)
-            GemmaAvatar(size: 48)
+            AssistantAvatar(size: 48)
             VStack(spacing: 4) {
                 Text("How can I help?")
                     .font(.system(size: 20, weight: .semibold))
-                Text("Gemma runs entirely on this Mac. Nothing you type leaves it.")
+                Text("\(modelName) runs entirely on this Mac. Nothing you type leaves it.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -126,7 +135,7 @@ struct GemmaChatView: View {
     private var composer: some View {
         VStack(spacing: 6) {
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Message Gemma", text: $draft, axis: .vertical)
+                TextField("Message \(modelName)", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .lineLimit(1...8)
@@ -192,9 +201,9 @@ struct GemmaChatView: View {
         .buttonStyle(.plain)
         .disabled(openNote == nil)
         .help(openNote == nil
-            ? "Open a note to give Gemma its contents"
-            : includeNote ? "Gemma sees this note with your message. Click to leave it out."
-                : "Click to let Gemma see this note")
+            ? "Open a note to share it with the model"
+            : includeNote ? "The model sees this note with your message. Click to leave it out."
+                : "Click to let the model see this note")
         .accessibilityLabel("Include current note")
         .accessibilityValue(isSharingNote ? "On" : "Off")
     }
@@ -233,12 +242,13 @@ struct GemmaChatView: View {
 
     private var unavailable: some View {
         VStack(spacing: 12) {
-            GemmaAvatar(size: 48).saturation(0.2)
-            Text(isAIEnabled ? "Gemma 4 isn't ready yet" : "On-device AI is turned off")
+            AssistantAvatar(size: 48).saturation(0.2)
+            Text(!showsAIFeatures ? "AI features are turned off"
+                : isAIEnabled ? "\(modelName) isn't downloaded yet" : "On-device AI is turned off")
                 .font(.system(size: 17, weight: .semibold))
-            Text(isAIEnabled
-                ? "Chat becomes available once the model has finished downloading."
-                : "Turn it on to download Gemma 4 (6.8 GB) and chat privately on this Mac.")
+            Text(!showsAIFeatures ? "Turn them back on in Settings › General."
+                : isAIEnabled ? "Chat becomes available once the model has finished downloading."
+                : "Turn it on and pick a model to chat privately on this Mac.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -290,7 +300,7 @@ struct GemmaChatView: View {
     private func run(_ skill: Skill) {
         guard !chat.isResponding else { return }
         let note = skill.usesNote || includeNote
-            ? openNote.map { GemmaChat.NoteContext(title: $0.displayName, content: vault.editorContent) }
+            ? openNote.map { AssistantChat.NoteContext(title: $0.displayName, content: vault.editorContent) }
             : nil
         if skill.usesNote, note == nil { return }
         chat.send(skill.chatMessage, note: note, displayText: skill.name)
@@ -321,7 +331,7 @@ struct GemmaChatView: View {
     private func send() {
         guard !chat.isResponding else { return }
         let note = includeNote
-            ? openNote.map { GemmaChat.NoteContext(title: $0.displayName, content: vault.editorContent) }
+            ? openNote.map { AssistantChat.NoteContext(title: $0.displayName, content: vault.editorContent) }
             : nil
         chat.send(draft, note: note)
         draft = ""
@@ -356,7 +366,7 @@ private struct UserMessageView: View {
 }
 
 private struct AssistantMessageView: View {
-    let message: GemmaChat.Message
+    let message: AssistantChat.Message
     let isStreaming: Bool
     let canInsert: Bool
     let onInsert: (String) -> Void
@@ -364,7 +374,7 @@ private struct AssistantMessageView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            GemmaAvatar(size: 26)
+            AssistantAvatar(size: 26)
             VStack(alignment: .leading, spacing: 8) {
                 content
                 if !isStreaming, !message.isError, !message.text.isEmpty { actions }
@@ -434,8 +444,8 @@ private struct MessageActionButton: View {
     }
 }
 
-/// Gemma's mark in the chat: the app's own icon, as macOS renders it for the Dock.
-private struct GemmaAvatar: View {
+/// The assistant's mark in the chat: the app's own icon, as macOS renders it for the Dock.
+private struct AssistantAvatar: View {
     let size: CGFloat
 
     var body: some View {
@@ -450,7 +460,7 @@ private struct GemmaAvatar: View {
     }
 }
 
-/// How full Gemma's context window is: a small ring and "1.7K / 131K". The ring turns amber from
+/// How full the model's context window is: a small ring and "1.7K / 131K". The ring turns amber from
 /// 70 % and red from 90 %; the tooltip has exact numbers and the last answer's speed.
 struct ContextGauge: View {
     let usage: ContextUsage
@@ -488,7 +498,7 @@ struct ContextGauge: View {
     static func helpText(_ usage: ContextUsage, _ lastAnswer: AnswerStats?, locale: Locale = .current) -> String {
         let percent = Int((usage.fraction * 100).rounded())
         var text = "Context: \(usage.tokens.formatted(.number.locale(locale))) of "
-            + "\(ContextUsage.window.formatted(.number.locale(locale))) tokens (\(percent) %)."
+            + "\(usage.window.formatted(.number.locale(locale))) tokens (\(percent) %)."
         if let lastAnswer {
             text += " Last answer: \(lastAnswer.tokens.formatted(.number.locale(locale))) tokens at "
                 + "\(lastAnswer.tokensPerSecond.formatted(.number.precision(.fractionLength(1)).locale(locale))) tokens/s."
@@ -498,7 +508,7 @@ struct ContextGauge: View {
     }
 }
 
-/// Three pulsing dots while Gemma prepares its answer; static with Reduce Motion.
+/// Three pulsing dots while the model prepares its answer; static with Reduce Motion.
 private struct TypingIndicator: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAnimating = false
@@ -519,7 +529,7 @@ private struct TypingIndicator: View {
         .padding(.vertical, 6)
         .onAppear { isAnimating = true }
         .accessibilityElement()
-        .accessibilityLabel("Gemma is thinking")
+        .accessibilityLabel("The model is thinking")
     }
 }
 
@@ -638,7 +648,7 @@ struct ChatMarkdownView: View {
 
 #if DEBUG
 #Preview("Conversation") {
-    let chat = GemmaChat()
+    let chat = AssistantChat()
     chat.loadForPreview([
         .init(role: .user, text: "What did we decide about the launch?", prompt: ""),
         .init(role: .assistant, text: """
@@ -651,6 +661,6 @@ struct ChatMarkdownView: View {
         .init(role: .user, text: "Draft a short message to support about it.", prompt: ""),
         .init(role: .assistant, text: "", prompt: ""),
     ], responding: true, contextTokens: 1_717, lastAnswer: AnswerStats(tokens: 136, tokensPerSecond: 31.7))
-    return GemmaChatView(chat: chat, vault: .shared).frame(width: 560, height: 720)
+    return AssistantChatView(chat: chat, vault: .shared).frame(width: 560, height: 720)
 }
 #endif

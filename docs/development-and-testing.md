@@ -28,7 +28,7 @@ brain-md/
 │   ├── mcp-server.md              # Model Context Protocol API reference
 │   ├── settings-and-customization.md # System settings & templates
 │   ├── 3d-graph-view.md           # SceneKit brain graph & layout model
-│   ├── local-ai.md                # Gemma 4, skills, chat & meeting transcription
+│   ├── local-ai.md                # Models, skills, chat & meeting transcription
 │   ├── releasing.md               # DMG, signing & Homebrew cask
 │   ├── release-notes/             # Per-version notes used by publish.sh
 │   └── development-and-testing.md # This guide
@@ -56,14 +56,15 @@ brain-md/
 │   │   ├── PDFExportService.swift # Vector PDF export of the preview
 │   │   ├── ThemeManager.swift     # Theme selection & syntax colors
 │   │   └── AI/                    # On-device AI & meetings (see local-ai.md)
-│   │       ├── LocalModelManager.swift # Gemma 4 download, verify, load/unload
+│   │       ├── Models/            # ModelCatalog, ModelStore, ModelSelection, LanguageModelRuntime
+│   │       ├── Speech/            # Speech engines, utterance segmenter, Sortformer diarizer
+│   │       ├── Vendor/Gemma4Audio/ # Gemma 4 audio input ported from mlx-swift-lm#392
 │   │       ├── HubAdapters.swift  # Hugging Face/tokenizer bridges, KV-cache mask fix
-│   │       ├── GemmaService.swift # Prompts & streaming generation
-│   │       ├── GemmaChat.swift    # Free-form chat state & history replay
+│   │       ├── LanguageModelService.swift # Prompts & streaming generation
+│   │       ├── AssistantChat.swift    # Free-form chat state & history replay
 │   │       ├── Skills.swift       # Skill files, prompts & the vault's skill library
 │   │       ├── VisualCaptureService.swift # Screenshots for Explain Screen
 │   │       ├── AudioCaptureService.swift # System audio + microphone capture
-│   │       ├── MeetingTranscriber.swift # SpeechAnalyzer per audio source
 │   │       └── MeetingRecorder.swift # Recording session & transcript lines
 │   ├── Views/                     # SwiftUI views & UI components
 │   │   ├── SidebarView.swift      # File tree navigation & drag-and-drop
@@ -75,8 +76,9 @@ brain-md/
 │   │   ├── BrainGraph3DView.swift # SceneKit 3D brain network view (Graph3DSceneView)
 │   │   ├── QuickSwitcherModalView.swift # Spotlight-style note switcher (⌘O)
 │   │   ├── MCPServerModalView.swift # Server inspector & agent setup
-│   │   ├── AIResultSheet.swift    # Review sheet for Gemma output
-│   │   ├── GemmaChatView.swift    # "Gemma Chat" window
+│   │   ├── AIResultSheet.swift    # Review sheet for model output
+│   │   ├── AssistantChatView.swift # "AI Chat" window
+│   │   ├── ModelSettingsViews.swift # Model rows in Settings
 │   │   ├── MeetingLiveOverlay.swift # Live levels & partial transcript
 │   │   └── SettingsView.swift     # macOS System Settings window
 │   ├── MCP/                       # Model Context Protocol implementation
@@ -162,16 +164,21 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
 | `testUnregisterOnlyMatchingScrollView()` | Identity-checked unregistration survives SwiftUI building replacements before dismantling. |
 | `testScrollViewFinderRegistersAndReleasesPreview()` | `ScrollViewFinder` registers on window attach and unregisters on dismantle. |
 | `testMetricsIgnoreDocumentFrameOrigin()` / `testMetricsNonFlippedDocument()` / `testMetricsHonorContentInsets()` / `testMetricsShortDocument()` | `ScrollMetrics` geometry: frame-origin independence, `isFlipped` handling, content insets, and non-scrollable documents. |
-| `LocalModelManagerTests` | Snapshot completeness (every indexed weight file), legacy placeholder cleanup, disk size of symlinked blobs, memory check, and loading without a download. |
+| `ModelStoreTests` | Snapshot completeness (every indexed weight file), legacy placeholder cleanup, disk size of symlinked blobs, memory check, and loading without a download. |
 | `NoteGraphServiceTests` | Wikilink (with aliases) and Markdown link extraction, link resolution, graph edges and degrees, folder hubs and clustering, valid 3D layout coordinates. |
 | `LocalAIServicesTests` | AI model types: download state transitions, capture configurations, speaker labels, frame metadata, request modes. |
-| `GemmaServiceTests` (+ `GemmaChatTests.swift`, which extends it) | Prompt wording per mode, empty-note and disabled errors (without loading the model), speaker labels, truncation marker. Chat: note attached only when new or changed, history replay of complete exchanges, failed turns, blank messages, context-usage labels and warning levels, custom instructions, skills sent from chat. |
+| `LanguageModelServiceTests` (+ `AssistantChatTests.swift`, which extends it) | Prompt wording per mode, empty-note and disabled errors (without loading the model), speaker labels, truncation marker. Chat: note attached only when new or changed, history replay of complete exchanges, failed turns, blank messages, context-usage labels and warning levels, custom instructions, skills sent from chat. |
 | `SkillsTests` | Skill frontmatter and defaults, note placement (`{{note}}` or appended), empty notes, sort order, default skills and template; library seeding once per vault, restore keeps edits, unique new names, ignored files; the test host never seeds the user's vault. |
 | `VaultAppFoldersTests` | Which attachment settings make an app folder, case-insensitive membership, sidebar split and order, graph excludes Skills and attachments. |
 | `HubAdaptersTests` | Gemma 4's all-ones attention mask is dropped for text prompts (so chat turns reuse the KV cache) and kept for real masks and media; opt-in real-model check that a follow-up reuses the cache. |
-| `GemmaBenchmarkTests` | Opt-in speed measurements (load, first token, prompt and generation tokens/s, prewarm); see [On-Device AI & Meetings](local-ai.md#testing). |
+| `LanguageModelBenchmarkTests` | Opt-in speed measurements (load, first token, prompt and generation tokens/s, prewarm); see [On-Device AI & Meetings](local-ai.md#testing). |
 | `VisualCaptureServiceTests` | AppKit → ScreenCaptureKit coordinates (including a display above the main one), the disabled setting for both capture modes, picker configuration (one window, app or display; brain-md excluded) and full-resolution capture size. |
 | `MeetingTranscriptionTests` | Sample-buffer conversion, level meter mapping, transcript line format, transcription language default, locale matching (`nl_BE`, `nl` → `nl_NL`, `en_BE` → `en_US`). |
+| `SpeechRecognitionTests` | Engine choice (speech model, Gemma 4 E4B, Apple Speech; AI off or Intel), catalog integrity (unique ids, 40-character revisions, mlx-audio engine types), utterance cutting (pauses, live-word windows, max length, clicks, chunk-size independence), speaker timelines, "Me" / "Speaker N" / "Them" labels in note lines and minutes, per-engine settings. |
+| `TranscriptWriterTests` | Transcript paragraphs: same speaker joins one timestamp, speaker changes, "Them" grouping, 30-second pauses, two-minute monologues, text typed after the transcript is kept, edits earlier in the note, out-of-order segments, minutes use the same paragraphs. |
+| `AIFeaturesTests` | The AI Features master switch: on by default, overrides on-device AI without forgetting it, keeps meetings on Apple Speech while off, stops a recording and unloads the model. |
+| `GemmaAudioTests` / `BrainGemma4AudioPortTests` | The ported Gemma 4 audio encoder: feature shapes, encoder output, weight mapping; opt-in real transcription. |
+| `MLXSpeechIntegrationTests`, `AlternativeLanguageModelTests`, `CatalogConfigCheckTests` | Opt-in real speech models, Qwen3.5 and catalog network checks; see [On-Device AI & Meetings](local-ai.md#testing). |
 | Opt-in real-model and speech tests | Run with `TEST_RUNNER_BRAINMD_MODEL_INTEGRATION=1` or `TEST_RUNNER_BRAINMD_SPEECH_INTEGRATION=1`; see [On-Device AI & Meetings](local-ai.md#testing). |
 
 ---
@@ -183,7 +190,7 @@ xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platf
    - Avoid nonisolated references to actor properties in `deinit`.
 2. **Zero Runtime Dependencies**:
    - Do not introduce external package dependencies (via Swift Package Manager or CocoaPods) unless strictly necessary. `brain-md` relies on Apple's standard frameworks (`SwiftUI`, `AppKit`, `WebKit`, `Network`, `Foundation`).
-   - **Exception: on-device AI.** Running Gemma 4 needs MLX, so the app pins `mlx-swift-lm` 3.32.3, `mlx-swift` 0.32.3, `swift-huggingface` 0.13.0 and `swift-transformers` 1.3.4 to exact versions (`Package.resolved` is committed). Check new versions for advisories before bumping; see [On-Device AI & Meetings](local-ai.md#the-model) for the open yyjson advisory.
+   - **Exception: on-device AI.** Running models needs MLX, so the app pins `mlx-swift-lm` 3.32.3, `mlx-swift` 0.32.3, `mlx-audio-swift` 0.1.5 (speech models and Sortformer, MIT), `swift-huggingface` 0.13.0 and `swift-transformers` 1.3.4 to exact versions (`Package.resolved` is committed). Check new versions for advisories before bumping; see [On-Device AI & Meetings](local-ai.md#download-storage-and-memory) for the open yyjson advisory.
    - **Building MLX needs the Metal Toolchain:** `xcodebuild -downloadComponent MetalToolchain` (once per Xcode install).
 3. **Defensive Path Operations**:
    - Never use raw file paths without passing them through `resolveSecurePath(relativePath:)`.

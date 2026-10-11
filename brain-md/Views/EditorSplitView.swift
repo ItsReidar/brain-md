@@ -40,9 +40,12 @@ public struct EditorSplitView: View {
     @ObservedObject private var audioCapture = AudioCaptureService.shared
     @AppStorage("ai_capture_system_audio") private var captureSystemAudio = true
     @AppStorage("ai_capture_microphone") private var captureMicrophone = true
-    @ObservedObject private var modelManager = LocalModelManager.shared
+    @ObservedObject private var runtime = LanguageModelRuntime.shared
+    @ObservedObject private var modelStore = ModelStore.shared
+    @AppStorage(ModelSelection.languageModelKey) private var languageModelID = ModelCatalog.defaultLanguageModelID
     @ObservedObject private var skillLibrary = SkillLibrary.shared
-    @AppStorage(LocalModelManager.enabledDefaultsKey) private var isAIEnabled = false
+    @AppStorage(ModelSelection.enabledKey) private var isAIEnabled = false
+    @AppStorage(AIFeatures.key) private var showsAIFeatures = true
     @State private var aiRequest: AIResultRequest?
     @AppStorage("ai_capture_screen_diagrams") private var isScreenExplanationEnabled = true
     @Environment(\.openSettings) private var openSettings
@@ -428,12 +431,12 @@ public struct EditorSplitView: View {
             // Action Buttons in Top Right
             HStack(spacing: 4) {
                 // Model download progress (started from Settings)
-                if modelManager.state.status == .downloading {
+                if showsAIFeatures, let download = activeDownload {
                     HStack(spacing: 6) {
-                        ProgressView(value: modelManager.state.progress)
+                        ProgressView(value: download.state.progress)
                             .progressViewStyle(.linear)
                             .frame(width: 70)
-                        Text("\(Int(modelManager.state.progress * 100))%")
+                        Text("\(Int(download.state.progress * 100))%")
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundColor(.accentColor)
                     }
@@ -441,54 +444,62 @@ public struct EditorSplitView: View {
                     .padding(.vertical, 3)
                     .background(Color.primary.opacity(0.06))
                     .cornerRadius(5)
-                    .help("Downloading Gemma 4 for on-device AI")
+                    .help("Downloading \(download.model.displayName) for on-device AI")
                 }
 
-                // Local AI Meeting Transcription & Screen Capture
-                ToolbarIconButton(
-                    icon: meetingRecorder.isRecording ? "record.circle.fill" : "waveform.and.mic",
-                    helpText: meetingRecorder.isRecording ? "Stop Recording the Meeting" : "Record and Transcribe a Meeting"
-                ) {
-                    toggleMeetingRecording()
-                }
-                .foregroundColor(meetingRecorder.isRecording ? .red : .primary)
-
-                // On-device AI actions (results open in a review sheet)
-                Menu {
-                    if isAIAvailable {
-                        let menuSkills = skillLibrary.skills(for: .menu)
-                        ForEach(menuSkills) { skill in
-                            Button { runSkill(skill) } label: {
-                                Label(skill.name, systemImage: skill.icon)
-                            }
-                        }
-                        if menuSkills.isEmpty {
-                            Text("No skills in the ✨ menu yet")
-                        }
-                        if isScreenExplanationEnabled {
-                            Divider()
-                            Menu("Explain Screen") {
-                                Button("Screen Under Pointer") { explainScreen() }
-                                Button("Choose Window, App or Display…") { explainChosenContent() }
-                            }
-                        }
-                        Divider()
-                        Button("Chat with Gemma…") { openWindow(id: GemmaChatView.windowID) }
-                        Button("Manage Skills…") { openSettings() }
-                    } else {
-                        Button("Set Up On-Device AI…") { openSettings() }
+                // AI features, hidden by the master switch in Settings › General.
+                if showsAIFeatures {
+                    // Local AI Meeting Transcription & Screen Capture
+                    ToolbarIconButton(
+                        icon: meetingRecorder.isRecording ? "record.circle.fill" : "waveform.and.mic",
+                        helpText: meetingRecorder.isRecording ? "Stop Recording the Meeting" : "Record and Transcribe a Meeting"
+                    ) {
+                        toggleMeetingRecording()
                     }
-                } label: {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(isAIAvailable ? .purple : .secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(isAIAvailable ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
-                        .cornerRadius(5)
+                    .foregroundColor(meetingRecorder.isRecording ? .red : .primary)
+
+                    // On-device AI actions (results open in a review sheet)
+                    Menu {
+                        if isAIAvailable {
+                            let menuSkills = skillLibrary.skills(for: .menu)
+                            ForEach(menuSkills) { skill in
+                                Button { runSkill(skill) } label: {
+                                    Label(skill.name, systemImage: skill.icon)
+                                }
+                            }
+                            if menuSkills.isEmpty {
+                                Text("No skills in the ✨ menu yet")
+                            }
+                            if isScreenExplanationEnabled {
+                                Divider()
+                                if runtime.activeModel.supportsVision {
+                                    Menu("Explain Screen") {
+                                        Button("Screen Under Pointer") { explainScreen() }
+                                        Button("Choose Window, App or Display…") { explainChosenContent() }
+                                    }
+                                } else {
+                                    Button("Explain Screen (needs a model that sees images)") {}
+                                        .disabled(true)
+                                }
+                            }
+                            Divider()
+                            Button("AI Chat…") { openWindow(id: AssistantChatView.windowID) }
+                            Button("Manage Skills…") { openSettings() }
+                        } else {
+                            Button("Set Up On-Device AI…") { openSettings() }
+                        }
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(isAIAvailable ? .purple : .secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(isAIAvailable ? Color.purple.opacity(0.1) : Color.primary.opacity(0.05))
+                            .cornerRadius(5)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .help(isAIAvailable ? "On-device AI (\(runtime.activeModel.displayName))" : aiUnavailableReason)
                 }
-                .menuStyle(.borderlessButton)
-                .help(isAIAvailable ? "On-device AI (Gemma 4)" : aiUnavailableReason)
 
                 // Export as PDF Button
                 ToolbarIconButton(
@@ -701,15 +712,17 @@ public struct EditorSplitView: View {
             sampleRate: 16_000, channels: 1)
         let heading = "\n\n## Meeting transcript · \(Date().formatted(date: .abbreviated, time: .shortened))\n"
         var wroteHeading = false
+        var writer = TranscriptWriter()
         meetingRecorder.start(
             configuration: configuration,
-            locale: MeetingTranscriber.preferredLocale(),
-            onLine: { line in
+            locale: AppleSpeechRecognizer.preferredLocale(),
+            onSegment: { segment in
                 if !wroteHeading {
                     vault.editorContent += heading
                     wroteHeading = true
                 }
-                vault.editorContent += "\n" + line
+                // Consecutive lines from one speaker extend their paragraph instead of adding a line.
+                writer.write(segment, into: &vault.editorContent)
                 vault.hasUnsavedChanges = true
             },
             onFinished: { segments, error in
@@ -719,7 +732,7 @@ public struct EditorSplitView: View {
                     showBubble(message: "Recording stopped: no speech was recognized")
                 } else if isAIAvailable {
                     let request = RewriteRequest(mode: .summarizeMeeting, sourceText: "", transcripts: segments)
-                    aiRequest = AIResultRequest(title: "Meeting Minutes") { GemmaService.shared.stream(request) }
+                    aiRequest = AIResultRequest(title: "Meeting Minutes") { LanguageModelService.shared.stream(request) }
                 } else {
                     showBubble(message: "Transcript saved in the note")
                 }
@@ -727,24 +740,34 @@ public struct EditorSplitView: View {
     }
 
     private var isAIAvailable: Bool {
-        isAIEnabled && modelManager.state.status == .ready
+        _ = languageModelID // re-evaluate when the active model changes
+        return showsAIFeatures && isAIEnabled && runtime.isActiveModelInstalled
+    }
+
+    /// The first catalog model that's downloading, for the toolbar progress pill.
+    private var activeDownload: (model: ModelDescriptor, state: ModelDownloadState)? {
+        ModelCatalog.all.lazy
+            .map { ($0, modelStore.state(of: $0)) }
+            .first { $0.1.status == .downloading }
     }
 
     private var aiUnavailableReason: String {
         guard isAIEnabled else { return "Turn on on-device AI in Settings" }
-        switch modelManager.state.status {
-        case .downloading: return "Gemma 4 is still downloading (\(Int(modelManager.state.progress * 100))%)"
-        case .error: return "The Gemma 4 download failed. Retry it in Settings"
-        case .notDownloaded, .ready: return "Gemma 4 isn't downloaded yet. Open Settings to download it"
+        let model = runtime.activeModel
+        let state = modelStore.state(of: model)
+        switch state.status {
+        case .downloading: return "\(model.displayName) is still downloading (\(Int(state.progress * 100))%)"
+        case .error: return "The \(model.displayName) download failed. Retry it in Settings"
+        case .notDownloaded, .ready: return "\(model.displayName) isn't downloaded yet. Open Settings to download it"
         }
     }
 
     private func runSkill(_ skill: Skill) {
         let note = vault.editorContent
-        aiRequest = AIResultRequest(title: skill.name) { GemmaService.shared.stream(skill, noteText: note) }
+        aiRequest = AIResultRequest(title: skill.name) { LanguageModelService.shared.stream(skill, noteText: note) }
     }
 
-    /// Lets the user pick a window, app or display with the system picker, then has Gemma explain it.
+    /// Lets the user pick a window, app or display with the system picker, then has the model explain it.
     private func explainChosenContent() {
         let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
         Task {
@@ -755,7 +778,7 @@ public struct EditorSplitView: View {
                 // Choosing a window can bring its app forward; the review sheet lives in brain-md.
                 NSApp.activate()
                 aiRequest = AIResultRequest(title: "Explanation: \(capture.label)") {
-                    GemmaService.shared.stream(request, image: capture.image)
+                    LanguageModelService.shared.stream(request, image: capture.image)
                 }
             } catch {
                 showBubble(message: error.localizedDescription)
@@ -763,7 +786,7 @@ public struct EditorSplitView: View {
         }
     }
 
-    /// Captures the screen (without brain-md's windows), then has Gemma explain it in the review sheet.
+    /// Captures the screen (without brain-md's windows), then has the model explain it in the review sheet.
     private func explainScreen() {
         let request = RewriteRequest(mode: .explainDiagram, sourceText: vault.editorContent)
         showBubble(message: "Capturing your screen…")
@@ -773,7 +796,7 @@ public struct EditorSplitView: View {
                     configuration: ScreenCaptureConfiguration(captureScreenFrames: true)
                 ).captureScreen()
                 aiRequest = AIResultRequest(title: "Screen Explanation") {
-                    GemmaService.shared.stream(request, image: image)
+                    LanguageModelService.shared.stream(request, image: image)
                 }
             } catch {
                 showBubble(message: error.localizedDescription)

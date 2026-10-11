@@ -70,7 +70,7 @@ struct SkillsTests {
         #expect(try placed.prompt(note: "Ship v2") == "Read Ship v2 and reply in one line.")
         #expect(placed.chatMessage == "Read the note and reply in one line.")
 
-        #expect(throws: GemmaServiceError.emptyInput) { try appended.prompt(note: " \n") }
+        #expect(throws: LanguageModelServiceError.emptyInput) { try appended.prompt(note: " \n") }
     }
 
     @Test func skillThatDoesNotUseTheNoteIgnoresIt() throws {

@@ -75,14 +75,14 @@ struct MeetingTranscriptionTests {
     }
 
     @Test func emptyLocaleSettingMeansSystemLanguage() {
-        #expect(MeetingTranscriber.preferredLocale("") == Locale.current)
-        #expect(MeetingTranscriber.preferredLocale("nl_BE").identifier == "nl_BE")
+        #expect(AppleSpeechRecognizer.preferredLocale("") == Locale.current)
+        #expect(AppleSpeechRecognizer.preferredLocale("nl_BE").identifier == "nl_BE")
     }
 
     @Test func localeMatchingPrefersExactThenLikelyRegion() {
         let available = ["en_GB", "en_US", "fr_FR", "nl_BE", "nl_NL"].map(Locale.init(identifier:))
         func match(_ identifier: String) -> String? {
-            MeetingTranscriber.match(Locale(identifier: identifier), in: available)?.identifier
+            AppleSpeechRecognizer.match(Locale(identifier: identifier), in: available)?.identifier
         }
         #expect(match("nl_BE") == "nl_BE")
         #expect(match("nl-BE") == "nl_BE") // separators don't matter
@@ -90,7 +90,7 @@ struct MeetingTranscriptionTests {
         #expect(match("en_BE") == "en_US") // unsupported region → likely region
         #expect(match("fr_CA") == "fr_FR") // otherwise any region of the language
         #expect(match("de_DE") == nil)
-        #expect(MeetingTranscriber.match(Locale(identifier: "nl"), in: []) == nil)
+        #expect(AppleSpeechRecognizer.match(Locale(identifier: "nl"), in: []) == nil)
     }
 
     /// Opt-in: speaks a sentence with `say`, then transcribes it through the real pipeline in
@@ -108,7 +108,7 @@ struct MeetingTranscriptionTests {
     /// Opt-in: Dutch isn't supported by SpeechTranscriber, so this exercises the DictationTranscriber path.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["BRAINMD_SPEECH_INTEGRATION"] == "1"))
     func spokenDutchSentenceIsTranscribed() async throws {
-        let engine = await MeetingTranscriber.engine(for: Locale(identifier: "nl_BE"))
+        let engine = await AppleSpeechRecognizer.engine(for: Locale(identifier: "nl_BE"))
         #expect(engine?.0 == .dictation)
         #expect(engine?.1.identifier == "nl_BE")
 
@@ -124,7 +124,7 @@ struct MeetingTranscriptionTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["BRAINMD_SPEECH_INTEGRATION"] == "1"))
     func dutchMeetingWithBothSourcesFinishesPromptly() async throws {
         // The one-time speech model download (tens of seconds) isn't part of the budget.
-        let (kind, locale) = try #require(await MeetingTranscriber.engine(for: Locale(identifier: "nl_NL")))
+        let (kind, locale) = try #require(await AppleSpeechRecognizer.engine(for: Locale(identifier: "nl_NL")))
         if let request = try await AssetInventory.assetInstallationRequest(
             supporting: [Transcriber(kind, locale: locale).module]) {
             try await request.downloadAndInstall()
@@ -167,8 +167,8 @@ struct MeetingTranscriptionTests {
         let finals = try await withThrowingTaskGroup(of: [TranscriptionSegment]?.self) { group in
             group.addTask {
                 var finals: [TranscriptionSegment] = []
-                let results = MeetingTranscriber().transcribe(
-                    audio, locale: Locale(identifier: locale), speakers: speakers)
+                let results = AppleSpeechRecognizer().transcribe(
+                    audio, locale: Locale(identifier: locale), sources: speakers)
                 for try await segment in results where segment.isFinal { finals.append(segment) }
                 return finals
             }

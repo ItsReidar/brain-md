@@ -53,7 +53,7 @@ struct HubAdaptersTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["BRAINMD_MODEL_INTEGRATION"] == "1"))
     func realModelFollowUpReusesTheCache() async throws {
         let session = ChatSession(
-            try await LocalModelManager.shared.loadModel(), instructions: "Answer in one word.",
+            try await TestModels.gemmaRuntime.loadModel(), instructions: "Answer in one word.",
             generateParameters: GenerateParameters(maxTokens: 16, temperature: 0), processing: UserInput.Processing())
         var cached: [Int] = []
         for prompt in ["Name a colour.", "Name another one."] {

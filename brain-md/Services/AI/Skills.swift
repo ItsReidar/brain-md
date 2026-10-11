@@ -76,8 +76,8 @@ public struct Skill: Identifiable, Equatable, Sendable {
     /// The prompt for the ✨ menu: the instructions with the note added when the skill uses it.
     public func prompt(note: String) throws -> String {
         guard usesNote else { return instructions.replacingOccurrences(of: Self.notePlaceholder, with: "") }
-        let note = GemmaService.trimmed(note)
-        guard !note.isEmpty else { throw GemmaServiceError.emptyInput }
+        let note = LanguageModelService.trimmed(note)
+        guard !note.isEmpty else { throw LanguageModelServiceError.emptyInput }
         if instructions.contains(Self.notePlaceholder) {
             return instructions.replacingOccurrences(of: Self.notePlaceholder, with: note)
         }
@@ -124,7 +124,7 @@ public final class SkillLibrary: ObservableObject {
             // `$rootItems` publishes before the property changes; read the files afterwards.
             Task { @MainActor in
                 guard let self else { return }
-                if self.defaults.bool(forKey: LocalModelManager.enabledDefaultsKey), !Self.isHostingTests {
+                if ModelSelection.isOnDeviceAIEnabled(self.defaults), !Self.isHostingTests {
                     self.seedDefaultsIfNeeded()
                 }
                 self.reload()
