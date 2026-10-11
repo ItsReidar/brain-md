@@ -25,13 +25,13 @@ The `brain` command opens files in Brain.md, the same way Finder does:
 brain notes.md ~/Desktop/todo.md
 ```
 
-`brain` on its own just opens the app. Homebrew installs the command with the app. Without Homebrew, link it yourself:
+A file that doesn't exist yet is created empty first, so `brain new.md` starts a new note (its folder must exist). `brain` on its own just opens the app. Homebrew installs the command with the app. Without Homebrew, link it yourself:
 
 ```bash
 ln -s /Applications/brain-md.app/Contents/Resources/brain /usr/local/bin/brain
 ```
 
-The command is a short shell script (`brain-md/Resources/brain`) that runs `open -b itsreidar.brain-md`, so it reaches the installed app through Launch Services. Files must already exist.
+The command is a short shell script (`brain-md/Resources/brain`) that runs `open -b itsreidar.brain-md`, so it reaches the installed app through Launch Services.
 
 ## Quick Look preview
 

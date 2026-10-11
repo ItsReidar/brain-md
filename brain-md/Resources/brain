@@ -4,4 +4,8 @@
 if [ $# -eq 0 ]; then
     exec open -b itsreidar.brain-md
 fi
+# Missing files are created empty, so `brain new.md` starts a new note.
+for file in "$@"; do
+    [ -e "$file" ] || : > "$file" || exit 1
+done
 exec open -b itsreidar.brain-md -- "$@"
