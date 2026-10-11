@@ -528,6 +528,10 @@ public final class VaultManager: ObservableObject, VaultManaging {
     
     public func saveCurrentNote() {
         guard let current = selectedItem, !current.isDirectory, current.isMarkdown else { return }
+        if current.isExternal {
+            saveExternalFile(current)
+            return
+        }
         do {
             try writeFile(relativePath: current.relativePath, content: editorContent)
             hasUnsavedChanges = false
