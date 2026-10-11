@@ -58,6 +58,10 @@ public struct EditorSplitView: View {
     public var body: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
+                if vault.tabs.count > 1 {
+                    noteTabBar
+                    Divider()
+                }
                 if let selected = vault.selectedItem {
                     if selected.isAttachment {
                         AttachmentDetailView(
@@ -302,6 +306,38 @@ public struct EditorSplitView: View {
         .padding(.vertical, 6)
         .background(Color.accentColor.opacity(0.08))
         .accessibilityElement(children: .contain)
+    }
+
+    /// The open notes, once there's more than one; each tab is named after its note.
+    private var noteTabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                ForEach(vault.tabs, id: \.url) { tab in
+                    let isActive = tab.url == vault.selectedItem?.url
+                    HStack(spacing: 6) {
+                        Button(tab.displayName) { vault.showTab(tab) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                            .foregroundStyle(isActive ? Color.accentColor : Color.primary)
+                            .lineLimit(1)
+                            .accessibilityAddTraits(isActive ? .isSelected : [])
+                        Button { vault.closeTab(tab) } label: {
+                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("Close Tab")
+                        .accessibilityLabel("Close \(tab.displayName)")
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(isActive ? Color.accentColor.opacity(0.15) : Color.clear))
+                    .help(tab.isExternal ? tab.url.path : tab.relativePath)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+        }
     }
 
     private func editorHeader(item: NoteItem) -> some View {

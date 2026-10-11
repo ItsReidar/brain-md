@@ -138,6 +138,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         let vault = VaultManager.shared
-        if let item = vault.selectedItem, !vault.hasUnsavedChanges { vault.trashIfUnwritten(item.url) }
+        for item in vault.tabs where !(vault.hasUnsavedChanges && item.url == vault.selectedItem?.url) {
+            vault.trashIfUnwritten(item.url)
+        }
     }
 }

@@ -69,9 +69,11 @@ public final class VaultManager: ObservableObject, VaultManaging {
     
     @Published public var vaultURL: URL
     @Published public var rootItems: [NoteItem] = []
+    /// Notes open in tabs, in order; the one shown is `selectedItem` (see NoteTabs.swift).
+    @Published public var tabs: [NoteItem] = []
     @Published public var selectedItem: NoteItem? {
         didSet {
-            if let old = oldValue, old.url != selectedItem?.url { trashIfUnwritten(old.url) }
+            if oldValue?.url != selectedItem?.url { selectedItemChanged(from: oldValue) }
         }
     }
     @Published public var editorContent: String = ""
@@ -1150,6 +1152,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         stopFileWatcher()
         vaultURL = newURL.standardized.resolvingSymlinksInPath()
         UserDefaults.standard.set(vaultURL.path, forKey: userDefaultsVaultKey)
+        tabs = []
         selectedItem = nil
         editorContent = ""
         editorTitle = ""

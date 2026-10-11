@@ -43,6 +43,16 @@ The dual-pane Split View features an interactive, high-precision draggable split
 - **Persistent Layout**: The split ratio is saved in `@AppStorage("editor_split_ratio")` and can also be adjusted or reset from **Settings > Editor & Markdown > Workspace Layout**.
 - **Native Cursor Affordance**: Hovering over the divider displays the macOS native `NSCursor.resizeLeftRight` cursor and highlights the handle.
 
+### Note Tabs
+
+Right-click a note in the sidebar and choose **Open in New Tab**, or ⌘-click it, to keep the current note open and show the other one next to it. Once two or more notes are open, a tab bar above the editor lists them, each tab named after its note; click a tab to switch, or its **×** to close it.
+
+- The editor shows one note at a time, and the active tab is always the note shown (`VaultManager.tabs` and `selectedItem`, in `Services/NoteTabs.swift`).
+- Picking a note normally (sidebar click, Quick Switcher, a link) replaces the active tab, like a browser tab following a link.
+- Switching tabs saves the note you leave. Closing the active tab shows the next tab, or the previous one if it was last.
+- A tab whose note was deleted or moved is dropped when you click it. Switching vaults closes all tabs.
+- A file created by the `brain` command and left empty is trashed when its tab closes, not when you switch away from it.
+
 ### Spotlight Quick Switcher (`QuickSwitcherModalView` - `⌘O`)
 
 Pressing `⌘O` (or clicking the magnifying glass toolbar button) summons the Spotlight-style Quick Switcher:
