@@ -540,6 +540,36 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
     
+    // MARK: - Auto-Save
+
+    static let autosaveDelayKey = "autosave_debounce_seconds"
+
+    /// Set while something else is writing into the note (a meeting transcript); auto-save waits
+    /// until it's cleared and `scheduleAutosave()` runs again.
+    public var isAutosaveSuspended = false
+    private var autosaveTask: Task<Void, Never>?
+
+    /// The Auto-Save Delay from Settings (General › Auto-Save & Synchronization), 1 s by default.
+    var autosaveDelay: TimeInterval {
+        let seconds = UserDefaults.standard.double(forKey: Self.autosaveDelayKey)
+        return seconds > 0 ? seconds : 1.0
+    }
+
+    /// Saves the open note once edits have paused for `delay` (the Auto-Save Delay by default).
+    /// Each call restarts the wait. Nothing is saved if another note was opened meanwhile (opening
+    /// a note already saves the previous one), there are no unsaved changes, or auto-save is suspended.
+    public func scheduleAutosave(after delay: TimeInterval? = nil) {
+        autosaveTask?.cancel()
+        let noteURL = selectedItem?.url
+        let delay = delay ?? autosaveDelay
+        autosaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled, !self.isAutosaveSuspended, self.hasUnsavedChanges,
+                  noteURL != nil, self.selectedItem?.url == noteURL else { return }
+            self.saveCurrentNote()
+        }
+    }
+
     public func promptNewNote() {
         let defaultTitle = NoteTemplateEngine.resolveTitle(from: .standard)
         newNotePromptDefaultName = generateUniqueNotePath(baseName: defaultTitle)

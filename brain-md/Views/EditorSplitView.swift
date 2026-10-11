@@ -94,6 +94,7 @@ public struct EditorSplitView: View {
                                         set: {
                                             vault.editorContent = $0
                                             vault.hasUnsavedChanges = true
+                                            vault.scheduleAutosave()
                                         }
                                     ),
                                     onSave: {
@@ -149,6 +150,7 @@ public struct EditorSplitView: View {
                                     set: {
                                         vault.editorContent = $0
                                         vault.hasUnsavedChanges = true
+                                        vault.scheduleAutosave()
                                     }
                                 ),
                                 onSave: {
@@ -752,6 +754,8 @@ public struct EditorSplitView: View {
         let heading = "\n\n## Meeting transcript · \(Date().formatted(date: .abbreviated, time: .shortened))\n"
         var wroteHeading = false
         var writer = TranscriptWriter()
+        // The transcript lands every few seconds; save it once the recording ends, not after each line.
+        vault.isAutosaveSuspended = true
         meetingRecorder.start(
             configuration: configuration,
             locale: AppleSpeechRecognizer.preferredLocale(),
@@ -765,6 +769,8 @@ public struct EditorSplitView: View {
                 vault.hasUnsavedChanges = true
             },
             onFinished: { segments, error in
+                vault.isAutosaveSuspended = false
+                vault.scheduleAutosave()
                 if let error {
                     showBubble(message: error.localizedDescription)
                 } else if segments.isEmpty {
