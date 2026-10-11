@@ -47,6 +47,27 @@ extension VaultManager {
         }
     }
 
+    /// Set by the `brain` command on the empty files it creates. Saves write a new file, which drops it.
+    static let newFileAttribute = "itsreidar.brain-md.new"
+
+    /// Moves a file the `brain` command created to the Trash if nothing was ever written to it.
+    @discardableResult
+    func trashIfUnwritten(_ url: URL) -> URL? {
+        guard (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) == 0,
+              getxattr(url.path, Self.newFileAttribute, nil, 0, 0, 0) >= 0 else { return nil }
+        let inVault = relativePathInVault(url) != nil // a trashed path no longer resolves
+        var trashed: NSURL?
+        do {
+            try FileManager.default.trashItem(at: url, resultingItemURL: &trashed)
+        } catch {
+            fileLog.error("Couldn't trash an unused new file: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        if inVault { refreshFiles() }
+        logActivity(action: "Trashed Empty File", detail: url.path, isError: false)
+        return trashed as URL?
+    }
+
     /// The vault-relative path of `url`, or nil when it's outside the vault.
     func relativePathInVault(_ url: URL) -> String? {
         let root = vaultURL.standardizedFileURL.resolvingSymlinksInPath().path
@@ -113,5 +134,10 @@ enum MarkdownFiles {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         MarkdownFiles.open(urls)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        let vault = VaultManager.shared
+        if let item = vault.selectedItem, !vault.hasUnsavedChanges { vault.trashIfUnwritten(item.url) }
     }
 }

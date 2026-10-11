@@ -25,7 +25,7 @@ The `brain` command opens files in Brain.md, the same way Finder does:
 brain notes.md ~/Desktop/todo.md
 ```
 
-A file that doesn't exist yet is created empty first, so `brain new.md` starts a new note (its folder must exist). `brain` on its own just opens the app. Homebrew installs the command with the app. Without Homebrew, link it yourself:
+A file that doesn't exist yet is created empty first, so `brain new.md` starts a new note (its folder must exist). If you close it without writing anything (switch notes or quit), Brain.md moves it to the Trash. Only files `brain` created are trashed: it marks them with the `itsreidar.brain-md.new` extended attribute, and the first save drops the mark. `brain` on its own just opens the app. Homebrew installs the command with the app. Without Homebrew, link it yourself:
 
 ```bash
 ln -s /Applications/brain-md.app/Contents/Resources/brain /usr/local/bin/brain

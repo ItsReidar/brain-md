@@ -4,8 +4,12 @@
 if [ $# -eq 0 ]; then
     exec open -b itsreidar.brain-md
 fi
-# Missing files are created empty, so `brain new.md` starts a new note.
+# Missing files are created empty, so `brain new.md` starts a new note. The attribute tells
+# Brain.md to trash the file if it's closed without anything written to it.
 for file in "$@"; do
-    [ -e "$file" ] || : > "$file" || exit 1
+    if [ ! -e "$file" ]; then
+        : > "$file" || exit 1
+        xattr -w itsreidar.brain-md.new 1 "$file"
+    fi
 done
 exec open -b itsreidar.brain-md -- "$@"

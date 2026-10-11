@@ -69,7 +69,11 @@ public final class VaultManager: ObservableObject, VaultManaging {
     
     @Published public var vaultURL: URL
     @Published public var rootItems: [NoteItem] = []
-    @Published public var selectedItem: NoteItem?
+    @Published public var selectedItem: NoteItem? {
+        didSet {
+            if let old = oldValue, old.url != selectedItem?.url { trashIfUnwritten(old.url) }
+        }
+    }
     @Published public var editorContent: String = ""
     @Published public var editorTitle: String = ""
     @Published public var searchQuery: String = ""

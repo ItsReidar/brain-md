@@ -102,6 +102,51 @@ struct ExternalFilesTests {
         let script = try #require(Bundle.main.url(forResource: "brain", withExtension: nil))
         #expect(FileManager.default.isExecutableFile(atPath: script.path))
         #expect(try String(contentsOf: script, encoding: .utf8).contains("open -b \(Bundle.main.bundleIdentifier!)"))
+        #expect(try String(contentsOf: script, encoding: .utf8).contains("xattr -w \(VaultManager.newFileAttribute)"))
+    }
+
+    /// An empty file marked the way the `brain` command marks the files it creates.
+    private func newFile(_ url: URL) throws {
+        try Data().write(to: url)
+        #expect(setxattr(url.path, VaultManager.newFileAttribute, "1", 1, 0, 0) == 0)
+    }
+
+    @Test func aNewFileClosedUnwrittenGoesToTheTrash() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tag = UUID().uuidString // unique names, so only this test's files are removed from the Trash
+        let new = root.appendingPathComponent("Downloads/new-\(tag).md")
+        let inVault = vaultURL.appendingPathComponent("idea-\(tag).md")
+        let untouched = root.appendingPathComponent("Downloads/empty.md")
+        try newFile(new)
+        try newFile(inVault)
+        try Data().write(to: untouched) // empty, but not created by `brain`
+
+        vault.openFile(at: new)
+        vault.openFile(at: inVault)
+        #expect(!FileManager.default.fileExists(atPath: new.path))
+        #expect(vault.selectedItem?.relativePath == inVault.lastPathComponent)
+        vault.openFile(at: untouched)
+        #expect(!FileManager.default.fileExists(atPath: inVault.path))
+        #expect(!vault.rootItems.contains { $0.relativePath == inVault.lastPathComponent })
+        vault.openFile(at: outsideURL)
+        #expect(FileManager.default.fileExists(atPath: untouched.path))
+        // Tidy the Trash where the test host may (it can't list the Trash, only remove known names).
+        let trash = try FileManager.default.url(for: .trashDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        for url in [new, inVault] { try? FileManager.default.removeItem(at: trash.appendingPathComponent(url.lastPathComponent)) }
+    }
+
+    @Test func aNewFileWithTextIsKept() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let new = root.appendingPathComponent("Downloads/new.md")
+        try newFile(new)
+        vault.openFile(at: new)
+        vault.editorContent = "# Started"
+        vault.hasUnsavedChanges = true
+        vault.openFile(at: outsideURL) // saves first
+        #expect(try read(new) == "# Started")
+        #expect(getxattr(new.path, VaultManager.newFileAttribute, nil, 0, 0, 0) < 0)
     }
 
     @Test func relativePathsOnlyForFilesInsideTheVault() throws {
