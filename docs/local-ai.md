@@ -27,6 +27,7 @@ flowchart LR
 | Skills | ✨ menu, and the chat's suggestions and **Skills** menu | Your saved prompts, as Markdown files in the vault (see [Instructions & Skills](#instructions--skills)). The defaults: Summarize Note, Extract Action Items, Polish & Rewrite, List the Open Questions and Suggest a Better Title |
 | Explain Screen | ✨ menu › Explain Screen | **Screen Under Pointer** captures that display (without brain-md's windows). **Choose Window, App or Display…** opens the macOS picker so you can pick exactly what to explain. The language model then explains the slide or diagram. Needs a model that sees images (all except Mistral 7B) |
 | Record a meeting | 🎙 toolbar button | A live transcript in paragraphs labelled **Me** and **Speaker 1–4** (or **Them** without speaker identification), one timestamp per turn; minutes from the language model when you stop |
+| Search by meaning | Sparkle-magnifier button in the sidebar's search field | Finds notes about your query even without the same words, ranked by how close their best passage is (see [Semantic search](#semantic-search)) |
 | AI Chat | ✨ menu › AI Chat…, or View › AI Chat (⇧⌘J) | A conversation in its own window, optionally about the open note |
 
 The ✨ menu also has **AI Chat…** and **Manage Skills…** (opens Settings). Until a language model is downloaded and on-device AI is turned on, it shows only **Set Up On-Device AI…**.
@@ -99,9 +100,31 @@ Apple Speech uses **SpeechTranscriber**, the long-form model built for meetings,
 
 The Transcription Language setting applies to Apple Speech and Whisper (which otherwise might translate). Nemotron, Parakeet, Orukeet, Voxtral and Gemma detect the language themselves. Nemotron, Parakeet and Orukeet cover 25 European languages including Dutch, Voxtral 13, Whisper 99.
 
+## Semantic search
+
+With a search model downloaded (**Settings › Local AI & Voice › Semantic Search**), the sidebar's search field gets a **search by meaning** button (sparkle magnifier). Searching then finds notes about what you typed, in any of the model's languages: "budget overrun" finds a note saying "the costs exceeded the plan", and an English query finds a Dutch note. Results are ranked by their best passage, which is shown as the snippet.
+
+- **On demand:** the first search embeds the whole vault (a progress line shows "Indexing 120 of 800 notes…"); later searches only embed notes that changed. Nothing runs in the background, and the model unloads three minutes after the last search.
+- **Private:** notes are embedded on this Mac. The index lives in `~/Library/Application Support/brain-md/index/`, one file per vault and model; **Rebuild Index** deletes it, and deleting the model deletes its index too.
+- **What's indexed:** Markdown notes outside the app folders (Skills, attachments). Notes are split at headings and blank lines into passages of about 1,000 characters, each prefixed with the note's title.
+
+| Model | Repository | Size | Languages | Licence |
+|---|---|---|---|---|
+| EmbeddingGemma 300M (default) | `mlx-community/embeddinggemma-300m-4bit` | 212 MB | 100+ incl. Dutch | Gemma |
+| Qwen3 Embedding 0.6B | `mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ` | 351 MB | 100+ | Apache-2.0 |
+| Arctic Embed L v2.0 | `mlx-community/snowflake-arctic-embed-l-v2.0-4bit` | 337 MB | 74 incl. Dutch | Apache-2.0 |
+| BGE Small v1.5 | `mlx-community/bge-small-en-v1.5-8bit` | 37 MB | English | MIT |
+| MiniLM L6 v2 | `mlx-community/all-MiniLM-L6-v2-4bit` | 14 MB | English | Apache-2.0 |
+
+Models run through mlx-swift-lm's **MLXEmbedders**. Each catalog entry states its pooling (the mlx-community conversions of BERT-style models ship no pooling config) and the query and document prefixes the model was trained with.
+
+**EmbeddingGemma's attention fix:** mlx-swift-lm 3.32.3 runs EmbeddingGemma with causal attention, though it's a bidirectional encoder. `Services/AI/Vendor/EmbeddingGemma/` carries the fix from [ml-explore/mlx-swift-lm#654](https://github.com/ml-explore/mlx-swift-lm/pull/654) (MIT), loaded by brain-md instead of the package's model. On the same weights it separates related from unrelated text about three times better (mean margin 0.28 against 0.09). Remove it when mlx-swift-lm > 3.32.3 ships #654 (`TODO` in the folder).
+
+**EmbeddingGemma 2** (`mlx-community/embeddinggemma-2-8bit`) needs [ml-explore/mlx-swift-lm#684](https://github.com/ml-explore/mlx-swift-lm/pull/684), which isn't released yet; it becomes one catalog entry once it is.
+
 ## Turning AI off
 
-**Settings › General › AI Features › Show AI features** is a master switch for people who just want a notes app. Off hides the ✨ menu (skills, Explain Screen, AI Chat), View › AI Chat (⇧⌘J), the meeting record button, the model download indicator, the Skills folder in the sidebar and the Local AI & Voice settings. Turning it off also stops a recording in progress (the transcript so far stays in the note), cancels model downloads, stops a chat answer and unloads the model. Nothing is deleted: models, skill files and AI settings return when it's switched back on. It's on by default. The MCP server isn't affected; it has its own setting.
+**Settings › General › AI Features › Show AI features** is a master switch for people who just want a notes app. Off hides the ✨ menu (skills, Explain Screen, AI Chat), View › AI Chat (⇧⌘J), the meeting record button, search by meaning, the model download indicator, the Skills folder in the sidebar and the Local AI & Voice settings. Turning it off also stops a recording in progress (the transcript so far stays in the note), cancels model downloads, stops a chat answer and unloads the model. Nothing is deleted: models, skill files and AI settings return when it's switched back on. It's on by default. The MCP server isn't affected; it has its own setting.
 
 ## Setup
 
@@ -194,6 +217,10 @@ mlx-swift-lm 3.32.3 drops Gemma 4's `audio_tower` weights. brain-md carries an a
 | `Services/AI/Speech/LanguageModelSpeechRecognizer.swift` | Gemma 4 E4B transcribing audio |
 | `Services/AI/Speech/AppleSpeechRecognizer.swift` | Apple SpeechAnalyzer: engine and locale choice, one analyzer per source, language assets |
 | `Services/AI/Speech/SpeakerDiarizer.swift` | Sortformer over call audio, the speaker timeline, the shared GPU gate |
+| `Services/AI/Search/EmbeddingRuntime.swift` | Loads the search model on demand, embeds text in batches, unloads when idle |
+| `Services/AI/Search/SemanticIndex.swift` | Passages, the on-disk index per vault and model, incremental updates, ranking |
+| `Services/AI/Search/SemanticSearch.swift` | Search by meaning for the sidebar: debounce, indexing progress, results |
+| `Services/AI/Vendor/EmbeddingGemma/` | EmbeddingGemma with bidirectional attention, from mlx-swift-lm#654 |
 | `Services/AI/MeetingRecorder.swift` | Recording session: capture → transcript lines → minutes |
 | `Views/AIResultSheet.swift` | Review sheet |
 | `Views/AssistantChatView.swift` | AI Chat window |
@@ -209,6 +236,7 @@ Unit tests cover prompts, the catalog, engine choice (all fallback cases), utter
 | `BRAINMD_MODEL_INTEGRATION=1` | Gemma 4 E4B chat, KV-cache reuse, images, audio | Gemma 4 E4B downloaded |
 | `BRAINMD_SPEECH_INTEGRATION=1` | Apple Speech in English and Dutch | Ellen and Xander voices; downloads Apple's Dutch model once |
 | `BRAINMD_MLX_SPEECH_INTEGRATION=1` | Nemotron (English with live words, Dutch), Sortformer telling two voices apart, Gemma through the meeting pipeline, Nemotron vs Apple Speech latency | Downloads Nemotron 8-bit (0.76 GB) and Sortformer (0.24 GB) if missing |
+| `BRAINMD_EMBEDDING_INTEGRATION=1` | EmbeddingGemma 300M: normalised vectors, English, Dutch and cross-language similarity, a 20-note vault searched by meaning, the vendored attention fix against the package's model | Downloads EmbeddingGemma 300M (212 MB) if missing |
 | `BRAINMD_QWEN_INTEGRATION=1` | Qwen3.5 2B chat, follow-up turn and image | Downloads Qwen3.5 2B (1.75 GB) if missing |
 | `BRAINMD_ORUKEET_DIR=<folder>` | A converted Orukeet transcribes English and Dutch before it's uploaded | Output of `convert_orukeet.py` |
 | `BRAINMD_CATALOG_CHECK=1` | Every catalog entry exists at its revision with safetensors and a supported `model_type` | Network; reads file lists and `config.json` only |

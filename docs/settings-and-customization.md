@@ -104,6 +104,8 @@ See [On-Device AI & Meetings](local-ai.md) for permissions, privacy and model de
 
 ---
 
+- **Semantic Search**: download, pick (**Use**) and delete search models; **Search Index** shows how many notes are indexed and **Rebuild Index** forgets the index so the next search embeds every note again. See [Semantic search](local-ai.md#semantic-search).
+
 ### 5. MCP Server
 
 - **Server Status Indicator**: Real-time status display showing active port with live green pulsating beacon.
