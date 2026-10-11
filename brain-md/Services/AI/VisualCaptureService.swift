@@ -20,8 +20,7 @@ public enum ScreenCaptureError: LocalizedError, Equatable {
         case .disabled:
             "Screen explanations are turned off in Settings › Local AI & Voice."
         case .permissionDenied:
-            "brain-md needs Screen Recording permission. Allow it in System Settings › Privacy & Security › "
-                + "Screen & System Audio Recording, then try again."
+            "Explain Screen needs Screen & System Audio Recording permission. " + AudioCaptureError.screenRecordingHelp
         case .noDisplay:
             "No display was found to capture."
         case .pickerUnavailable:
@@ -48,6 +47,10 @@ public final class VisualCaptureService {
     /// windows so a slide behind the note is what gets captured.
     public func captureScreen() async throws -> CGImage {
         guard configuration.captureScreenFrames else { throw ScreenCaptureError.disabled }
+        // Without this check every attempt would put up the system permission dialog again.
+        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+            throw ScreenCaptureError.permissionDenied
+        }
 
         let content: SCShareableContent
         do {

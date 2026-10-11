@@ -121,6 +121,8 @@ The Transcription Language setting applies to Apple Speech and Whisper (which ot
 | Screen & System Audio Recording | Explain Screen › Screen Under Pointer, system audio in meetings | On first use, by macOS |
 | Microphone | Your side of a meeting | When recording starts |
 
+**If macOS keeps asking for Screen Recording** although brain-md is switched on in System Settings: the permission belongs to an earlier version. Release builds are signed ad hoc, so macOS ties the permission to each version's exact binary. Select brain-md in **Privacy & Security › Screen & System Audio Recording**, remove it with **−**, then quit and reopen Brain.md and allow it when asked. Brain.md checks the permission before capturing, so it shows this advice instead of the system dialog on every attempt. A stable signing identity for releases avoids it altogether ([Releasing](releasing.md#optional-a-stable-signing-identity-recommended)).
+
 Choosing content with the picker needs no Screen Recording permission: picking is the consent. If the permission is already granted, a picked display also leaves out brain-md's own windows.
 
 Speech recognition permission is not requested: SpeechAnalyzer transcribes on-device without it. The usage string is declared as a safeguard.

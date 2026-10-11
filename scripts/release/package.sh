@@ -88,6 +88,7 @@ app="$archive/Products/Applications/$APP_BUNDLE"
 #    hardened runtime. No secure timestamp: Apple's timestamp service only serves Apple-issued certs.
 signature_label="ad hoc"
 [[ "$sign_identity" == "-" ]] || signature_label="'$sign_identity'"
+[[ "$sign_identity" != "-" ]] || warn "ad-hoc signing: users must re-grant Screen Recording and other permissions after updating (see docs/releasing.md)"
 log "Signing ($signature_label)"
 sign() {
     codesign --force --sign "$sign_identity" --options runtime --timestamp=none \
