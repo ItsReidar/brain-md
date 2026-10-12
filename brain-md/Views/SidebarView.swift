@@ -715,7 +715,7 @@ private struct ItemRowView: View {
                     )
                     .contextMenu {
                         Button("Rename Folder") { onRename(item) }
-                        Button("Delete Folder", role: .destructive) { onDelete(item) }
+                        Button("Move to Trash", role: .destructive) { onDelete(item) }
                         Button("Reveal in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([item.url])
                         }
@@ -781,12 +781,12 @@ private struct ItemRowView: View {
                     }
                     Divider()
                     Button("Rename Attachment") { onRename(item) }
-                    Button("Delete Attachment", role: .destructive) { onDelete(item) }
+                    Button("Move to Trash", role: .destructive) { onDelete(item) }
                 } else {
                     Button("Open in New Tab") { VaultManager.shared.openInNewTab(item) }
                     Divider()
                     Button("Rename Note") { onRename(item) }
-                    Button("Delete Note", role: .destructive) { onDelete(item) }
+                    Button("Move to Trash", role: .destructive) { onDelete(item) }
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([item.url])
                     }

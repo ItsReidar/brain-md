@@ -71,7 +71,7 @@ struct brain_mdApp: App {
                     if NSApp.keyWindow?.firstResponder is NSTextView {
                         NSApp.sendAction(#selector(NSResponder.deleteToBeginningOfLine(_:)), to: nil, from: nil)
                     } else if let item = VaultManager.shared.selectedItem, !item.isExternal {
-                        try? VaultManager.shared.moveToTrash(relativePath: item.relativePath)
+                        try? VaultManager.shared.deleteFile(relativePath: item.relativePath)
                     }
                 }
                 .keyboardShortcut(.delete, modifiers: .command)

@@ -178,7 +178,7 @@ Appends to or overwrites an existing note.
 ---
 
 ### 5. `delete_note`
-Permanently deletes a note from the vault.
+Moves a note from the vault to the macOS Trash, where Finder's **Put Back** restores it.
 - **Arguments**:
   - `path` *(string, required)*: Relative path to the note to delete.
 - **Example Call**:

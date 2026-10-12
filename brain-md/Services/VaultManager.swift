@@ -753,34 +753,22 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
     
+    /// Moves a note, attachment or folder to the Trash, so Finder's Put Back can restore it.
     public func deleteFile(relativePath: String) throws {
-        try removeFile(relativePath: relativePath, toTrash: false)
-    }
-
-    /// Moves a note to the Trash (⌘⌫), so it can be put back from Finder.
-    public func moveToTrash(relativePath: String) throws {
-        try removeFile(relativePath: relativePath, toTrash: true)
-    }
-
-    private func removeFile(relativePath: String, toTrash: Bool) throws {
         let fileURL = try resolveSecurePath(relativePath: relativePath)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             throw BrainError.fileNotFound(path: relativePath)
         }
         
         do {
-            if toTrash {
-                try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
-            } else {
-                try FileManager.default.removeItem(at: fileURL)
-            }
+            try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
             for session in sessions where session.selectedItem?.relativePath == relativePath {
                 session.selectedItem = nil
                 session.editorContent = ""
                 session.editorTitle = ""
             }
             refreshFiles()
-            logActivity(action: toTrash ? "Moved to Trash" : "Deleted Note", detail: relativePath, isError: false)
+            logActivity(action: "Moved to Trash", detail: relativePath, isError: false)
         } catch {
             throw BrainError.deleteFailed(path: relativePath, reason: error.localizedDescription)
         }

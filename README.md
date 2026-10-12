@@ -216,7 +216,7 @@ Maintainers: see [Releasing](docs/releasing.md).
 | `read_note`       | Reads the raw Markdown content of a specific note           | `path` *(required)*                                     |
 | `create_note`     | Creates a new Markdown note in the vault                    | `path` *(required)*, `content` *(required)*             |
 | `update_note`     | Appends or overwrites content in an existing note           | `path`, `content`, `mode` (`"overwrite"` or `"append"`) |
-| `delete_note`     | Permanently deletes a note from the vault                   | `path` *(required)*                                     |
+| `delete_note`     | Moves a note from the vault to the macOS Trash              | `path` *(required)*                                     |
 | `search_notes`    | Fast full-text and title search across all notes            | `query` *(required)*                                    |
 | `get_vault_stats` | Retrieves note counts, word count stats, and recent actions | *None*                                                  |
 | `move_note`       | Renames or moves notes into different subdirectories        | `sourcePath`, `targetFolder`                            |

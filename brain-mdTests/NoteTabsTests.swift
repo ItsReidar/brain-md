@@ -7,6 +7,13 @@ import Foundation
 import Testing
 @testable import brain_md
 
+/// Removes a file a test moved to the Trash. Give it a unique name, so nothing of yours goes.
+func removeFromTrash(named name: String) {
+    guard let trash = try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+    else { return }
+    try? FileManager.default.removeItem(at: trash.appendingPathComponent(name))
+}
+
 @MainActor
 struct NoteTabsTests {
     private let root = FileManager.default.temporaryDirectory.appendingPathComponent("brainmd-tabs-\(UUID().uuidString)")
@@ -106,10 +113,12 @@ struct NoteTabsTests {
         vault.selectNote(try note(vault, "A"))
         let first = vault.activeSession
         vault.openInNewTab(try note(vault, "B"))
-        try vault.renameItem(oldRelativePath: "A.md", newName: "Renamed")
-        #expect(first.selectedItem?.relativePath == "Renamed.md")
+        let renamed = "Renamed-\(UUID().uuidString)"
+        defer { removeFromTrash(named: renamed + ".md") }
+        try vault.renameItem(oldRelativePath: "A.md", newName: renamed)
+        #expect(first.selectedItem?.relativePath == renamed + ".md")
 
-        try vault.deleteFile(relativePath: "Renamed.md")
+        try vault.deleteFile(relativePath: renamed + ".md")
         #expect(first.selectedItem == nil)
         #expect(vault.selectedItem?.relativePath == "B.md")
     }
@@ -223,13 +232,12 @@ struct NoteTabsTests {
         vault.openInNewTab(try note(vault, "A"))
         vault.focus(first)
 
-        try vault.moveToTrash(relativePath: name)
+        try vault.deleteFile(relativePath: name)
         #expect(!FileManager.default.fileExists(atPath: vaultURL.appendingPathComponent(name).path))
         #expect(first.selectedItem == nil)
         #expect(vault.noteItem(atRelativePath: name) == nil)
         #expect(vault.recentActivities.first?.action == "Moved to Trash")
 
-        let trash = try FileManager.default.url(for: .trashDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-        try? FileManager.default.removeItem(at: trash.appendingPathComponent(name))
+        removeFromTrash(named: name)
     }
 }
