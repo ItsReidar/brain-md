@@ -33,6 +33,11 @@ public struct SidebarView: View {
         vault.perform(on: session) { vault.openNote(item) }
     }
 
+    /// The same Move to Trash as in the file tree, for notes listed in search results and tags.
+    private func trashButton(_ relativePath: String) -> some View {
+        Button("Move to Trash", role: .destructive) { vault.trash(relativePath: relativePath) }
+    }
+
     public init(vault: VaultManager, session: EditorSession, showingMCPModal: Binding<Bool>) {
         self.vault = vault
         self.session = session
@@ -256,7 +261,7 @@ public struct SidebarView: View {
                 showingRenameAlert = true
             },
             onDelete: { target in
-                try? vault.deleteFile(relativePath: target.relativePath)
+                vault.trash(relativePath: target.relativePath)
             },
             onMove: { sourcePath, targetDirectory in
                 try? vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: targetDirectory)
@@ -447,6 +452,7 @@ public struct SidebarView: View {
                         .contentShape(Rectangle()) // a plain button only takes clicks on what it draws
                     }
                     .buttonStyle(.plain)
+                    .contextMenu { trashButton(res.relativePath) }
                 }
                 .listStyle(.plain)
             }
@@ -619,6 +625,7 @@ public struct SidebarView: View {
                             .contentShape(Rectangle()) // a plain button only takes clicks on what it draws
                         }
                         .buttonStyle(.plain)
+                        .contextMenu { trashButton(note.relativePath) }
                     }
                 }
             }

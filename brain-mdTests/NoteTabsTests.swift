@@ -3,6 +3,7 @@
 //  brain-mdTests
 //
 
+import AppKit
 import Foundation
 import Testing
 @testable import brain_md
@@ -239,5 +240,47 @@ struct NoteTabsTests {
         #expect(vault.recentActivities.first?.action == "Moved to Trash")
 
         removeFromTrash(named: name)
+    }
+
+    @Test func commandDeleteTrashesTheNoteUnlessYoureEditingText() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        func open(_ name: String) throws -> String {
+            let file = "\(name)-\(UUID().uuidString).md" // unique: it goes to the Trash
+            try "# \(name)".write(to: vaultURL.appendingPathComponent(file), atomically: true, encoding: .utf8)
+            vault.refreshFiles()
+            vault.selectNote(byRelativePath: file)
+            return file
+        }
+        func exists(_ file: String) -> Bool { FileManager.default.fileExists(atPath: vaultURL.appendingPathComponent(file).path) }
+
+        // Nothing focused, or an empty field SwiftUI focused by itself: the note goes.
+        let first = try open("First")
+        defer { removeFromTrash(named: first) }
+        vault.commandDelete(firstResponder: nil)
+        #expect(!exists(first))
+        let second = try open("Second")
+        defer { removeFromTrash(named: second) }
+        vault.commandDelete(firstResponder: NSTextView())
+        #expect(!exists(second))
+
+        // Typing in a field, or in the note editor: ⌘⌫ deletes text and the note stays.
+        let third = try open("Third")
+        defer { removeFromTrash(named: third) }
+        let field = NSTextView()
+        field.string = "search words"
+        field.setSelectedRange(NSRange(location: 12, length: 0))
+        vault.commandDelete(firstResponder: field)
+        #expect(field.string.isEmpty)
+        vault.commandDelete(firstResponder: MarkdownNSTextView(frame: .zero))
+        #expect(exists(third))
+    }
+
+    @Test func aFailedMoveToTrashIsLoggedNotSilent() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        vault.trash(relativePath: "Missing.md")
+        #expect(vault.recentActivities.first?.action == "Move to Trash Failed")
+        #expect(vault.recentActivities.first?.isError == true)
     }
 }

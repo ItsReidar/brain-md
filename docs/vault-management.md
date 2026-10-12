@@ -98,7 +98,7 @@ When a note or folder is moved or renamed, `VaultManager` preserves the active s
 
 ## Moving Notes to the Trash
 
-Click a note in the sidebar and press ⌘⌫ (**File › Move to Trash**) to move it to the macOS Trash, where Finder's **Put Back** restores it. Clicking a note in the sidebar takes focus out of the editor, as in Finder; while you're typing in the editor or a text field, ⌘⌫ keeps its usual meaning and deletes to the start of the line. Every tab that showed the note closes it (`VaultManager.deleteFile(relativePath:)`). **Move to Trash** in a note's, attachment's or folder's context menu, and the MCP `delete_note` tool, use the Trash too; nothing in Brain.md deletes permanently. Files outside the vault aren't trashed this way.
+Press ⌘⌫ (**File › Move to Trash**) to move the open note or attachment to the macOS Trash, where Finder's **Put Back** restores it. ⌘⌫ only deletes text while you're editing: in the note editor, or in a field that has text in it. An empty field doesn't count, so the sidebar search, which macOS focuses at launch, never swallows it (`VaultManager.commandDelete(firstResponder:)`). Clicking a note in the sidebar takes focus out of the editor, as in Finder. **Move to Trash** is also in the context menu of every note in the file tree, search results and tag lists. A failed move beeps and is logged in the activity log (`VaultManager.trash(relativePath:)`). Every tab that showed the note closes it (`VaultManager.deleteFile(relativePath:)`). **Move to Trash** in a note's, attachment's or folder's context menu, and the MCP `delete_note` tool, use the Trash too; nothing in Brain.md deletes permanently. Files outside the vault aren't trashed this way.
 
 ## Template Engine: `NoteTemplateEngine`
 
