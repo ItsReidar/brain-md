@@ -2,270 +2,198 @@
   <img src="assets/app-icon.png" width="128" height="128" alt="brain.md App Icon" />
 </p>
 
-# brain.md 🧠
+<h1 align="center">brain.md 🧠</h1>
+
+<p align="center">
+  <strong>A fast, native Markdown notes app for macOS, with on-device AI and a built-in MCP server.</strong><br />
+  Your notes stay plain <code>.md</code> files on your Mac, and your AI assistants can read them too.
+</p>
+
+<p align="center">
 
 [![macOS](https://img.shields.io/badge/macOS-26%2B-black?style=flat-square&logo=apple)](https://apple.com)
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square&logo=swift)](https://swift.org)
 [![SwiftUI](https://img.shields.io/badge/UI-SwiftUI%20%2B%20AppKit-blue?style=flat-square)](https://developer.apple.com/xcode/swiftui/)
 [![MCP](https://img.shields.io/badge/MCP-1.0%20Compliant-purple?style=flat-square)](https://modelcontextprotocol.io)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](LICENSE)
-[![Dependencies](https://img.shields.io/badge/Dependencies-MLX%20for%20on--device%20AI%20only-emerald?style=flat-square)](docs/local-ai.md#the-model)
 
-> **The ultra-fast, local-first macOS Markdown knowledge base with an embedded Model Context Protocol (MCP) server.** Seamlessly bridge your personal thoughts with AI coding assistants (Claude Desktop, Cursor, Gemini, and autonomous agents).
-
----
-
-## ✨ Features
-
-- **⚡ Blazing Fast & Lightweight (120 FPS)**: 100% native Swift 6, SwiftUI, and AppKit. Layer-backed Core Animation rendering (`wantsLayer = true`), debounced live preview synchronization, and coalesced background syntax passes ensure silky smooth 120 FPS ProMotion typing responsiveness (<1ms keystroke latency) even on large notes. Instant startup, zero Electron or web bloat; the on-device AI model loads only when you use it.
-- **🧠 3D Visual Brain Graph**: Native Metal-accelerated 3D graph (Apple SceneKit) showing notes as velvety matte spheres clustered around folder hubs, linked via prominent 3D synaptic cylinders (`SCNCylinder` with glowing emissive materials for crystal-clear visibility), wikilinks (`[[Note]]`), markdown links, and `#tag` clusters. Features fluid organic floating and breathing animations, rotational elastic inertia, zero-allocation 120 FPS dynamic line tracking, single-click 3D trackball spin, cursor-anchored zoom, dynamic front-facing badge labels, live search filtering, and click-to-inspect popover with instant jump-to-editor navigation (`⌥⌘G`). The Skills and attachments folders are left out.
-- **🗂️ Native Note Tabs**: Open a note in a native macOS tab (right-click › **Open in New Tab**, ⌘-click in the sidebar, search results or Quick Switcher, or ⌘T for an empty tab). Each tab is named after its note and keeps its own edits; tabs can be reordered or pulled out into their own window, and come back when you reopen the vault.
-- **🔍 Spotlight Quick Switcher (`⌘O`)**: Instant keyboard-driven note navigation modal with fuzzy matching, real-time query filtering, folder location tags, and arrow-key navigation for lightning-fast jumps between notes.
-- **📂 Local-First Markdown Vault**: Plain-text `.md` files stored directly on your disk in human-readable hierarchies. Fully interoperable with Obsidian, VS Code, Logseq, and Git.
-- **🤖 Built-in Model Context Protocol (MCP) Server**: Built-in HTTP/SSE and Stdio servers expose 10 native tools (`list_notes`, `read_note`, `create_note`, `update_note`, `delete_note`, `search_notes`, `get_vault_stats`, `move_note`, `get_tags`, `get_backlinks`) directly to AI assistants.
-- **🎨 Rich Markdown Editor & Interactive Split View**: Real-time syntax highlighting, Split/Editor/Preview viewing modes, interactive draggable and proportional split divider with double-click snap-to-center (50/50) and `@AppStorage` persistence, lag-free bidirectional synchronized scrolling with synchronous re-entrancy protection and 1-click toolbar toggle, exact last-line content boundary alignment (neither pane scrolls into blank voids), generous typographic heading spacing (H1–H6), and GitHub Flavored Markdown (GFM) callouts (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`), task lists, tables, and strikethroughs.
-- **🌐 Full HTML Tag Support & Markdown Hacks**: Native support for inline and block HTML tags and character entities across both live preview and vector PDF/HTML export: `<details>` / `<summary>` collapsible accordions, `<mark>` text highlights, `<kbd>` keyboard badges, `<ins>`/`<u>` underlines, `<sub>` subscript (`H~2~O`), `<sup>` superscript (`X^2^`), `<center>`, `<figure>`/`<figcaption>`, `<font color="...">`, `<span style="...">`, and standard HTML entities (`&nbsp;`, `&copy;`, `&mdash;`, `&#124;`, etc.).
-- **📘 Complete Markdown Guide & GitHub Standards**: Strict adherence to GitHub Flavored Markdown (GFM) and Markdown Guide standards (Basic, Extended, and Hacks): Setext headings (`===` / `---`), `~~~` tilde code blocks, custom heading IDs (`{#custom-id}`), definition lists (`Term\n: Definition`), text highlights (`==highlight==`), emoji shortcodes (`:tada:`, `:rocket:`, etc.), bare URL autolinking, and markdown comments (`[comment]: # (...)`).
-- **✍️ Precision Editor & VS Code-Style List Indentation**: Font ligatures disabled and macOS auto-substitutions suppressed (`---` never turns into em-dashes). Full code-editor grade auto-pairing, triple backtick expansion, selection wrapping, and VS Code-style list editing: hierarchical indentation (`24pt` per level) with progressive bullet glyphs (Level 0: solid disc `•`, Level 1: hollow circle `◦`, Level 2: solid square `▪`, Level 3+: hollow square `▫`), smart multi-level continuation on Return, progressive outdenting on empty items, and `Tab` / `Shift-Tab` indent/outdent shortcuts.
-- **🛠️ Dedicated Headings & Format Toolbar**: Standalone Headings menu (`# H1` through `###### H6`) and comprehensive Format section right in the editor header (and macOS Menu Bar) with shortcuts for paragraphs, line breaks, emphasis (bold, italic, strikethrough), blockquotes, lists, code, horizontal rules, links, images, escaping characters, and HTML.
-- **💻 Vibrant Codeblocks & macOS Window Styling**: Code blocks rendered as macOS windows with traffic light dots, accent language badges, theme-driven 16-color ANSI syntax highlighting (Swift, Python, JS, TS, JSON, Bash, SQL, HTML, etc.), elevated contrast surfaces, and one-click copy.
-- **🖼️ Dynamic macOS App Icon (Apple Icon Composer)**: Crafted with Apple Icon Composer conforming to Apple Human Interface Guidelines (`brain-md.icon`) with native Light and Dark mode appearances (`NSAppearanceNameAqua` and `NSAppearanceNameDarkAqua`), adapting automatically to system theme changes across the macOS Dock, Finder, and App Switcher.
-- **🖼️ Dedicated Attachment & Image Management**: Drag-and-drop images directly from Finder or paste screenshots (`⌘V`) straight from your clipboard into the editor. Images are automatically saved to your configured attachments folder (default: `Attachments/` at vault root, or same directory as the note) with conflict-free unique names, inserting clean relative markdown image syntax `![Alt](relative/path.png)` at the cursor. Supports live preview rendering (with native local NSImage and remote AsyncImage caching) as well as embedded high-resolution graphics in Vector PDF exports.
-- **📄 Vector PDF Export**: Seamlessly export the rendered Markdown preview into crisp, paginated vector PDFs with styled headers, codeblocks, callouts, tables, embedded images, and offline Mermaid diagrams via toolbar button or `⌘P`.
-- **📊 Offline Mermaid Diagrams**: Interactive diagrams (flowcharts, sequence, class, state, git graphs) rendered completely offline via bundled `mermaid.min.js` with adaptive dark/light themes.
-- **🎨 112 Custom Themes (terminalcolors.com)**: Comprehensive catalog of 80 dark and 32 light themes across 36 iconic theme families (Catppuccin, Tokyo Night, Dracula, Gruvbox, Nord, Rosé Pine, GitHub, Ayu, Solarized, Zenbones, etc.). Powers real-time syntax highlighting, custom editor canvas styling, and live color swatch previews in Settings.
-- **⚙️ Modern macOS System Settings**: Native Ventura/Sonoma/Sequoia-style settings menu with custom note title formats (with dynamic tokens like `{date}`, `{time}`, `{year}`), customizable Markdown content templates, and configurable attachment folders.
-- **🎙️ On-Device AI & Meeting Assistant (MLX)**: Pick a language model (Gemma 4 E4B, E2B or 12B, including base checkpoints, Qwen3.5 2B/4B/9B, Ministral 3, Mistral 7B) running on your Mac with MLX: summaries, action items, rewriting and screen explanations, always reviewed in a sheet before they touch a note, plus a free-form **AI Chat** window (⇧⌘J) that can use the open note as context. **Skills** (your own saved prompts, as Markdown files in the vault) fill the ✨ menu and the chat, and **custom instructions** in Settings apply to every request. Records meetings and transcribes them on-device with an MLX speech model (Nemotron, Parakeet, Orukeet, Voxtral, Whisper), Gemma 4 E4B or Apple's SpeechAnalyzer, labels your microphone "Me" and up to four voices on the call "Speaker 1–4" with Sortformer, then drafts the minutes, in English, Dutch and many other languages. Nothing leaves your Mac, and one switch in Settings › General hides every AI feature for a plain notes app. See [On-Device AI & Meetings](docs/local-ai.md).
-- **🔎 Search by Meaning**: Optional on-device semantic search: download a small MLX embedding model (EmbeddingGemma 300M by default, 212 MB) and the sidebar search finds notes about your query even without the same words, across languages. The vault is indexed only when you search and the model unloads afterwards. See [Semantic search](docs/local-ai.md#semantic-search).
-- **🗂️ Finder Integration**: Open any Markdown file from Finder or the terminal (`brain notes.md`), in your vault or not (outside files get an **Add to Vault** button), make Brain.md the default Markdown app from Settings, and press Space in Finder for a Quick Look preview rendered in Brain.md's style, private by design (no scripts, no network). See [Finder Integration](docs/finder-integration.md).
-- **🔄 Live File Synchronization**: Automatic background file system watcher (`FSEvents` / `DispatchSource`) detects changes made by external editors in real time.
-- **🔒 Secure & Private**: Offline-by-default, path traversal protection, and optional MCP read-only guard.
-
----
-
-## 🏛️ System Architecture
-
-```mermaid
-graph TB
-    subgraph Client ["UI & Interaction Layer (SwiftUI + AppKit)"]
-        Window["Main Window (ContentView)"]
-        Sidebar["Vault Sidebar (SidebarView)"]
-        Editor["Editor & Live Preview (EditorSplitView)"]
-        Graph["3D Brain Graph Modal (BrainGraphModalView)"]
-        Scene3D["SceneKit 3D Viewport (Graph3DSceneView)"]
-        Highlighter["Syntax Highlighter Engine"]
-        Mermaid["Offline Mermaid Engine (WKWebView)"]
-        Settings["macOS System Settings (SettingsView)"]
-        ChatWindow["AI Chat Window (AssistantChatView)"]
-    end
-
-    subgraph AI ["On-Device AI (MLX + Apple Speech)"]
-        ModelManager["ModelCatalog / ModelStore / LanguageModelRuntime"]
-        Gemma["LanguageModelService & AssistantChat"]
-        Skills["SkillLibrary (Skills/*.md)"]
-        Meetings["MeetingRecorder (ScreenCaptureKit + MLX speech / SpeechAnalyzer + Sortformer)"]
-    end
-
-    subgraph Storage ["Local Vault & Storage Engine"]
-        VM["VaultManager (VaultManaging)"]
-        FileWatcher["VaultFileMonitor (Background Watcher)"]
-        TemplateEngine["NoteTemplateEngine"]
-        GraphService["NoteGraphService (Link & 3D Force Simulation)"]
-        Disk[("Local Filesystem (.md)")]
-    end
-
-    subgraph MCP ["Model Context Protocol (AI Integration)"]
-        MCPEngine["MCPServer (JSON-RPC 2.0 Engine)"]
-        HTTPServer["MCPHTTPServer (HTTP / SSE / Messages)"]
-        StdioServer["MCPStdioServer (Standard I/O)"]
-        Inspector["MCP Modal Inspector & Config Generator"]
-    end
-
-    subgraph Agents ["External AI Assistants & Tools"]
-        Claude["Claude Desktop"]
-        Cursor["Cursor / Copilot"]
-        CustomAgent["Autonomous AI Agents"]
-    end
-
-    %% UI to Storage
-    Window --> Sidebar
-    Window --> Editor
-    Window --> Graph
-    Graph --> Scene3D
-    Graph --> GraphService
-    Editor --> Highlighter
-    Editor --> Mermaid
-    Window --> Settings
-    Sidebar --> VM
-    Editor --> VM
-    GraphService --> VM
-    Settings --> TemplateEngine
-
-    %% On-device AI
-    Editor --> Gemma
-    Editor --> Meetings
-    ChatWindow --> Gemma
-    Gemma --> ModelManager
-    Gemma --> Skills
-    Skills --> VM
-
-    %% Storage to Disk
-    VM <--> Disk
-    FileWatcher -.->|Monitors external edits| Disk
-    FileWatcher -->|Publishes changes| VM
-
-    %% MCP Connections
-    VM <--> MCPEngine
-    MCPEngine <--> HTTPServer
-    MCPEngine <--> StdioServer
-    Window --> Inspector
-
-    %% External Connections
-    Claude <-->|SSE / Stream| HTTPServer
-    Cursor <-->|Stdio / SSE| HTTPServer
-    CustomAgent <-->|JSON-RPC Tools| HTTPServer
-```
-
----
-
-## 🚀 Getting Started
-
-### Installing a Release
+</p>
 
 ```bash
 brew install --cask itsreidar/tap/brain-md
 ```
 
-Or download the DMG from the [latest release](https://github.com/ItsReidar/brain-md/releases/latest) and drag Brain.md into Applications. Requires macOS 26 (Tahoe) or later.
+---
 
-Brain.md is signed but not notarized by Apple, so macOS blocks the first launch (and the first launch after each upgrade). Either open the app once, then go to **System Settings > Privacy & Security** and click **Open Anyway**, or remove the download quarantine flag in Terminal (no `sudo` needed):
+## Why brain.md
+
+- **⚡ Native and fast.** Pure Swift, SwiftUI and AppKit: instant startup, 120 FPS typing, no Electron.
+- **📂 Your files, your folders.** A vault is just a folder of Markdown. Use it alongside Obsidian, VS Code or Git.
+- **🤖 AI that stays on your Mac.** Summaries, chat, meeting transcripts and search by meaning, all run locally with MLX.
+- **🔌 Plugs into your AI tools.** Claude Desktop, Cursor and other agents can read, search and write your notes over MCP.
+- **🔒 Private by default.** Works offline. Nothing leaves your Mac unless you connect an assistant yourself.
+
+---
+
+## ✨ Features
+
+### ✍️ Write
+
+- **Live split view.** Editor and preview side by side, with synced scrolling, or either one on its own.
+- **Everything Markdown can do.** GitHub Flavored Markdown with tables, task lists, callouts (`[!NOTE]`, `[!TIP]` …), definition lists, `==highlights==`, emoji shortcodes and inline HTML like `<details>`, `<kbd>` and `<mark>`.
+- **Diagrams offline.** Mermaid flowcharts, sequence and state diagrams render without a network connection.
+- **Code that looks good.** Syntax-highlighted code blocks styled as macOS windows, with one-click copy.
+- **An editor that behaves.** Smart lists with Tab / ⇧Tab, auto-pairing, selection wrapping, and no surprise em-dashes.
+- **112 themes.** Catppuccin, Tokyo Night, Dracula, Nord, Gruvbox, Solarized and many more, light and dark.
+- **Images just work.** Drag them in or paste a screenshot with ⌘V; they land in your attachments folder with a relative link.
+- **Export to PDF.** Crisp vector PDFs of the preview, diagrams and images included (⌘P).
+
+### 🗂️ Organize
+
+- **Native tabs.** ⌘-click a note, or press ⌘T. Every tab keeps its own edits, and your tabs come back next time.
+- **Jump anywhere.** The Quick Switcher (⌘O) finds any note as you type.
+- **See how notes connect.** A 3D brain graph of your notes, folders, links and tags (⌥⌘G).
+- **Safe deletes.** ⌘⌫ or **Move to Trash** sends notes to the macOS Trash, so Finder's **Put Back** can undo it.
+- **Templates.** New notes get the title format and content template you choose, with tokens like `{date}`.
+- **Always in sync.** Edits made in other apps show up instantly.
+
+### 🤖 On-device AI
+
+Optional, and one switch in Settings turns it all off.
+
+- **Pick your model.** Gemma 4, Qwen3.5, Ministral or Mistral, downloaded only when you choose one.
+- **Rewrite, summarize, extract action items.** Results open in a review sheet, so nothing touches your note until you say so.
+- **AI Chat (⇧⌘J).** Ask about the open note or anything else.
+- **Skills.** Save your own prompts as Markdown notes and reuse them from the ✨ menu.
+- **Meeting notes.** Record a call, get a live transcript with speakers labelled, then draft the minutes, in English, Dutch and many other languages.
+- **Search by meaning.** Find the note about "budget overrun" even if it says "costs exceeded the plan", across languages.
+
+More in [On-Device AI & Meetings](docs/local-ai.md).
+
+### 🍎 Fits into macOS
+
+- **Open from Finder.** Double-click any `.md` file, in your vault or not, and make Brain.md your default Markdown app.
+- **Open from the terminal.** `brain notes.md` opens a note, and `brain new.md` starts one.
+- **Quick Look.** Press Space in Finder for a rendered preview.
+
+More in [Finder Integration](docs/finder-integration.md).
+
+---
+
+## 🔌 Connect your AI assistant (MCP)
+
+Brain.md runs a local [Model Context Protocol](https://modelcontextprotocol.io) server, so assistants like Claude Desktop and Cursor can work with your notes.
+
+**Claude Desktop in three steps:**
+
+1. In Brain.md, click the **MCP** badge in the toolbar and choose **Copy Claude Desktop Config**.
+2. Paste it into `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+   ```json
+   {
+     "mcpServers": {
+       "brain-md": { "url": "http://127.0.0.1:8765/sse" }
+     }
+   }
+   ```
+
+3. Restart Claude Desktop.
+
+<details>
+<summary><strong>The 10 tools assistants get</strong></summary>
+
+| Tool              | What it does                                         | Arguments                                       |
+| :---------------- | :--------------------------------------------------- | :---------------------------------------------- |
+| `list_notes`      | Lists notes and folders                              | `folder` *(optional)*                           |
+| `read_note`       | Reads a note's Markdown                              | `path`                                          |
+| `create_note`     | Creates a note                                       | `path`, `content`                               |
+| `update_note`     | Appends to or overwrites a note                      | `path`, `content`, `mode` (`overwrite`/`append`) |
+| `delete_note`     | Moves a note to the macOS Trash                      | `path`                                          |
+| `search_notes`    | Full-text and title search                           | `query`                                         |
+| `get_vault_stats` | Note and word counts, recent activity                | none                                            |
+| `move_note`       | Renames or moves a note                              | `sourcePath`, `targetFolder`                    |
+| `get_tags`        | All tags with counts and notes                       | `tag` *(optional)*                              |
+| `get_backlinks`   | Incoming and outgoing links and tags of a note       | `path`                                          |
+
+A read-only mode in Settings blocks every tool that changes notes. Full details in the [MCP Server docs](docs/mcp-server.md).
+
+</details>
+
+---
+
+## 🚀 Install
+
+```bash
+brew install --cask itsreidar/tap/brain-md
+```
+
+Or download the DMG from the [latest release](https://github.com/ItsReidar/brain-md/releases/latest) and drag Brain.md into Applications. Requires macOS 26 (Tahoe); on-device AI needs Apple Silicon.
+
+<details>
+<summary><strong>macOS says it can't open Brain.md</strong></summary>
+
+Brain.md is signed but not notarized by Apple, so macOS blocks the first launch (and the first launch after each upgrade). Open it once, then click **Open Anyway** in **System Settings › Privacy & Security**. Or remove the quarantine flag (no `sudo` needed):
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/brain-md.app
 ```
 
-Maintainers: see [Releasing](docs/releasing.md).
-
-### Prerequisites
-
-- macOS 26 (Tahoe) or later; on-device AI needs Apple Silicon
-- Xcode 26 or later (Swift 6), with the Metal Toolchain: `xcodebuild -downloadComponent MetalToolchain`
-
-### Building from Source
-
-1. **Clone the repository**:
-
-   ```bash
-   git clone https://github.com/ItsReidar/brain-md.git
-   cd brain-md
-   ```
-
-2. **Open in Xcode**:
-
-   ```bash
-   open brain-md.xcodeproj
-   ```
-
-3. **Or build from terminal**:
-
-   ```bash
-   xcodebuild -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' build
-   ```
-
-4. **Run Unit Tests**:
-
-   ```bash
-   xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdTests
-   ```
+</details>
 
 ---
 
-## 🤖 AI Integration with Model Context Protocol (MCP)
+## ⌨️ Keyboard shortcuts
 
-`brain.md` includes an integrated MCP server that runs locally on your Mac. When running, AI agents can read notes, summarize research, perform full-text searches, create meeting logs, and reorganize your knowledge base in real time.
-
-### Connecting Claude Desktop
-
-1. Open `brain.md` and click the **MCP Status Badge** in the top-right toolbar (or press `⌘,` and go to the **MCP Server** tab).
-2. Click **"Copy Claude Desktop Config"**.
-3. Open your Claude Desktop configuration file:
-
-   ```bash
-   code ~/Library/Application\ Support/Claude/claude_desktop_config.json
-   ```
-
-4. Paste the configuration:
-
-   ```json
-   {
-     "mcpServers": {
-       "brain-md": {
-         "url": "http://127.0.0.1:8765/sse"
-       }
-     }
-   }
-   ```
-
-5. Restart Claude Desktop. You will now see the `brain.md` hammer icon with 10 available tools!
-
-### Available MCP Tools
-
-| Tool Name         | Description                                                 | Key Arguments                                           |
-| :---------------- | :---------------------------------------------------------- | :------------------------------------------------------ |
-| `list_notes`      | Lists notes and directory trees within the vault            | `folder` *(optional)*                                   |
-| `read_note`       | Reads the raw Markdown content of a specific note           | `path` *(required)*                                     |
-| `create_note`     | Creates a new Markdown note in the vault                    | `path` *(required)*, `content` *(required)*             |
-| `update_note`     | Appends or overwrites content in an existing note           | `path`, `content`, `mode` (`"overwrite"` or `"append"`) |
-| `delete_note`     | Moves a note from the vault to the macOS Trash              | `path` *(required)*                                     |
-| `search_notes`    | Fast full-text and title search across all notes            | `query` *(required)*                                    |
-| `get_vault_stats` | Retrieves note counts, word count stats, and recent actions | *None*                                                  |
-| `move_note`       | Renames or moves notes into different subdirectories        | `sourcePath`, `targetFolder`                            |
-| `get_tags`        | Lists all tags across notes with counts and note paths      | `tag` *(optional filter)*                               |
-| `get_backlinks`   | Resolves incoming backlinks, outgoing links, and note tags  | `path` *(required)*                                     |
-
-For full payload specifications, schema examples, and curl tests, see [MCP Server Documentation](docs/mcp-server.md).
+| Shortcut          | Action                          | Shortcut      | Action                       |
+| :---------------- | :------------------------------ | :------------ | :--------------------------- |
+| `⌘N`              | New note                        | `⌘⌃1` – `⌘⌃3` | Split, editor or preview     |
+| `⌘T`              | New tab                         | `⇧⌘J`         | AI Chat                      |
+| `⌘W`              | Close tab                       | `⌘.`          | Stop an AI answer            |
+| `⌘O`              | Quick Switcher                  | `⌘B` / `⌘I`   | Bold / italic                |
+| `⌘S`              | Save                            | `⌘E` / `⌥⌘C`  | Inline code / code block     |
+| `⌘⌫`              | Move note to Trash              | `⌘K`          | Link                         |
+| `⌘P`              | Export PDF                      | `⌥⌘1` – `⌥⌘6` | Heading 1–6                  |
+| `⌥⌘G`             | Brain graph                     | `⌘,`          | Settings                     |
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## 🛠️ Build from source
 
-| Shortcut    | Action                                                   |
-| :---------- | :------------------------------------------------------- |
-| `⌘N`        | Create a new note using active title & content templates |
-| `⌘O`        | Spotlight Quick Switcher (open/jump to note)             |
-| `⌘S`        | Save current note to disk immediately                    |
-| `⌘P`        | Export live preview as paginated vector PDF              |
-| `⌥⌘G`       | Open 3D Visual Brain Graph modal                         |
-| `⌘,`        | Open macOS System Settings window                        |
-| `⌘⌃1`       | Switch to Split View (Editor + Live Preview)             |
-| `⌘⌃2`       | Switch to Editor-Only View                               |
-| `⌘⌃3`       | Switch to Preview-Only View                              |
-| `⇧⌘J`       | Open the AI Chat window                                  |
-| `⌘.`        | Stop an AI answer (chat or review sheet)                 |
-| `⌘B` / `⌘I` | Bold / Italic                                            |
-| `⌘E` / `⌥⌘C`| Inline code / Code block                                 |
-| `⌘K`        | Insert a link                                            |
-| `⌥⌘1`–`⌥⌘6` | Heading 1–6                                              |
+You need Xcode 26 or later with the Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`).
+
+```bash
+git clone https://github.com/ItsReidar/brain-md.git
+cd brain-md
+open brain-md.xcodeproj
+```
+
+Run the tests from Xcode, or from the terminal:
+
+```bash
+xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdTests
+```
+
+See [Development & Testing](docs/development-and-testing.md) and, for maintainers, [Releasing](docs/releasing.md).
 
 ---
 
-## 📚 In-Depth Documentation
+## 📚 Documentation
 
-Explore the comprehensive technical guides in the [`docs/`](docs/) directory:
-
-- [**System Architecture & Concurrency**](docs/architecture.md): Deep-dive into Swift 6 concurrency, view models, and AppKit integration.
-- [**Vault & File Management**](docs/vault-management.md): Directory trees, background watchers, debounced auto-save, and template engines.
-- [**Markdown Editor & Diagrams**](docs/editor-and-markdown.md): Syntax highlighter parser, offline Mermaid diagram engine, and GFM features.
-- [**Model Context Protocol (MCP)**](docs/mcp-server.md): Protocol specifications, SSE transports, tool schemas, and AI agent configuration.
-- [**Settings & Customization**](docs/settings-and-customization.md): macOS Ventura-style settings architecture, token formatting, and custom Markdown templates.
-- [**Development & Testing**](docs/development-and-testing.md): Building, testing, benchmarking, and contributing to `brain.md`.
-- [**On-Device AI & Meetings**](docs/local-ai.md): language and speech models with MLX, review sheet, AI Chat, meeting transcription, speaker identification, languages, permissions and model details.
-- [**Finder Integration**](docs/finder-integration.md): opening Markdown files from Finder and the `brain` command, files outside the vault, the default app setting and the Quick Look preview.
-- [**3D Visual Brain Graph**](docs/3d-graph-view.md): SceneKit rendering, force-directed layout and interaction model.
-- [**Releasing**](docs/releasing.md): Packaging, signing without a paid developer account, DMG and Homebrew cask distribution.
+| Guide | What's inside |
+| :---- | :------------ |
+| [Architecture](docs/architecture.md) | How the app fits together, with diagrams, concurrency and security |
+| [Vault & Files](docs/vault-management.md) | Folders, auto-save, templates, attachments, Trash |
+| [Editor & Markdown](docs/editor-and-markdown.md) | Syntax highlighting, tabs, Mermaid, every supported Markdown feature |
+| [On-Device AI & Meetings](docs/local-ai.md) | Models, AI Chat, Skills, transcription, search by meaning |
+| [MCP Server](docs/mcp-server.md) | Transports, tool schemas, connecting assistants |
+| [Finder Integration](docs/finder-integration.md) | Opening files, the `brain` command, Quick Look |
+| [3D Brain Graph](docs/3d-graph-view.md) | Rendering, layout and interaction |
+| [Settings](docs/settings-and-customization.md) | Themes, title formats, templates |
+| [Development & Testing](docs/development-and-testing.md) | Building, tests, benchmarks |
+| [Releasing](docs/releasing.md) | Signing, DMG and Homebrew distribution |
 
 ---
 
 ## 📄 License
 
-`brain.md` is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License v3.0 (GPLv3)](LICENSE).
+brain.md is free software under the [GNU General Public License v3.0](LICENSE).
