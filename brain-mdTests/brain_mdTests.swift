@@ -20,7 +20,8 @@ struct brain_mdTests {
         let vault = VaultManager(customVaultURL: tempDir)
         
         // 1. Create note
-        let noteName = "TestNote.md"
+        let noteName = "TestNote-\(UUID().uuidString).md" // unique: deleting moves it to the Trash
+        defer { removeFromTrash(named: noteName) }
         let initialContent = "# Hello Brain\nThis is a unit test note."
         try vault.createFile(relativePath: noteName, content: initialContent)
         
@@ -36,7 +37,7 @@ struct brain_mdTests {
         // 4. Search notes
         let results = vault.searchNotes(query: "Hello Brain")
         #expect(!results.isEmpty)
-        #expect(results.contains(where: { $0.relativePath == "TestNote.md" }))
+        #expect(results.contains(where: { $0.relativePath == noteName }))
         
         // 5. Delete note
         try vault.deleteFile(relativePath: noteName)

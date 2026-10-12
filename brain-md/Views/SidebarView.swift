@@ -26,6 +26,13 @@ public struct SidebarView: View {
     @State private var isRootDropTargeted = false
     @State private var isTagsExpanded = true
     
+    /// Opens a note clicked in the sidebar. Focus leaves the editor, as in Finder, so ⌘⌫ trashes
+    /// the note instead of deleting text.
+    private func openFromSidebar(_ item: NoteItem) {
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        vault.perform(on: session) { vault.openNote(item) }
+    }
+
     public init(vault: VaultManager, session: EditorSession, showingMCPModal: Binding<Bool>) {
         self.vault = vault
         self.session = session
@@ -241,7 +248,7 @@ public struct SidebarView: View {
             item: item,
             selectedItem: session.selectedItem,
             onSelect: { selected in
-                vault.perform(on: session) { vault.openNote(selected) }
+                openFromSidebar(selected)
             },
             onRename: { target in
                 renamingItem = target
@@ -415,7 +422,7 @@ public struct SidebarView: View {
                 List(results) { res in
                     Button(action: {
                         if let item = findItem(path: res.relativePath, in: vault.rootItems) {
-                            vault.perform(on: session) { vault.openNote(item) }
+                            openFromSidebar(item)
                         }
                     }) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -437,6 +444,7 @@ public struct SidebarView: View {
                             }
                         }
                         .padding(.vertical, 4)
+                        .contentShape(Rectangle()) // a plain button only takes clicks on what it draws
                     }
                     .buttonStyle(.plain)
                 }
@@ -582,7 +590,7 @@ public struct SidebarView: View {
                 } else {
                     ForEach(matchingNotes) { note in
                         Button(action: {
-                            vault.perform(on: session) { vault.openNote(note) }
+                            openFromSidebar(note)
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "doc.text")
@@ -608,6 +616,7 @@ public struct SidebarView: View {
                                 RoundedRectangle(cornerRadius: 6)
                                     .fill(session.selectedItem?.id == note.id ? Color.accentColor.opacity(0.15) : Color.clear)
                             )
+                            .contentShape(Rectangle()) // a plain button only takes clicks on what it draws
                         }
                         .buttonStyle(.plain)
                     }
@@ -680,6 +689,9 @@ private struct ItemRowView: View {
                             .truncationMode(.middle)
                         Spacer()
                     }
+                    // Padding before the content shape, so the whole highlighted row takes clicks and drops.
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
                     .contentShape(Rectangle())
                     .draggable(item.relativePath) {
                         dragPreview(icon: item.iconName, text: item.displayName)
@@ -693,8 +705,6 @@ private struct ItemRowView: View {
                     } isTargeted: { targeted in
                         self.isDropTargeted = targeted
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
                             .fill(isDropTargeted ? Color.accentColor.opacity(0.2) : Color.clear)
@@ -705,7 +715,7 @@ private struct ItemRowView: View {
                     )
                     .contextMenu {
                         Button("Rename Folder") { onRename(item) }
-                        Button("Delete Folder", role: .destructive) { onDelete(item) }
+                        Button("Move to Trash", role: .destructive) { onDelete(item) }
                         Button("Reveal in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([item.url])
                         }
@@ -725,6 +735,9 @@ private struct ItemRowView: View {
                 
                 Spacer()
             }
+            // Padding before the content shape, so the whole highlighted row takes clicks, not just the name.
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
             .onTapGesture {
                 onSelect(item)
@@ -740,8 +753,6 @@ private struct ItemRowView: View {
             } isTargeted: { targeted in
                 self.isDropTargeted = targeted
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isDropTargeted ? Color.accentColor.opacity(0.18) : (selectedItem?.id == item.id ? Color.accentColor.opacity(0.15) : Color.clear))
@@ -770,12 +781,12 @@ private struct ItemRowView: View {
                     }
                     Divider()
                     Button("Rename Attachment") { onRename(item) }
-                    Button("Delete Attachment", role: .destructive) { onDelete(item) }
+                    Button("Move to Trash", role: .destructive) { onDelete(item) }
                 } else {
                     Button("Open in New Tab") { VaultManager.shared.openInNewTab(item) }
                     Divider()
                     Button("Rename Note") { onRename(item) }
-                    Button("Delete Note", role: .destructive) { onDelete(item) }
+                    Button("Move to Trash", role: .destructive) { onDelete(item) }
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([item.url])
                     }

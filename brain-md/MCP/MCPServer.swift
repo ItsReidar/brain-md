@@ -243,7 +243,7 @@ public final class MCPServer: MCPServing {
             ),
             MCPTool(
                 name: MCPToolName.deleteNote.rawValue,
-                description: "Permanently delete a note from the vault.",
+                description: "Move a note from the vault to the macOS Trash.",
                 inputSchema: AnyCodableValue.dictionary([
                     "type": AnyCodableValue.string("object"),
                     "properties": AnyCodableValue.dictionary([
