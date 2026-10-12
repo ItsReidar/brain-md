@@ -753,6 +753,27 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
     
+    /// Move to Trash from the sidebar, a menu or ⌘⌫: a failure beeps and is logged, never silent.
+    public func trash(relativePath: String) {
+        do {
+            try deleteFile(relativePath: relativePath)
+        } catch {
+            logActivity(action: "Move to Trash Failed", detail: "\(relativePath): \(error.localizedDescription)", isError: true)
+            NSSound.beep()
+        }
+    }
+
+    /// ⌘⌫: deletes to the start of the line while you're editing text (the note editor, or a field
+    /// with text in it); otherwise moves the open note to the Trash. An empty field that SwiftUI
+    /// focused by itself (the sidebar search, at launch) doesn't count as editing.
+    public func commandDelete(firstResponder: NSResponder?) {
+        if let textView = firstResponder as? NSTextView, textView is MarkdownNSTextView || !textView.string.isEmpty {
+            textView.deleteToBeginningOfLine(nil)
+        } else if let item = selectedItem, !item.isExternal {
+            trash(relativePath: item.relativePath)
+        }
+    }
+
     /// Moves a note, attachment or folder to the Trash, so Finder's Put Back can restore it.
     public func deleteFile(relativePath: String) throws {
         let fileURL = try resolveSecurePath(relativePath: relativePath)

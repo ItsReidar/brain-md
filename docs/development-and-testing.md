@@ -128,6 +128,19 @@ xcodebuild -project brain-md.xcodeproj -scheme brain-md -destination 'platform=m
 xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdTests
 ```
 
+### Deleting from the sidebar (UI test)
+
+`brain-mdUITests/DeleteUITests` drives the real app: Move to Trash from the context menu and ⌘⌫ for a note, a nested note and an attachment, plus ⌘⌫ with focus in the empty search field. It takes over the mouse and keyboard for about a minute. The test runner is sandboxed and can't create files, so prepare a vault first and pass its path; the app opens it through the arguments domain, so your saved vault setting isn't changed:
+
+```bash
+V=$(mktemp -d)/vault && mkdir -p "$V/Attachments" "$V/Folder"
+for n in MenuNote KeyNote SearchNote Folder/NestedNote; do printf '# %s\n\nText.\n' "$n" > "$V/$n.md"; done
+for n in menu-pic key-pic; do printf '\x89PNG' > "$V/Attachments/$n.png"; done
+TEST_RUNNER_BRAINMD_UI_VAULT="$V" xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdUITests/DeleteUITests
+```
+
+The deleted test files end up in your Trash.
+
 ### Test Coverage Breakdown
 
 | Test Name | Verifies |

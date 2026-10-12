@@ -67,12 +67,7 @@ struct brain_mdApp: App {
                 .keyboardShortcut("s", modifiers: .command)
 
                 Button("Move to Trash") {
-                    // While typing, ⌘⌫ keeps its usual meaning: delete to the start of the line.
-                    if NSApp.keyWindow?.firstResponder is NSTextView {
-                        NSApp.sendAction(#selector(NSResponder.deleteToBeginningOfLine(_:)), to: nil, from: nil)
-                    } else if let item = VaultManager.shared.selectedItem, !item.isExternal {
-                        try? VaultManager.shared.deleteFile(relativePath: item.relativePath)
-                    }
+                    VaultManager.shared.commandDelete(firstResponder: NSApp.keyWindow?.firstResponder)
                 }
                 .keyboardShortcut(.delete, modifiers: .command)
                 
