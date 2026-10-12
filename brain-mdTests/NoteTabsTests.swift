@@ -211,4 +211,25 @@ struct NoteTabsTests {
         let saved = defaults.dictionary(forKey: VaultManager.openTabsKey)?[vault.vaultURL.path] as? [String: Any]
         #expect(saved?["tabs"] as? [String] == ["A.md", "B.md"])
     }
+
+    @Test func movingANoteToTheTrashClosesItInEveryTab() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let name = "trash-\(UUID().uuidString).md" // unique, so only this test's file is removed from the Trash
+        try "# Gone".write(to: vaultURL.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        vault.refreshFiles()
+        vault.selectNote(byRelativePath: name)
+        let first = vault.activeSession
+        vault.openInNewTab(try note(vault, "A"))
+        vault.focus(first)
+
+        try vault.moveToTrash(relativePath: name)
+        #expect(!FileManager.default.fileExists(atPath: vaultURL.appendingPathComponent(name).path))
+        #expect(first.selectedItem == nil)
+        #expect(vault.noteItem(atRelativePath: name) == nil)
+        #expect(vault.recentActivities.first?.action == "Moved to Trash")
+
+        let trash = try FileManager.default.url(for: .trashDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        try? FileManager.default.removeItem(at: trash.appendingPathComponent(name))
+    }
 }

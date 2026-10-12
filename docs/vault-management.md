@@ -96,6 +96,10 @@ When a note or folder is moved or renamed, `VaultManager` preserves the active s
 
 ---
 
+## Moving Notes to the Trash
+
+Click a note in the sidebar and press ⌘⌫ (**File › Move to Trash**) to move it to the macOS Trash, where Finder's **Put Back** restores it. Clicking a note in the sidebar takes focus out of the editor, as in Finder; while you're typing in the editor or a text field, ⌘⌫ keeps its usual meaning and deletes to the start of the line. Every tab that showed the note closes it (`VaultManager.moveToTrash(relativePath:)`). Files outside the vault aren't trashed this way, and **Delete Note** in the context menu still deletes immediately.
+
 ## Template Engine: `NoteTemplateEngine`
 
 `brain-md` features a dual template engine:
