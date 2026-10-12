@@ -140,7 +140,7 @@ public struct SidebarView: View {
             Button("Cancel", role: .cancel) { newFolderName = "" }
             Button("Create") {
                 if !newFolderName.isEmpty {
-                    try? vault.createFolder(relativePath: newFolderName)
+                    vault.reportingErrors("Couldn't Create Folder") { try vault.createFolder(relativePath: newFolderName) }
                     newFolderName = ""
                 }
             }
@@ -153,10 +153,8 @@ public struct SidebarView: View {
             }
             Button("Rename") {
                 if let item = renamingItem, !renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    do {
+                    vault.reportingErrors("Couldn't Rename") {
                         try vault.renameItem(oldRelativePath: item.relativePath, newName: renameText)
-                    } catch {
-                        vault.logActivity(action: "Rename Failed", detail: error.localizedDescription, isError: true)
                     }
                     renameText = ""
                     renamingItem = nil
@@ -187,11 +185,8 @@ public struct SidebarView: View {
             .buttonStyle(.plain)
             .dropDestination(for: String.self) { droppedItems, _ in
                 guard let sourcePath = droppedItems.first else { return false }
-                do {
+                return vault.reportingErrors("Couldn't Move") {
                     try vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: "")
-                    return true
-                } catch {
-                    return false
                 }
             } isTargeted: { targeted in
                 self.isHeaderDropTargeted = targeted
@@ -264,7 +259,9 @@ public struct SidebarView: View {
                 vault.trash(relativePath: target.relativePath)
             },
             onMove: { sourcePath, targetDirectory in
-                try? vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: targetDirectory)
+                vault.reportingErrors("Couldn't Move") {
+                    try vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: targetDirectory)
+                }
             },
             folderIcon: folderIcon
         )
@@ -322,11 +319,8 @@ public struct SidebarView: View {
                 )
                 .dropDestination(for: String.self) { droppedItems, _ in
                     guard let sourcePath = droppedItems.first else { return false }
-                    do {
+                    return vault.reportingErrors("Couldn't Move") {
                         try vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: "")
-                        return true
-                    } catch {
-                        return false
                     }
                 } isTargeted: { targeted in
                     self.isRootDropTargeted = targeted
@@ -340,11 +334,8 @@ public struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .dropDestination(for: String.self) { droppedItems, _ in
             guard let sourcePath = droppedItems.first else { return false }
-            do {
+            return vault.reportingErrors("Couldn't Move") {
                 try vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: "")
-                return true
-            } catch {
-                return false
             }
         }
     }

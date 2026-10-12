@@ -68,6 +68,12 @@ public final class VaultManager: ObservableObject, VaultManaging {
     public static let shared: VaultManager = {
         let vault = VaultManager()
         vault.tabsDefaults = .standard
+        vault.errorPresenter = { title, message in
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = message
+            if let window = NSApp.keyWindow { alert.beginSheetModal(for: window) } else { alert.runModal() }
+        }
         vault.restoreTabs()
         return vault
     }()
@@ -86,6 +92,8 @@ public final class VaultManager: ObservableObject, VaultManaging {
     var editing: EditorSession { editingOverride ?? activeSession }
     /// Where the open tabs are remembered between launches; nil (as in tests) remembers nothing.
     var tabsDefaults: UserDefaults?
+    /// Shows a failed operation to the user (an alert sheet); nil, as in tests, only logs it.
+    var errorPresenter: ((_ title: String, _ message: String) -> Void)?
     /// Opens a note window; set by the first window, since only views can open windows.
     var openWindowHandler: ((NoteWindowRequest) -> Void)?
     var pendingTabPaths: [String] = []
@@ -753,14 +761,23 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
     
-    /// Move to Trash from the sidebar, a menu or ⌘⌫: a failure beeps and is logged, never silent.
-    public func trash(relativePath: String) {
+    /// Runs a file operation started from the sidebar or a menu. A failure is logged and shown
+    /// (`errorPresenter`), never silent.
+    @discardableResult
+    public func reportingErrors(_ title: String, _ operation: () throws -> Void) -> Bool {
         do {
-            try deleteFile(relativePath: relativePath)
+            try operation()
+            return true
         } catch {
-            logActivity(action: "Move to Trash Failed", detail: "\(relativePath): \(error.localizedDescription)", isError: true)
-            NSSound.beep()
+            logActivity(action: title, detail: error.localizedDescription, isError: true)
+            errorPresenter?(title, error.localizedDescription)
+            return false
         }
+    }
+
+    /// Move to Trash from the sidebar, a menu or ⌘⌫.
+    public func trash(relativePath: String) {
+        reportingErrors("Couldn't Move to Trash") { try deleteFile(relativePath: relativePath) }
     }
 
     /// ⌘⌫: deletes to the start of the line while you're editing text (the note editor, or a field

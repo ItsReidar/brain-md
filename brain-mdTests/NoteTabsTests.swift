@@ -276,11 +276,24 @@ struct NoteTabsTests {
         #expect(exists(third))
     }
 
-    @Test func aFailedMoveToTrashIsLoggedNotSilent() throws {
+    @Test func failedSidebarOperationsAreShownNotSilent() throws {
         let vault = try setUp()
         defer { try? FileManager.default.removeItem(at: root) }
+        var shown: [String] = []
+        vault.errorPresenter = { title, _ in shown.append(title) }
+
         vault.trash(relativePath: "Missing.md")
-        #expect(vault.recentActivities.first?.action == "Move to Trash Failed")
-        #expect(vault.recentActivities.first?.isError == true)
+        let renamed = vault.reportingErrors("Couldn't Rename") { try vault.renameItem(oldRelativePath: "A.md", newName: "B") }
+        let moved = vault.reportingErrors("Couldn't Move") {
+            try vault.moveItem(sourceRelativePath: "Missing.md", toDirectoryRelativePath: "")
+        }
+        #expect(!renamed && !moved) // B.md exists; Missing.md doesn't
+        #expect(shown == ["Couldn't Move to Trash", "Couldn't Rename", "Couldn't Move"])
+        let logged = vault.recentActivities.prefix(3).allSatisfy(\.isError)
+        #expect(logged)
+
+        let ok = vault.reportingErrors("Couldn't Rename") { try vault.renameItem(oldRelativePath: "A.md", newName: "D") }
+        #expect(ok)
+        #expect(shown.count == 3) // a success shows nothing
     }
 }
