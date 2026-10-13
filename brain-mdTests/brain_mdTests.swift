@@ -551,6 +551,54 @@ struct brain_mdTests {
         #expect(mcpMovedContent.contains("Draft task."))
     }
 
+    @Test func mcpCreatesFoldersAndReadOnlyModeBlocksEveryWrite() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("vault_mcp_folder_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let suite = "brainmd-tests-mcp-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = VaultManager(customVaultURL: tempDir)
+        let server = MCPServer(vault: vault, defaults: defaults)
+
+        func call(_ name: String, _ arguments: [String: AnyCodableValue]) async throws -> (isError: Bool, text: String) {
+            let request = JSONRPCRequest(id: .int(1), method: "tools/call",
+                                         params: ["name": .string(name), "arguments": .dictionary(arguments)])
+            let data = await server.handleRequest(data: try JSONEncoder().encode(request))
+            let response = try JSONDecoder().decode(JSONRPCResponse.self, from: try #require(data))
+            return (response.result?["isError"]?.boolValue ?? true,
+                    response.result?["content"]?.arrayValue?.first?["text"]?.stringValue ?? "")
+        }
+        func isDirectory(_ path: String) -> Bool {
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: tempDir.appendingPathComponent(path).path, isDirectory: &isDir) && isDir.boolValue
+        }
+
+        #expect(try await call("create_folder", ["path": "Projects/2026"]).isError == false)
+        #expect(isDirectory("Projects/2026"))
+        #expect(try await call("create_folder", ["path": "Projects/2026"]).isError == false) // already there
+        #expect(try await call("create_folder", ["path": "../outside"]).isError)
+        #expect(try await call("create_folder", [:]).isError)
+
+        // Read-only: every tool that changes the vault is refused, reading still works.
+        defaults.set(true, forKey: MCPServer.readOnlyKey)
+        let refused = try await call("create_folder", ["path": "Blocked"])
+        #expect(refused.isError && refused.text.contains("read-only"))
+        #expect(!isDirectory("Blocked"))
+        for (name, arguments) in [
+            ("create_note", ["path": AnyCodableValue.string("New.md"), "content": .string("x")]),
+            ("update_note", ["path": .string("New.md"), "content": .string("x")]),
+            ("delete_note", ["path": .string("New.md")]),
+            ("move_note", ["sourcePath": .string("Projects"), "targetFolder": .string("")]),
+        ] {
+            #expect(try await call(name, arguments).isError, "\(name)")
+        }
+        #expect(!FileManager.default.fileExists(atPath: tempDir.appendingPathComponent("New.md").path))
+        #expect(try await call("list_notes", [:]).isError == false)
+        #expect(MCPToolName.allCases.filter(\.changesVault).map(\.rawValue).sorted()
+                == ["create_folder", "create_note", "delete_note", "move_note", "update_note"])
+    }
+
     @Test func testFolderMoveAndRenamePreservesSelection() throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("vault_folder_test_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

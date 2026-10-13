@@ -86,7 +86,7 @@ graph TD
     %% MCP connections
     HTTPServer -->|Routes JSON-RPC| MCPServer
     StdioServer -->|Routes JSON-RPC| MCPServer
-    MCPServer -->|Translates 10 tools to Vault Ops| VM
+    MCPServer -->|Translates 11 tools to Vault Ops| VM
 ```
 
 ---
@@ -184,7 +184,7 @@ private func resolveSecurePath(relativePath: String) throws -> URL {
 If an AI agent or malicious input passes `../../etc/passwd` or `/System/Volumes`, `BrainError.pathTraversalDetected` is thrown immediately.
 
 ### MCP Read-Only Guard
-In the **MCP Server** settings pane, users can enable **Read-Only Mode**. When active, all mutating tools (`create_note`, `update_note`, `delete_note`, `move_note`) are rejected with a standardized error code before any filesystem modification occurs.
+In the **MCP Server** settings pane, users can enable **Read-Only Mode**. When active, all mutating tools (`create_note`, `update_note`, `delete_note`, `move_note`, `create_folder`) are rejected with `BrainError.readOnlyMode` before any filesystem modification occurs (`MCPToolName.changesVault`, checked in `MCPServer`).
 
 ---
 

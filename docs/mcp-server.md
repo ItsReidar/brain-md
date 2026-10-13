@@ -89,7 +89,7 @@ sequenceDiagram
 
 ## Complete MCP Tool Reference
 
-`brain-md` exposes 10 native tools:
+`brain-md` exposes 11 native tools. With **Read-Only** on in Settings › MCP Server, the five that change the vault (`create_note`, `update_note`, `delete_note`, `move_note`, `create_folder`) are refused with an error before anything on disk changes; the others keep working.
 
 ### 1. `list_notes`
 Lists all Markdown notes and directories in the vault.
@@ -287,6 +287,25 @@ Resolves incoming backlinks, outgoing links (wikilinks `[[Note]]` and Markdown l
       "name": "get_backlinks",
       "arguments": {
         "path": "Welcome to Brain-md.md"
+      }
+    }
+  }
+  ```
+
+### 11. `create_folder`
+Creates a folder in the vault, including any missing parent folders. Succeeds if the folder already exists.
+- **Arguments**:
+  - `path` *(string, required)*: Relative path of the folder (e.g., `Projects/2026`).
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "tools/call",
+    "params": {
+      "name": "create_folder",
+      "arguments": {
+        "path": "Projects/2026"
       }
     }
   }

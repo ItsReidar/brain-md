@@ -18,6 +18,15 @@ public enum MCPToolName: String, CaseIterable, Sendable {
     case moveNote = "move_note"
     case getTags = "get_tags"
     case getBacklinks = "get_backlinks"
+    case createFolder = "create_folder"
+
+    /// Tools that change the vault; Settings › MCP Server › Read-Only blocks them.
+    var changesVault: Bool {
+        switch self {
+        case .createNote, .updateNote, .deleteNote, .moveNote, .createFolder: true
+        case .listNotes, .readNote, .searchNotes, .getVaultStats, .getTags, .getBacklinks: false
+        }
+    }
 }
 
 // MARK: - MCPServing Protocol
@@ -35,11 +44,16 @@ public final class MCPServer: MCPServing {
     public static let shared = MCPServer()
     
     private let vault: any VaultManaging
+    private let defaults: UserDefaults
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+
+    /// The Read-Only switch in Settings › MCP Server.
+    static let readOnlyKey = "mcp_read_only"
     
-    public init(vault: (any VaultManaging)? = nil) {
+    public init(vault: (any VaultManaging)? = nil, defaults: UserDefaults = .standard) {
         self.vault = vault ?? VaultManager.shared
+        self.defaults = defaults
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys]
         self.encoder = enc
@@ -321,6 +335,20 @@ public final class MCPServer: MCPServing {
                     ]),
                     "required": AnyCodableValue.array([AnyCodableValue.string("path")])
                 ])
+            ),
+            MCPTool(
+                name: MCPToolName.createFolder.rawValue,
+                description: "Create a folder in the vault, including any missing parent folders. Succeeds if it already exists.",
+                inputSchema: AnyCodableValue.dictionary([
+                    "type": AnyCodableValue.string("object"),
+                    "properties": AnyCodableValue.dictionary([
+                        "path": AnyCodableValue.dictionary([
+                            "type": AnyCodableValue.string("string"),
+                            "description": AnyCodableValue.string("Relative path of the folder (e.g., 'Projects/2026')")
+                        ])
+                    ]),
+                    "required": AnyCodableValue.array([AnyCodableValue.string("path")])
+                ])
             )
         ]
     }
@@ -332,6 +360,9 @@ public final class MCPServer: MCPServing {
         
         guard let tool = MCPToolName(rawValue: name) else {
             return MCPToolResult(text: BrainError.unknownTool(name: name).localizedDescription, isError: true)
+        }
+        if tool.changesVault, defaults.bool(forKey: Self.readOnlyKey) {
+            return MCPToolResult(text: BrainError.readOnlyMode(tool: name).localizedDescription, isError: true)
         }
         
         switch tool {
@@ -355,6 +386,20 @@ public final class MCPServer: MCPServing {
             return handleGetTags(args: arguments)
         case .getBacklinks:
             return handleGetBacklinks(args: arguments)
+        case .createFolder:
+            return handleCreateFolder(args: arguments)
+        }
+    }
+
+    private func handleCreateFolder(args: [String: AnyCodableValue]) -> MCPToolResult {
+        guard let path = args["path"]?.stringValue, !path.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return MCPToolResult(text: BrainError.invalidToolArgument(tool: "create_folder", argument: "path").localizedDescription, isError: true)
+        }
+        do {
+            try vault.createFolder(relativePath: path)
+            return MCPToolResult(text: "Successfully created folder '\(path)'")
+        } catch {
+            return MCPToolResult(text: error.localizedDescription, isError: true)
         }
     }
     

@@ -100,7 +100,7 @@ Brain.md runs a local [Model Context Protocol](https://modelcontextprotocol.io) 
 3. Restart Claude Desktop.
 
 <details>
-<summary><strong>The 10 tools assistants get</strong></summary>
+<summary><strong>The 11 tools assistants get</strong></summary>
 
 | Tool              | What it does                                         | Arguments                                       |
 | :---------------- | :--------------------------------------------------- | :---------------------------------------------- |
@@ -114,6 +114,7 @@ Brain.md runs a local [Model Context Protocol](https://modelcontextprotocol.io) 
 | `move_note`       | Renames or moves a note                              | `sourcePath`, `targetFolder`                    |
 | `get_tags`        | All tags with counts and notes                       | `tag` *(optional)*                              |
 | `get_backlinks`   | Incoming and outgoing links and tags of a note       | `path`                                          |
+| `create_folder`   | Creates a folder, with any missing parent folders    | `path`                                          |
 
 A read-only mode in Settings blocks every tool that changes notes. Full details in the [MCP Server docs](docs/mcp-server.md).
 
