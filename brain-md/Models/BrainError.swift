@@ -18,6 +18,8 @@ public enum BrainError: LocalizedError, Equatable, Sendable {
     case unknownTool(name: String)
     case resourceNotFound(uri: String)
     case invalidResourceScheme(uri: String)
+    case readOnlyMode(tool: String)
+    case noAppWindow
     
     public var errorDescription: String? {
         switch self {
@@ -45,6 +47,10 @@ public enum BrainError: LocalizedError, Equatable, Sendable {
             return "Resource not found for URI: '\(uri)'"
         case .invalidResourceScheme(let uri):
             return "Invalid resource URI scheme for '\(uri)'. Expected 'note://'"
+        case .noAppWindow:
+            return "This needs the Brain.md app with a window open; connect over HTTP (http://127.0.0.1:8765/sse) instead of --stdio."
+        case .readOnlyMode(let tool):
+            return "'\(tool)' changes the vault, and Brain.md's MCP server is in read-only mode (Settings › MCP Server)."
         }
     }
 }

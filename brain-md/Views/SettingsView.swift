@@ -1016,7 +1016,7 @@ public struct EditorSettingsPane: View {
 public struct MCPServerSettingsPane: View {
   @ObservedObject var server = MCPHTTPServer.shared
   @AppStorage("mcp_preferred_port") private var preferredPort: Int = 8765
-  @AppStorage("mcp_read_only") private var readOnlyMode: Bool = false
+  @AppStorage(MCPServer.readOnlyKey) private var readOnlyMode: Bool = false
   @State private var copiedConfig = false
 
   public var body: some View {

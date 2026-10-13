@@ -162,6 +162,17 @@ extension VaultManager {
         openInNewTab(path: item.relativePath, url: item.url)
     }
 
+    public var hasAppWindow: Bool { openWindowHandler != nil }
+
+    /// Opens a note for an MCP agent. Needs an app window: the `--stdio` server has none.
+    public func showNote(relativePath: String, inNewTab: Bool) throws {
+        guard hasAppWindow else { throw BrainError.noAppWindow }
+        guard let item = noteItem(atRelativePath: relativePath), !item.isDirectory else {
+            throw BrainError.fileNotFound(path: relativePath)
+        }
+        if inNewTab { openInNewTab(item) } else { selectNote(item) }
+    }
+
     /// Opens a file from Finder or the `brain` command: in its tab if it's open, in the frontmost
     /// window if that's empty, otherwise in a new tab.
     func openFileInTab(_ url: URL) {

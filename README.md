@@ -100,7 +100,7 @@ Brain.md runs a local [Model Context Protocol](https://modelcontextprotocol.io) 
 3. Restart Claude Desktop.
 
 <details>
-<summary><strong>The 10 tools assistants get</strong></summary>
+<summary><strong>The 16 tools assistants get</strong></summary>
 
 | Tool              | What it does                                         | Arguments                                       |
 | :---------------- | :--------------------------------------------------- | :---------------------------------------------- |
@@ -111,9 +111,15 @@ Brain.md runs a local [Model Context Protocol](https://modelcontextprotocol.io) 
 | `delete_note`     | Moves a note to the macOS Trash                      | `path`                                          |
 | `search_notes`    | Full-text and title search                           | `query`                                         |
 | `get_vault_stats` | Note and word counts, recent activity                | none                                            |
-| `move_note`       | Renames or moves a note                              | `sourcePath`, `targetFolder`                    |
+| `move_note`       | Moves a note or folder into another folder           | `sourcePath`, `targetFolder`                    |
+| `rename_note`     | Renames a note or folder                             | `path`, `newName`                               |
 | `get_tags`        | All tags with counts and notes                       | `tag` *(optional)*                              |
 | `get_backlinks`   | Incoming and outgoing links and tags of a note       | `path`                                          |
+| `create_folder`   | Creates a folder, with any missing parent folders    | `path`                                          |
+| `list_folders`    | Lists every folder, empty ones too                   | none                                            |
+| `search_by_meaning` | Finds notes by meaning with the on-device model    | `query`, `limit` *(optional)*                   |
+| `get_open_note`   | The note in Brain.md's front tab, unsaved edits too  | none                                            |
+| `open_note`       | Opens a note in Brain.md, in a new tab by default    | `path`, `newTab` *(optional)*                   |
 
 A read-only mode in Settings blocks every tool that changes notes. Full details in the [MCP Server docs](docs/mcp-server.md).
 
