@@ -74,6 +74,19 @@ public final class VaultManager: ObservableObject, VaultManaging {
             alert.informativeText = message
             if let window = NSApp.keyWindow { alert.beginSheetModal(for: window) } else { alert.runModal() }
         }
+        vault.confirmPresenter = { title, message, button, done in
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = message
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: button).hasDestructiveAction = true
+            alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
+            if let window = NSApp.keyWindow {
+                alert.beginSheetModal(for: window) { done($0 == .alertFirstButtonReturn) }
+            } else {
+                done(alert.runModal() == .alertFirstButtonReturn)
+            }
+        }
         vault.restoreTabs()
         return vault
     }()
@@ -94,6 +107,8 @@ public final class VaultManager: ObservableObject, VaultManaging {
     var tabsDefaults: UserDefaults?
     /// Shows a failed operation to the user (an alert sheet); nil, as in tests, only logs it.
     var errorPresenter: ((_ title: String, _ message: String) -> Void)?
+    /// Asks the user to confirm a destructive action (an alert sheet with a destructive button).
+    var confirmPresenter: ((_ title: String, _ message: String, _ button: String, _ done: @escaping (Bool) -> Void) -> Void)?
     /// Opens a note window; set by the first window, since only views can open windows.
     var openWindowHandler: ((NoteWindowRequest) -> Void)?
     var pendingTabPaths: [String] = []
@@ -775,9 +790,23 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
 
-    /// Move to Trash from the sidebar, a menu or ⌘⌫.
+    /// Move to Trash from the sidebar, a menu or ⌘⌫. An item that can't go to the Trash (a file
+    /// OneDrive has synced) can be deleted immediately instead, after a confirmation, as in Finder.
     public func trash(relativePath: String) {
-        reportingErrors("Couldn't Move to Trash") { try deleteFile(relativePath: relativePath) }
+        do {
+            try deleteFile(relativePath: relativePath)
+        } catch BrainError.cannotTrash(let path) {
+            let name = (path as NSString).lastPathComponent
+            let inCloud = vaultURL.path.contains("/Library/CloudStorage/")
+            let message = "Do you want to delete it immediately? You can't undo this action."
+                + (inCloud ? " Your cloud storage provider may keep a copy in its online recycle bin." : "")
+            confirmPresenter?("“\(name)” can't be moved to the Trash.", message, "Delete") { [weak self] confirmed in
+                guard confirmed, let self else { return }
+                self.reportingErrors("Couldn't Delete") { try self.deleteFile(relativePath: path, permanently: true) }
+            }
+        } catch {
+            reportingErrors("Couldn't Move to Trash") { throw error }
+        }
     }
 
     /// ⌘⌫: deletes to the start of the line while you're editing text (the note editor, or a field
@@ -793,20 +822,36 @@ public final class VaultManager: ObservableObject, VaultManaging {
 
     /// Moves a note, attachment or folder to the Trash, so Finder's Put Back can restore it.
     public func deleteFile(relativePath: String) throws {
+        try deleteFile(relativePath: relativePath, permanently: false)
+    }
+
+    /// `permanently` deletes without the Trash; only after the user confirmed it (see `trash`).
+    func deleteFile(relativePath: String, permanently: Bool) throws {
         let fileURL = try resolveSecurePath(relativePath: relativePath)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             throw BrainError.fileNotFound(path: relativePath)
         }
         
         do {
-            try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
+            if permanently {
+                try FileManager.default.removeItem(at: fileURL)
+            } else {
+                do {
+                    try FileManager.default.trashItem(at: fileURL, resultingItemURL: nil)
+                } catch CocoaError.fileWriteNoPermission {
+                    // Files a cloud provider (OneDrive) has synced need Full Disk Access to go to the Trash.
+                    throw BrainError.cannotTrash(path: relativePath)
+                }
+            }
             for session in sessions where session.selectedItem?.relativePath == relativePath {
                 session.selectedItem = nil
                 session.editorContent = ""
                 session.editorTitle = ""
             }
             refreshFiles()
-            logActivity(action: "Moved to Trash", detail: relativePath, isError: false)
+            logActivity(action: permanently ? "Deleted Permanently" : "Moved to Trash", detail: relativePath, isError: false)
+        } catch let error as BrainError {
+            throw error
         } catch {
             throw BrainError.deleteFailed(path: relativePath, reason: error.localizedDescription)
         }

@@ -20,6 +20,7 @@ public enum BrainError: LocalizedError, Equatable, Sendable {
     case invalidResourceScheme(uri: String)
     case readOnlyMode(tool: String)
     case noAppWindow
+    case cannotTrash(path: String)
     
     public var errorDescription: String? {
         switch self {
@@ -47,6 +48,8 @@ public enum BrainError: LocalizedError, Equatable, Sendable {
             return "Resource not found for URI: '\(uri)'"
         case .invalidResourceScheme(let uri):
             return "Invalid resource URI scheme for '\(uri)'. Expected 'note://'"
+        case .cannotTrash(let path):
+            return "'\(path)' can't be moved to the Trash: macOS doesn't let Brain.md trash files your cloud storage (OneDrive) has synced. Delete it in Brain.md, which offers to delete it immediately."
         case .noAppWindow:
             return "This needs the Brain.md app with a window open; connect over HTTP (http://127.0.0.1:8765/sse) instead of --stdio."
         case .readOnlyMode(let tool):

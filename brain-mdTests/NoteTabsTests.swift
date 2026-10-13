@@ -296,4 +296,39 @@ struct NoteTabsTests {
         #expect(ok)
         #expect(shown.count == 3) // a success shows nothing
     }
+
+    @Test func whatCantGoToTheTrashIsDeletedOnlyAfterConfirming() throws {
+        let vault = try setUp()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var shown: [String] = []
+        var asked: [String] = []
+        var answer = false
+        vault.errorPresenter = { title, _ in shown.append(title) }
+        vault.confirmPresenter = { title, _, _, done in asked.append(title); done(answer) }
+
+        // A read-only folder refuses the move to the Trash with the same permission error that
+        // OneDrive-synced files give.
+        let locked = vaultURL.appendingPathComponent("Locked")
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+        try "# Kept".write(to: locked.appendingPathComponent("Kept.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+        vault.refreshFiles()
+
+        #expect(throws: BrainError.cannotTrash(path: "Locked/Kept.md")) { try vault.deleteFile(relativePath: "Locked/Kept.md") }
+        vault.trash(relativePath: "Locked/Kept.md") // cancelled
+        #expect(asked == ["“Kept.md” can't be moved to the Trash."])
+        #expect(shown.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: locked.appendingPathComponent("Kept.md").path))
+
+        // Confirming deletes immediately; here the read-only folder refuses that too, which is shown.
+        answer = true
+        vault.trash(relativePath: "Locked/Kept.md")
+        #expect(shown == ["Couldn't Delete"])
+
+        // An ordinary file is deleted immediately when that's confirmed.
+        try vault.deleteFile(relativePath: "C.md", permanently: true)
+        #expect(!FileManager.default.fileExists(atPath: vaultURL.appendingPathComponent("C.md").path))
+        #expect(vault.recentActivities.first?.action == "Deleted Permanently")
+    }
 }
