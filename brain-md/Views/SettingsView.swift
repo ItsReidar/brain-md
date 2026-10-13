@@ -425,6 +425,7 @@ public struct GeneralSettingsPane: View {
   @AppStorage("file_watcher_enabled") private var fileWatcherEnabled: Bool = true
   @AppStorage("mcp_autostart_on_launch") private var mcpAutostart: Bool = true
   @AppStorage(AIFeatures.key) private var showsAIFeatures = true
+  @AppStorage(SidebarOrder.foldersFirstKey) private var foldersFirst = true
 
   private var previewTitle: String {
     NoteTemplateEngine.resolveTitle(preset: noteTitleFormat, customFormat: customTitleFormat)
@@ -452,6 +453,25 @@ public struct GeneralSettingsPane: View {
       }
 
       MarkdownDefaultAppCard()
+
+      SettingsCard(
+        title: "Sidebar",
+        footer: "Choose how notes are sorted with the ↑↓ button at the bottom of the sidebar, or drag notes into your own order."
+      ) {
+        SettingsRow(
+          title: "Show first",
+          subtitle: "Whether folders or notes come first in each folder",
+          icon: "sidebar.left"
+        ) {
+          Picker("", selection: $foldersFirst) {
+            Text("Folders").tag(true)
+            Text("Notes").tag(false)
+          }
+          .pickerStyle(.segmented)
+          .fixedSize()
+          .accessibilityLabel("Show first")
+        }
+      }
 
       SettingsCard(title: "Startup & New Notes") {
         // 1. Note Title Format

@@ -13,6 +13,8 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
     public let isDirectory: Bool
     public var children: [NoteItem]?
     public let modifiedAt: Date
+    /// When the file was created; the sidebar can sort by it.
+    public let createdAt: Date
     public let size: Int64
     public var tags: [String]
     /// A Markdown file opened from Finder that lives outside the vault. `relativePath` is then its
@@ -26,6 +28,7 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
         isDirectory: Bool,
         children: [NoteItem]? = nil,
         modifiedAt: Date = Date(),
+        createdAt: Date? = nil,
         size: Int64 = 0,
         tags: [String] = []
     ) {
@@ -35,6 +38,7 @@ public struct NoteItem: Identifiable, Hashable, Sendable {
         self.isDirectory = isDirectory
         self.children = children
         self.modifiedAt = modifiedAt
+        self.createdAt = createdAt ?? modifiedAt
         self.size = size
         self.tags = tags
     }

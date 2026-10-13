@@ -96,6 +96,14 @@ When a note or folder is moved or renamed, `VaultManager` preserves the active s
 
 ---
 
+## Sorting the Sidebar
+
+The **↑↓** button at the bottom of the sidebar sorts notes by **Name**, **Date Modified** (newest first), **Date Created** (newest first) or **Custom**. **Settings › General › Sidebar › Show first** (also in that menu as **Folders First**) puts folders or notes first in every folder, whatever the sort.
+
+Drag a note onto another to put it right above it. Dragging always works: in another sort mode it switches to **Custom**, starting from the order you were looking at. Dropping on a note in another folder moves the file there; dropping on a folder moves it into that folder, at the end. New notes appear after the ones you've arranged.
+
+The custom order is kept in the vault, in `.brain-md/sidebar-order.json` (folder path → file names in order), so it syncs with the vault and survives renames and moves (`SidebarOrder.swift`). The folder is hidden from the sidebar. Deleting the file resets the custom order.
+
 ## Moving Notes to the Trash
 
 Press ⌘⌫ (**File › Move to Trash**) to move the open note or attachment to the macOS Trash, where Finder's **Put Back** restores it. ⌘⌫ only deletes text while you're editing: in the note editor, or in a field that has text in it. An empty field doesn't count, so the sidebar search, which macOS focuses at launch, never swallows it (`VaultManager.commandDelete(firstResponder:)`). Clicking a note in the sidebar takes focus out of the editor, as in Finder. **Move to Trash** is also in the context menu of every note in the file tree, search results and tag lists. Files that OneDrive (or another File Provider cloud service) has already synced can't be moved to the Trash by apps without Full Disk Access; macOS refuses with a permission error. Brain.md then does what Finder does for items that can't go to the Trash: it asks whether to delete the file immediately (**Delete** / **Cancel**), and only deletes it after you confirm. The provider usually keeps a copy in its online recycle bin. Over MCP, `delete_note` returns an error explaining this instead of deleting permanently on an agent's behalf (`BrainError.cannotTrash`).
