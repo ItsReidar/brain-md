@@ -65,6 +65,19 @@ Pressing `⌘O` (or clicking the magnifying glass toolbar button) summons the Sp
 
 ---
 
+## LaTeX Math
+
+Write math in LaTeX, as on GitHub and in Obsidian:
+
+- **Inline:** `$E = mc^2$` is drawn in the line, on the text's baseline.
+- **Display:** `$$ … $$` (on one line or several) or a fenced ```` ```math ```` block is drawn centred on its own line.
+
+Formulas are drawn natively by [SwiftMath](https://github.com/mgriebling/SwiftMath) (MIT, pinned to 1.7.3): offline, no web views. It covers the math people write in notes (fractions, roots, sums and integrals, Greek letters, matrices, `cases`, `aligned`), not every LaTeX package. Formulas that don't parse show as their source in red.
+
+To keep prices plain, `$` follows Pandoc's rule: an opening `$` must be followed by a non-space, and a closing `$` must follow a non-space and not be followed by a digit, so "$5 and $10" stays text. `\$` is a literal dollar, and code spans are left alone (`MathSyntax`).
+
+The same renderer (`MathRenderer`) puts formulas into PDF exports and Quick Look previews as images (inverted for dark themes), and the editor highlights math in the code colour. In AI Chat, math blocks show as code.
+
 ## Real-Time Syntax Highlighting
 
 `brain-md` uses a custom, high-performance regex-based syntax highlighter (`SyntaxHighlighter.swift`) running directly on macOS `NSTextStorage` / `AttributedString`.

@@ -791,6 +791,11 @@ public struct MarkdownSyntaxHighlighter: Sendable {
     private static let tagRegex = try! NSRegularExpression(
         pattern: "(?<=^|\\s)#([a-zA-Z0-9_-]+)"
     )
+    /// LaTeX math: `$$…$$` blocks and `$…$` inline, by the same rule as MathSyntax (no "$5 and $10").
+    private static let displayMathRegex = try! NSRegularExpression(pattern: "\\$\\$[\\s\\S]+?\\$\\$")
+    private static let inlineMathRegex = try! NSRegularExpression(
+        pattern: "(?<![\\\\$])\\$(?=[^\\s$])(?:\\\\.|[^$\\n\\\\])+?(?<=\\S)\\$(?![\\d$])"
+    )
     private static let inlineCodeRegex = try! NSRegularExpression(
         pattern: "(`[^`\\n]+`)"
     )
@@ -981,6 +986,14 @@ public struct MarkdownSyntaxHighlighter: Sendable {
             textStorage.addAttribute(.font, value: boldFont, range: m.range)
         }
         
+        // 14b. LaTeX math ($…$, $$…$$); inline code and code blocks below take precedence
+        for regex in [displayMathRegex, inlineMathRegex] {
+            for m in regex.matches(in: string, range: fullRange) {
+                textStorage.addAttribute(.font, value: monoFont, range: m.range)
+                textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
+            }
+        }
+
         // 15. Inline Code (`code`)
         let codeMatches = inlineCodeRegex.matches(in: string, range: fullRange)
         for m in codeMatches {

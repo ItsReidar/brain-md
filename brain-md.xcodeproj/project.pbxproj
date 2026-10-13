@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D0A100000000000000000062 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = D0A100000000000000000061 /* SwiftMath */; };
+		D0A100000000000000000064 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = D0A100000000000000000063 /* SwiftMath */; };
 		D0A1000000000000000000C1 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B1 /* MLXVLM */; };
 		D0A1000000000000000000C2 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B2 /* MLXLMCommon */; };
 		D0A1000000000000000000C3 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = D0A1000000000000000000B3 /* MLX */; };
@@ -94,6 +96,8 @@
 				Models/TerminalTheme.swift,
 				Resources/TerminalThemes.swift,
 				Services/MarkdownQuickLook.swift,
+				Services/MathRenderer.swift,
+				Services/MathSyntax.swift,
 				Services/ScrollSyncCoordinator.swift,
 				Services/SyntaxHighlighter.swift,
 				Services/ThemeManager.swift,
@@ -150,6 +154,7 @@
 				D0A1000000000000000000C7 /* MLXAudioSTT in Frameworks */,
 				D0A1000000000000000000C8 /* MLXAudioVAD in Frameworks */,
 				D0A1000000000000000000C9 /* MLXAudioCore in Frameworks */,
+				D0A100000000000000000062 /* SwiftMath in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -171,6 +176,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D0A100000000000000000064 /* SwiftMath in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -221,6 +227,7 @@
 			);
 			name = "brain-md";
 			packageProductDependencies = (
+				D0A100000000000000000061 /* SwiftMath */,
 				D0A1000000000000000000B1 /* MLXVLM */,
 				D0A1000000000000000000B2 /* MLXLMCommon */,
 				D0A1000000000000000000B3 /* MLX */,
@@ -299,6 +306,7 @@
 			);
 			name = "brain-md-QuickLook";
 			packageProductDependencies = (
+				D0A100000000000000000063 /* SwiftMath */,
 			);
 			productName = "brain-md-QuickLook";
 			productReference = D0B20000000000000000000A /* brain-md-QuickLook.appex */;
@@ -345,6 +353,7 @@
 				D0A1000000000000000000A3 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
 				D0A1000000000000000000A4 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 				D0A1000000000000000000A5 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
+				D0A100000000000000000060 /* XCRemoteSwiftPackageReference "SwiftMath" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D09200EB305B825300CC84D2 /* Products */;
@@ -871,6 +880,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		D0A100000000000000000060 /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mgriebling/SwiftMath.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.7.3;
+			};
+		};
 		D0A1000000000000000000A1 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
@@ -914,6 +931,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D0A100000000000000000061 /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0A100000000000000000060 /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
+		};
+		D0A100000000000000000063 /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0A100000000000000000060 /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
+		};
 		D0A1000000000000000000B1 /* MLXVLM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D0A1000000000000000000A1 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
