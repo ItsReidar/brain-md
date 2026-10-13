@@ -42,6 +42,7 @@ brew install --cask itsreidar/tap/brain-md
 - **Live split view.** Editor and preview side by side, with synced scrolling, or either one on its own.
 - **Everything Markdown can do.** GitHub Flavored Markdown with tables, task lists, callouts (`[!NOTE]`, `[!TIP]` …), definition lists, `==highlights==`, emoji shortcodes and inline HTML like `<details>`, `<kbd>` and `<mark>`.
 - **Diagrams offline.** Mermaid flowcharts, sequence and state diagrams render without a network connection.
+- **LaTeX math.** Write `$E = mc^2$` inline or `$$ … $$` blocks; formulas are drawn natively, offline, in the preview, PDF exports and Quick Look.
 - **Code that looks good.** Syntax-highlighted code blocks styled as macOS windows, with one-click copy.
 - **An editor that behaves.** Smart lists with Tab / ⇧Tab, auto-pairing, selection wrapping, and no surprise em-dashes.
 - **112 themes.** Catppuccin, Tokyo Night, Dracula, Nord, Gruvbox, Solarized and many more, light and dark.

@@ -115,7 +115,7 @@ public struct MarkdownPreviewView: View {
                                     Text("[\(fn.id)]")
                                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                                         .foregroundColor(.accentColor)
-                                    Text(parseAttributedString(fn.text))
+                                    inlineText(fn.text)
                                         .font(.system(size: 12))
                                         .foregroundColor(.secondary)
                                 }
@@ -170,6 +170,8 @@ public struct MarkdownPreviewView: View {
         case alert(type: AlertType, text: String)
         case codeBlock(lang: String, code: String)
         case mermaidDiagram(code: String)
+        /// LaTeX display math: `$$…$$` or a ```math fence.
+        case math(String)
         case blockquote(String)
         case taskItem(done: Bool, text: String)
         case listItem(ordered: Bool, number: Int, text: String, indent: Int)
@@ -246,9 +248,18 @@ public struct MarkdownPreviewView: View {
                 let fullCode = codeLines.joined(separator: "\n")
                 if lang.lowercased() == "mermaid" {
                     blocks.append(.mermaidDiagram(code: fullCode))
+                } else if lang.lowercased() == "math" {
+                    blocks.append(.math(fullCode))
                 } else {
                     blocks.append(.codeBlock(lang: lang, code: fullCode))
                 }
+                continue
+            }
+            
+            // 2b. LaTeX display math ($$ … $$)
+            if let math = MathSyntax.block(in: lines, at: i) {
+                blocks.append(.math(math.latex))
+                i = math.end + 1
                 continue
             }
             
@@ -709,7 +720,7 @@ public struct MarkdownPreviewView: View {
         case .h1(let text):
             let (title, _) = Self.parseHeadingTextAndID(text)
             VStack(alignment: .leading, spacing: 8) {
-                Text(parseAttributedString(title))
+                inlineText(title)
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundColor(.primary)
                 Divider()
@@ -720,7 +731,7 @@ public struct MarkdownPreviewView: View {
         case .h2(let text):
             let (title, _) = Self.parseHeadingTextAndID(text)
             VStack(alignment: .leading, spacing: 6) {
-                Text(parseAttributedString(title))
+                inlineText(title)
                     .font(.system(size: 21, weight: .bold, design: .rounded))
                     .foregroundColor(.primary)
                 Divider()
@@ -730,7 +741,7 @@ public struct MarkdownPreviewView: View {
             
         case .h3(let text):
             let (title, _) = Self.parseHeadingTextAndID(text)
-            Text(parseAttributedString(title))
+            inlineText(title)
                 .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .foregroundColor(.primary)
                 .padding(.top, 20)
@@ -738,7 +749,7 @@ public struct MarkdownPreviewView: View {
             
         case .h4(let text):
             let (title, _) = Self.parseHeadingTextAndID(text)
-            Text(parseAttributedString(title))
+            inlineText(title)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.primary)
                 .padding(.top, 16)
@@ -746,7 +757,7 @@ public struct MarkdownPreviewView: View {
             
         case .h5(let text):
             let (title, _) = Self.parseHeadingTextAndID(text)
-            Text(parseAttributedString(title))
+            inlineText(title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.secondary)
                 .padding(.top, 14)
@@ -754,7 +765,7 @@ public struct MarkdownPreviewView: View {
             
         case .h6(let text):
             let (title, _) = Self.parseHeadingTextAndID(text)
-            Text(parseAttributedString(title))
+            inlineText(title)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.secondary)
                 .padding(.top, 12)
@@ -768,13 +779,15 @@ public struct MarkdownPreviewView: View {
             
         case .mermaidDiagram(let code):
             MermaidDiagramView(code: code)
+        case .math(let latex):
+            mathBlock(latex)
             
         case .blockquote(let text):
             HStack(alignment: .top, spacing: 12) {
                 Rectangle()
                     .fill(Color.secondary.opacity(0.4))
                     .frame(width: 3.5)
-                Text(parseAttributedString(text))
+                inlineText(text)
                     .font(.system(size: 14))
                     .foregroundColor(.secondary)
                     .lineSpacing(4)
@@ -787,7 +800,7 @@ public struct MarkdownPreviewView: View {
                     .foregroundColor(done ? .accentColor : .secondary)
                     .font(.system(size: 14))
                     .padding(.top, 2)
-                Text(parseAttributedString(text))
+                inlineText(text)
                     .font(.system(size: 14))
                     .foregroundColor(done ? .secondary : .primary)
                     .strikethrough(done, color: .secondary)
@@ -803,7 +816,7 @@ public struct MarkdownPreviewView: View {
                 } else {
                     renderBulletGlyph(for: indent)
                 }
-                Text(parseAttributedString(text))
+                inlineText(text)
                     .font(.system(size: 14))
                     .lineSpacing(3)
             }
@@ -817,12 +830,12 @@ public struct MarkdownPreviewView: View {
             
         case .definitionList(let term, let definitions):
             VStack(alignment: .leading, spacing: 6) {
-                Text(parseAttributedString(term))
+                inlineText(term)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.primary)
                 ForEach(definitions.indices, id: \.self) { dIdx in
                     HStack(alignment: .top, spacing: 6) {
-                        Text(parseAttributedString(definitions[dIdx]))
+                        inlineText(definitions[dIdx])
                             .font(.system(size: 13.5))
                             .foregroundColor(.secondary)
                             .lineSpacing(3)
@@ -861,14 +874,14 @@ public struct MarkdownPreviewView: View {
                 .replacingOccurrences(of: "<center>", with: "", options: .caseInsensitive)
                 .replacingOccurrences(of: "</center>", with: "", options: .caseInsensitive)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            Text(parseAttributedString(stripped))
+            inlineText(stripped)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
         } else {
             let stripped = trimmed.replacingOccurrences(of: "</?[a-zA-Z][a-zA-Z0-9]*\\b[^>]*\\/?>", with: "", options: .regularExpression)
             if !stripped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(parseAttributedString(stripped))
+                inlineText(stripped)
                     .font(.system(size: 14))
                     .padding(.vertical, 2)
             }
@@ -924,7 +937,7 @@ public struct MarkdownPreviewView: View {
                 }
                 .foregroundColor(type.accentColor)
                 
-                Text(parseAttributedString(content))
+                inlineText(content)
                     .font(.system(size: 13.5))
                     .foregroundColor(.primary)
                     .lineSpacing(3)
@@ -948,7 +961,7 @@ public struct MarkdownPreviewView: View {
                 GridRow {
                     ForEach(headers.indices, id: \.self) { cIdx in
                         let align = cIdx < alignments.count ? alignments[cIdx] : .leading
-                        Text(parseAttributedString(headers[cIdx]))
+                        inlineText(headers[cIdx])
                             .font(.system(size: 13, weight: .bold))
                             .multilineTextAlignment(align)
                             .padding(.horizontal, 14)
@@ -974,7 +987,7 @@ public struct MarkdownPreviewView: View {
                         ForEach(headers.indices, id: \.self) { cIdx in
                             let align = cIdx < alignments.count ? alignments[cIdx] : .leading
                             let cellText = cIdx < row.count ? row[cIdx] : ""
-                            Text(parseAttributedString(cellText))
+                            inlineText(cellText)
                                 .font(.system(size: 13))
                                 .multilineTextAlignment(align)
                                 .padding(.horizontal, 14)
@@ -1016,12 +1029,12 @@ public struct MarkdownPreviewView: View {
                         RoundedRectangle(cornerRadius: 3)
                             .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
                     )
-                Text(parseAttributedString(text))
+                inlineText(text)
                     .font(.system(size: 14.5))
                     .lineSpacing(4)
             }
         } else {
-            Text(parseAttributedString(text))
+            inlineText(text)
                 .font(.system(size: 14.5))
                 .lineSpacing(4)
         }
@@ -1063,6 +1076,46 @@ public struct MarkdownPreviewView: View {
     
     private func parseAttributedString(_ markdown: String) -> AttributedString {
         Self.parseStaticAttributedString(markdown)
+    }
+
+    private var mathColor: NSColor { colorScheme == .dark ? .white : .black }
+
+    /// Inline Markdown with `$…$` math drawn in place, on the text's baseline. Text without a `$`
+    /// takes the plain path. LaTeX that doesn't parse shows as its source, in red.
+    /// shortcut: math is drawn at body size (14.5 pt) even in headings; pass a size if that matters.
+    private func inlineText(_ markdown: String) -> Text {
+        guard markdown.contains("$") else { return Text(parseAttributedString(markdown)) }
+        return MathSyntax.inlineSegments(markdown).reduce(Text(verbatim: "")) { text, segment in
+            switch segment {
+            case .text(let part):
+                return text + Text(parseAttributedString(part))
+            case .math(let latex):
+                guard let rendered = MathRenderer.render(latex, display: false, fontSize: 14.5, color: mathColor) else {
+                    return text + Text(verbatim: "$\(latex)$").foregroundColor(.red)
+                }
+                return text + Text(Image(nsImage: rendered.image)).baselineOffset(-rendered.descent)
+            }
+        }
+    }
+
+    /// Display math, centred and shrunk to fit the pane; LaTeX that doesn't parse shows as its source.
+    @ViewBuilder
+    private func mathBlock(_ latex: String) -> some View {
+        if let rendered = MathRenderer.render(latex, display: true, fontSize: 17, color: mathColor) {
+            Image(nsImage: rendered.image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: rendered.image.size.width)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .accessibilityLabel(latex)
+        } else {
+            Text(verbatim: latex)
+                .font(.system(size: 13, design: .monospaced))
+                .foregroundColor(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help("This LaTeX couldn't be rendered")
+        }
     }
     
     public static func parseStaticAttributedString(_ markdown: String) -> AttributedString {
@@ -1876,6 +1929,8 @@ public enum MarkdownHTMLRenderer {
                 out += renderCodeBlockHTML(lang: lang, code: code) + "\n"
             case .mermaidDiagram(let code):
                 out += renderMermaidHTML(code: code) + "\n"
+            case .math(let latex):
+                out += "<div class=\"math-block\">\(MathRenderer.htmlImage(latex, display: true, fontSize: 17) ?? "<pre class=\"math-error\">\(escapeHTML(latex))</pre>")</div>\n"
             case .blockquote(let text):
                 out += "<blockquote><p>\(renderInline(text, noteURL: noteURL, vaultURL: vaultURL))</p></blockquote>\n"
             case .taskItem(let done, let text):
@@ -2085,6 +2140,22 @@ public enum MarkdownHTMLRenderer {
         
         var placeholders: [String: String] = [:]
         var pCounter = 0
+
+        // Step 0: LaTeX math $…$, drawn as an image (MathSyntax leaves code spans to step 1).
+        if str.contains("$") {
+            str = MathSyntax.inlineSegments(str).map { segment -> String in
+                switch segment {
+                case .text(let part):
+                    return part
+                case .math(let latex):
+                    let key = "@@MATH_\(pCounter)@@"
+                    pCounter += 1
+                    placeholders[key] = MathRenderer.htmlImage(latex, display: false, fontSize: 14.5)
+                        ?? "<code class=\"math-error\">$\(escapeHTML(latex))$</code>"
+                    return key
+                }
+            }.joined()
+        }
         
         // Step 1: Code spans `code`
         if let codeSpanRegex = try? NSRegularExpression(pattern: "`([^`]+)`") {
@@ -2757,6 +2828,21 @@ public enum MarkdownHTMLRenderer {
         }
         .mermaid {
           text-align: center;
+        }
+
+        .math-block {
+          text-align: center;
+          margin: 12px 0;
+        }
+
+        img.math {
+          display: inline-block;
+          max-width: 100%;
+          \(isDark ? "filter: invert(1);" : "")
+        }
+
+        .math-error {
+          color: #cf222e;
         }
 
         /* Extended Markdown & HTML Syntax */

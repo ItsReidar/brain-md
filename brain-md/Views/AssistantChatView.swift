@@ -598,6 +598,8 @@ struct ChatMarkdownView: View {
             CodeBlockView(language: language, code: code)
         case .mermaidDiagram(let code):
             CodeBlockView(language: "mermaid", code: code)
+        case .math(let latex):
+            CodeBlockView(language: "math", code: latex)
         case .blockquote(let text):
             quote(Text(Self.inline(text)), tint: .secondary)
         case .alert(let type, let text):
