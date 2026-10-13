@@ -101,8 +101,39 @@ struct ExternalFilesTests {
     @Test func theBrainCommandShipsInTheApp() throws {
         let script = try #require(Bundle.main.url(forResource: "brain", withExtension: nil))
         #expect(FileManager.default.isExecutableFile(atPath: script.path))
-        #expect(try String(contentsOf: script, encoding: .utf8).contains("open -b \(Bundle.main.bundleIdentifier!)"))
         #expect(try String(contentsOf: script, encoding: .utf8).contains("xattr -w \(VaultManager.newFileAttribute)"))
+    }
+
+    /// `brain` opens the app it ships in, even through Homebrew's link, never just any copy macOS
+    /// has registered for the bundle ID (old Xcode builds took the files before).
+    @Test func theBrainCommandOpensTheAppItShipsIn() throws {
+        let script = try #require(Bundle.main.url(forResource: "brain", withExtension: nil))
+        let dir = root.appendingPathComponent("bin")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Homebrew's /opt/homebrew/bin/brain is a link like this one.
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("brain"), withDestinationURL: script)
+        // A stand-in for /usr/bin/open that records its arguments.
+        let log = dir.appendingPathComponent("open.log")
+        let fakeOpen = dir.appendingPathComponent("open")
+        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > '\(log.path)'\n".write(to: fakeOpen, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeOpen.path)
+
+        func run(_ arguments: [String]) throws -> [String] {
+            let process = Process()
+            process.executableURL = dir.appendingPathComponent("brain")
+            process.arguments = arguments
+            process.environment = ["PATH": "\(dir.path):/usr/bin:/bin"]
+            process.currentDirectoryURL = root
+            try process.run()
+            process.waitUntilExit()
+            return try String(contentsOf: log, encoding: .utf8).split(separator: "\n").map(String.init)
+        }
+        let resolved = try #require(realpath(Bundle.main.bundlePath, nil))
+        defer { free(resolved) }
+        let appPath = String(cString: resolved)
+        #expect(try run([]) == ["-a", appPath])
+        #expect(try run(["note.md"]) == ["-a", appPath, "--", "note.md"])
     }
 
     /// An empty file marked the way the `brain` command marks the files it creates.

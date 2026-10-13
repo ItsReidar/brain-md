@@ -31,7 +31,7 @@ A file that doesn't exist yet is created empty first, so `brain new.md` starts a
 ln -s /Applications/brain-md.app/Contents/Resources/brain /usr/local/bin/brain
 ```
 
-The command is a short shell script (`brain-md/Resources/brain`) that runs `open -b itsreidar.brain-md`, so it reaches the installed app through Launch Services.
+The command is a short shell script (`brain-md/Resources/brain`). It follows its own link back into the app it ships in and runs `open -a` on that app, so `brain` always opens that copy (`/Applications/brain-md.app` for Homebrew), never an old Xcode or test build that macOS also has registered for the bundle ID.
 
 ## Quick Look preview
 
