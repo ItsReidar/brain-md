@@ -27,6 +27,10 @@ public protocol VaultManaging: AnyObject {
     func selectNote(byRelativePath path: String)
     func generateUniqueNotePath(baseName: String) -> String
     func saveCurrentNote()
+    /// The app has an editor window (not the headless `--stdio` server).
+    var hasAppWindow: Bool { get }
+    /// Shows a note in the app, in a new tab or the front one; throws without an app window.
+    func showNote(relativePath: String, inNewTab: Bool) throws
     func promptNewNote()
     func createNote(named name: String) throws -> String
     func createNoteFromTemplate() throws -> String

@@ -596,7 +596,70 @@ struct brain_mdTests {
         #expect(!FileManager.default.fileExists(atPath: tempDir.appendingPathComponent("New.md").path))
         #expect(try await call("list_notes", [:]).isError == false)
         #expect(MCPToolName.allCases.filter(\.changesVault).map(\.rawValue).sorted()
-                == ["create_folder", "create_note", "delete_note", "move_note", "update_note"])
+                == ["create_folder", "create_note", "delete_note", "move_note", "rename_note", "update_note"])
+    }
+
+    @Test func mcpToolsForTabsFoldersRenamingAndSearchByMeaning() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("vault_mcp_new_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir.appendingPathComponent("Empty"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: tempDir.appendingPathComponent("Projects/2026"), withIntermediateDirectories: true)
+        try "# Budget".write(to: tempDir.appendingPathComponent("Budget.md"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let suite = "brainmd-tests-mcp-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = VaultManager(customVaultURL: tempDir)
+        var searchAvailable = false
+        let server = MCPServer(vault: vault, defaults: defaults) { query, limit in
+            guard searchAvailable else { throw SemanticSearchError.unavailable }
+            return [SemanticMatch(relativePath: "Budget.md", title: "Budget", excerpt: "costs \(query)", score: 0.8)].prefix(limit).map { $0 }
+        }
+        func call(_ name: String, _ arguments: [String: AnyCodableValue] = [:]) async throws -> (isError: Bool, text: String) {
+            let request = JSONRPCRequest(id: .int(1), method: "tools/call",
+                                         params: ["name": .string(name), "arguments": .dictionary(arguments)])
+            let data = await server.handleRequest(data: try JSONEncoder().encode(request))
+            let response = try JSONDecoder().decode(JSONRPCResponse.self, from: try #require(data))
+            return (response.result?["isError"]?.boolValue ?? true,
+                    response.result?["content"]?.arrayValue?.first?["text"]?.stringValue ?? "")
+        }
+
+        // list_folders shows empty folders too.
+        let folders = try await call("list_folders")
+        #expect(folders.text == #"["Empty","Projects","Projects/2026"]"#)
+
+        // rename_note keeps the extension.
+        #expect(try await call("rename_note", ["path": "Budget.md", "newName": "Costs"]).isError == false)
+        #expect(FileManager.default.fileExists(atPath: tempDir.appendingPathComponent("Costs.md").path))
+
+        // search_by_meaning: a clear error until a model is there, then ranked notes as JSON.
+        let unavailable = try await call("search_by_meaning", ["query": "overrun"])
+        #expect(unavailable.isError && unavailable.text.contains("Semantic Search"))
+        searchAvailable = true
+        let found = try await call("search_by_meaning", ["query": "overrun", "limit": .int(5)])
+        #expect(!found.isError && found.text.contains(#""relativePath":"Budget.md""#) && found.text.contains("costs overrun"))
+        #expect(try await call("search_by_meaning", [:]).isError)
+
+        // get_open_note and open_note need an app window.
+        #expect(try await call("open_note", ["path": "Costs.md"]).text.contains("--stdio"))
+        #expect(try await call("get_open_note").isError)
+        _ = vault.claimSession()
+        vault.openWindowHandler = { [weak vault] request in
+            guard let vault else { return }
+            vault.activate(vault.claimSession(loading: request.path))
+        }
+        #expect(try await call("open_note", ["path": "Costs.md"]).isError == false)
+        #expect(vault.selectedItem?.relativePath == "Costs.md")
+        vault.editorContent = "# Costs\nNot saved yet"
+        vault.hasUnsavedChanges = true
+        let open = try await call("get_open_note")
+        #expect(!open.isError && open.text.contains("Not saved yet") && open.text.contains(#""hasUnsavedChanges":true"#))
+        #expect(try await call("open_note", ["path": "Missing.md"]).isError)
+
+        // Read-only blocks renaming but not reading or opening.
+        defaults.set(true, forKey: MCPServer.readOnlyKey)
+        #expect(try await call("rename_note", ["path": "Costs.md", "newName": "X"]).isError)
+        #expect(try await call("list_folders").isError == false)
+        #expect(try await call("open_note", ["path": "Costs.md", "newTab": .bool(false)]).isError == false)
     }
 
     @Test func testFolderMoveAndRenamePreservesSelection() throws {

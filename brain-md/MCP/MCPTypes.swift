@@ -268,6 +268,15 @@ public struct NoteListingItem: Codable, Sendable {
     }
 }
 
+/// The note in Brain.md's front tab, for `get_open_note`.
+public struct OpenNoteItem: Codable, Sendable {
+    public let path: String
+    public let title: String
+    public let content: String
+    public let hasUnsavedChanges: Bool
+    public let isOutsideVault: Bool
+}
+
 public struct SearchResultItem: Codable, Sendable {
     public let path: String
     public let title: String

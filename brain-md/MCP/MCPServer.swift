@@ -19,12 +19,18 @@ public enum MCPToolName: String, CaseIterable, Sendable {
     case getTags = "get_tags"
     case getBacklinks = "get_backlinks"
     case createFolder = "create_folder"
+    case renameNote = "rename_note"
+    case listFolders = "list_folders"
+    case searchByMeaning = "search_by_meaning"
+    case getOpenNote = "get_open_note"
+    case openNote = "open_note"
 
     /// Tools that change the vault; Settings › MCP Server › Read-Only blocks them.
     var changesVault: Bool {
         switch self {
-        case .createNote, .updateNote, .deleteNote, .moveNote, .createFolder: true
-        case .listNotes, .readNote, .searchNotes, .getVaultStats, .getTags, .getBacklinks: false
+        case .createNote, .updateNote, .deleteNote, .moveNote, .createFolder, .renameNote: true
+        case .listNotes, .readNote, .searchNotes, .getVaultStats, .getTags, .getBacklinks, .listFolders,
+             .searchByMeaning, .getOpenNote, .openNote: false
         }
     }
 }
@@ -34,7 +40,7 @@ public enum MCPToolName: String, CaseIterable, Sendable {
 @MainActor
 public protocol MCPServing: AnyObject {
     func handleRequest(data: Data) async -> Data?
-    func handle(request: JSONRPCRequest) -> JSONRPCResponse?
+    func handle(request: JSONRPCRequest) async -> JSONRPCResponse?
 }
 
 // MARK: - MCPServer Implementation
@@ -45,17 +51,22 @@ public final class MCPServer: MCPServing {
     
     private let vault: any VaultManaging
     private let defaults: UserDefaults
+    private let searchByMeaning: (String, Int) async throws -> [SemanticMatch]
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
     /// The Read-Only switch in Settings › MCP Server.
     static let readOnlyKey = "mcp_read_only"
     
-    public init(vault: (any VaultManaging)? = nil, defaults: UserDefaults = .standard) {
+    init(
+        vault: (any VaultManaging)? = nil, defaults: UserDefaults = .standard,
+        searchByMeaning: ((String, Int) async throws -> [SemanticMatch])? = nil
+    ) {
         self.vault = vault ?? VaultManager.shared
         self.defaults = defaults
+        self.searchByMeaning = searchByMeaning ?? { try await SemanticSearch.shared.matches(for: $0, limit: $1) }
         let enc = JSONEncoder()
-        enc.outputFormatting = [.sortedKeys]
+        enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes] // paths read as "A/B", not "A\/B"
         self.encoder = enc
         self.decoder = JSONDecoder()
     }
@@ -75,11 +86,11 @@ public final class MCPServer: MCPServing {
             return try? encoder.encode(errResp)
         }
         
-        guard let response = handle(request: request) else { return nil }
+        guard let response = await handle(request: request) else { return nil }
         return try? encoder.encode(response)
     }
     
-    public func handle(request: JSONRPCRequest) -> JSONRPCResponse? {
+    public func handle(request: JSONRPCRequest) async -> JSONRPCResponse? {
         let isNotification = (request.id == nil)
         
         switch request.method {
@@ -135,7 +146,7 @@ public final class MCPServer: MCPServing {
                 return JSONRPCResponse(id: request.id, error: .invalidParams)
             }
             let arguments = params["arguments"]?.dictValue ?? [:]
-            let toolResult = executeTool(name: toolName, arguments: arguments)
+            let toolResult = await executeTool(name: toolName, arguments: arguments)
             
             let contentsArray: [AnyCodableValue] = toolResult.content.map { c in
                 AnyCodableValue.dictionary([
@@ -349,13 +360,61 @@ public final class MCPServer: MCPServing {
                     ]),
                     "required": AnyCodableValue.array([AnyCodableValue.string("path")])
                 ])
+            ),
+            MCPTool(
+                name: MCPToolName.renameNote.rawValue,
+                description: "Rename a note or folder in place. A note keeps its extension if the new name leaves it out.",
+                inputSchema: Self.schema(
+                    ["path": "Relative path of the note or folder to rename",
+                     "newName": "New name, without a folder (e.g., 'Meeting 2026-10-13')"],
+                    required: ["path", "newName"])
+            ),
+            MCPTool(
+                name: MCPToolName.listFolders.rawValue,
+                description: "List every folder in the vault, including empty ones.",
+                inputSchema: Self.schema([:])
+            ),
+            MCPTool(
+                name: MCPToolName.searchByMeaning.rawValue,
+                description: "Search notes by meaning rather than exact words, with Brain.md's on-device embedding model, across languages. Needs a search model downloaded in Brain.md's Settings; the first search indexes the vault.",
+                inputSchema: Self.schema(
+                    ["query": "What you're looking for, in plain words",
+                     "limit": "Maximum number of notes to return (1-50, default 10)"],
+                    types: ["limit": "integer"], required: ["query"])
+            ),
+            MCPTool(
+                name: MCPToolName.getOpenNote.rawValue,
+                description: "Get the note open in Brain.md's front tab, including edits not saved yet. Needs the Brain.md app (HTTP), not --stdio.",
+                inputSchema: Self.schema([:])
+            ),
+            MCPTool(
+                name: MCPToolName.openNote.rawValue,
+                description: "Open a note in Brain.md for the user to see, in a new tab by default. Needs the Brain.md app (HTTP), not --stdio.",
+                inputSchema: Self.schema(
+                    ["path": "Relative path of the note",
+                     "newTab": "Open in a new tab (default true) or in the front tab"],
+                    types: ["newTab": "boolean"], required: ["path"])
             )
         ]
+    }
+
+    /// An object schema with string properties (or the given `types`) and their descriptions.
+    private static func schema(
+        _ properties: [String: String], types: [String: String] = [:], required: [String] = []
+    ) -> AnyCodableValue {
+        var schema: [String: AnyCodableValue] = [
+            "type": .string("object"),
+            "properties": .dictionary(Dictionary(uniqueKeysWithValues: properties.map { key, description in
+                (key, AnyCodableValue.dictionary(["type": .string(types[key] ?? "string"), "description": .string(description)]))
+            })),
+        ]
+        if !required.isEmpty { schema["required"] = .array(required.map { .string($0) }) }
+        return .dictionary(schema)
     }
     
     // MARK: - Tool Execution
     
-    private func executeTool(name: String, arguments: [String: AnyCodableValue]) -> MCPToolResult {
+    private func executeTool(name: String, arguments: [String: AnyCodableValue]) async -> MCPToolResult {
         log(action: "Tool Call: \(name)", detail: "\(arguments)")
         
         guard let tool = MCPToolName(rawValue: name) else {
@@ -388,6 +447,78 @@ public final class MCPServer: MCPServing {
             return handleGetBacklinks(args: arguments)
         case .createFolder:
             return handleCreateFolder(args: arguments)
+        case .renameNote:
+            return handleRenameNote(args: arguments)
+        case .listFolders:
+            return handleListFolders()
+        case .searchByMeaning:
+            return await handleSearchByMeaning(args: arguments)
+        case .getOpenNote:
+            return handleGetOpenNote()
+        case .openNote:
+            return handleOpenNote(args: arguments)
+        }
+    }
+
+    private func json<T: Encodable>(_ value: T) -> MCPToolResult {
+        guard let data = try? encoder.encode(value), let text = String(data: data, encoding: .utf8) else {
+            return MCPToolResult(text: "Couldn't encode the result", isError: true)
+        }
+        return MCPToolResult(text: text)
+    }
+
+    private func handleRenameNote(args: [String: AnyCodableValue]) -> MCPToolResult {
+        guard let path = args["path"]?.stringValue, let newName = args["newName"]?.stringValue else {
+            return MCPToolResult(text: BrainError.invalidToolArgument(tool: "rename_note", argument: "path/newName").localizedDescription, isError: true)
+        }
+        do {
+            try vault.renameItem(oldRelativePath: path, newName: newName)
+            return MCPToolResult(text: "Successfully renamed '\(path)' to '\(newName)'")
+        } catch {
+            return MCPToolResult(text: error.localizedDescription, isError: true)
+        }
+    }
+
+    /// Every folder, empty ones included (list_notes only lists notes).
+    private func handleListFolders() -> MCPToolResult {
+        func folders(in items: [NoteItem]) -> [String] {
+            items.filter(\.isDirectory).flatMap { [$0.relativePath] + folders(in: $0.children ?? []) }
+        }
+        return json(folders(in: vault.rootItems).sorted())
+    }
+
+    private func handleSearchByMeaning(args: [String: AnyCodableValue]) async -> MCPToolResult {
+        guard let query = args["query"]?.stringValue, !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return MCPToolResult(text: BrainError.invalidToolArgument(tool: "search_by_meaning", argument: "query").localizedDescription, isError: true)
+        }
+        let limit = min(max(args["limit"]?.intValue ?? 10, 1), 50)
+        do {
+            return json(try await searchByMeaning(query, limit))
+        } catch {
+            return MCPToolResult(text: error.localizedDescription, isError: true)
+        }
+    }
+
+    private func handleGetOpenNote() -> MCPToolResult {
+        guard vault.hasAppWindow else { return MCPToolResult(text: BrainError.noAppWindow.localizedDescription, isError: true) }
+        guard let item = vault.selectedItem, item.isMarkdown else {
+            return MCPToolResult(text: "No note is open in Brain.md.", isError: true)
+        }
+        return json(OpenNoteItem(
+            path: item.relativePath, title: item.displayName, content: vault.editorContent,
+            hasUnsavedChanges: vault.hasUnsavedChanges, isOutsideVault: item.isExternal))
+    }
+
+    private func handleOpenNote(args: [String: AnyCodableValue]) -> MCPToolResult {
+        guard let path = args["path"]?.stringValue else {
+            return MCPToolResult(text: BrainError.invalidToolArgument(tool: "open_note", argument: "path").localizedDescription, isError: true)
+        }
+        let inNewTab = args["newTab"]?.boolValue ?? true
+        do {
+            try vault.showNote(relativePath: path, inNewTab: inNewTab)
+            return MCPToolResult(text: "Opened '\(path)' in Brain.md\(inNewTab ? " in a new tab" : "")")
+        } catch {
+            return MCPToolResult(text: error.localizedDescription, isError: true)
         }
     }
 

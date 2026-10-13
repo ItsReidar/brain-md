@@ -89,7 +89,7 @@ sequenceDiagram
 
 ## Complete MCP Tool Reference
 
-`brain-md` exposes 11 native tools. With **Read-Only** on in Settings › MCP Server, the five that change the vault (`create_note`, `update_note`, `delete_note`, `move_note`, `create_folder`) are refused with an error before anything on disk changes; the others keep working.
+`brain-md` exposes 16 native tools. With **Read-Only** on in Settings › MCP Server, the six that change the vault (`create_note`, `update_note`, `delete_note`, `move_note`, `create_folder`, `rename_note`) are refused with an error before anything on disk changes; the others keep working.
 
 ### 1. `list_notes`
 Lists all Markdown notes and directories in the vault.
@@ -307,6 +307,94 @@ Creates a folder in the vault, including any missing parent folders. Succeeds if
       "arguments": {
         "path": "Projects/2026"
       }
+    }
+  }
+  ```
+
+### 12. `rename_note`
+Renames a note or folder in place. A note keeps its extension when the new name leaves it out.
+- **Arguments**:
+  - `path` *(string, required)*: Relative path of the note or folder.
+  - `newName` *(string, required)*: The new name, without a folder.
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "tools/call",
+    "params": {
+      "name": "rename_note",
+      "arguments": { "path": "Inbox/Draft.md", "newName": "Meeting 2026-10-13" }
+    }
+  }
+  ```
+
+### 13. `list_folders`
+Lists every folder in the vault, including empty ones (`list_notes` only lists notes). Returns a JSON array of relative paths.
+- **Arguments**:
+  - None.
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "method": "tools/call",
+    "params": {
+      "name": "list_folders",
+      "arguments": {}
+    }
+  }
+  ```
+
+### 14. `search_by_meaning`
+Searches notes by meaning instead of exact words, with Brain.md's on-device embedding model, also across languages. Returns the closest notes, best first, with the matching passage and a score. Needs a search model downloaded in **Settings › Local AI & Voice › Semantic Search**; without one it returns an error saying so. The first search indexes the vault, later ones only embed changed notes.
+- **Arguments**:
+  - `query` *(string, required)*: What you're looking for, in plain words.
+  - `limit` *(integer, optional)*: Maximum notes to return, 1–50 (default 10).
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 14,
+    "method": "tools/call",
+    "params": {
+      "name": "search_by_meaning",
+      "arguments": { "query": "budget overrun", "limit": 5 }
+    }
+  }
+  ```
+
+### 15. `get_open_note`
+Returns the note open in Brain.md's front tab: path, title, content including edits not saved yet, and whether it's outside the vault. Needs the Brain.md app (connect over HTTP); the `--stdio` server has no window and returns an error.
+- **Arguments**:
+  - None.
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 15,
+    "method": "tools/call",
+    "params": {
+      "name": "get_open_note",
+      "arguments": {}
+    }
+  }
+  ```
+
+### 16. `open_note`
+Opens a note in Brain.md for the user to see, in a new tab by default; a note that's already open in a tab comes to the front. Needs the Brain.md app (HTTP), not `--stdio`. Allowed in read-only mode, since it changes nothing on disk.
+- **Arguments**:
+  - `path` *(string, required)*: Relative path of the note.
+  - `newTab` *(boolean, optional)*: `true` (default) for a new tab, `false` to show it in the front tab.
+- **Example Call**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 16,
+    "method": "tools/call",
+    "params": {
+      "name": "open_note",
+      "arguments": { "path": "Projects/Plan.md" }
     }
   }
   ```

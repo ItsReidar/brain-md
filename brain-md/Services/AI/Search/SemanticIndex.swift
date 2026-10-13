@@ -16,7 +16,7 @@ nonisolated struct IndexedNoteSource: Sendable, Equatable {
 }
 
 /// One result: a note and its passage closest to the query.
-nonisolated struct SemanticMatch: Sendable, Equatable {
+nonisolated struct SemanticMatch: Sendable, Equatable, Codable {
     let relativePath: String
     let title: String
     let excerpt: String

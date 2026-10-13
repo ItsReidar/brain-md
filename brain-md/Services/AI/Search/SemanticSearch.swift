@@ -6,6 +6,14 @@
 import Combine
 import Foundation
 
+enum SemanticSearchError: LocalizedError {
+    case unavailable
+
+    var errorDescription: String? {
+        "Download a search model in Settings › Local AI & Voice › Semantic Search."
+    }
+}
+
 /// Search by meaning for the sidebar. Each search first embeds notes that are new or changed
 /// since the last one, so nothing runs in the background; the model unloads after a few idle minutes.
 @MainActor
@@ -51,13 +59,10 @@ final class SemanticSearch: ObservableObject {
             reset()
             return
         }
-        guard isAvailable, let directory = store.snapshotDirectory(of: model) else {
-            errorMessage = "Download a search model in Settings › Local AI & Voice › Semantic Search."
+        guard isAvailable else {
+            errorMessage = SemanticSearchError.unavailable.localizedDescription
             return
         }
-        let embedder = LocalEmbedder(model: model, directory: directory)
-        let notes = noteSources()
-        let vaultURL = vault.vaultURL
         task = Task {
             try? await Task.sleep(for: Self.debounce)
             guard !Task.isCancelled else { return }
@@ -67,10 +72,7 @@ final class SemanticSearch: ObservableObject {
                 progress = nil
             }
             do {
-                try await index.update(notes: notes, vaultURL: vaultURL, embedder: embedder) { done, total in
-                    Task { @MainActor [weak self] in self?.progress = done < total ? (done, total) : nil }
-                }
-                let matches = try await index.search(query, vaultURL: vaultURL, embedder: embedder)
+                let matches = try await matches(for: query)
                 try Task.checkCancellation()
                 results = matches.map {
                     NoteSearchResult(relativePath: $0.relativePath, title: $0.title, snippet: $0.excerpt)
@@ -81,6 +83,18 @@ final class SemanticSearch: ObservableObject {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// Brings the index up to date (only new and changed notes are embedded) and returns the notes
+    /// closest to `query`, best first. The sidebar and the MCP `search_by_meaning` tool share it.
+    func matches(for query: String, limit: Int = 20) async throws -> [SemanticMatch] {
+        guard isAvailable, let directory = store.snapshotDirectory(of: model) else { throw SemanticSearchError.unavailable }
+        let embedder = LocalEmbedder(model: model, directory: directory)
+        let vaultURL = vault.vaultURL
+        try await index.update(notes: noteSources(), vaultURL: vaultURL, embedder: embedder) { done, total in
+            Task { @MainActor [weak self] in self?.progress = done < total ? (done, total) : nil }
+        }
+        return try await index.search(query, vaultURL: vaultURL, embedder: embedder, limit: limit)
     }
 
     /// Stops a search or indexing run; what's indexed so far is kept.
