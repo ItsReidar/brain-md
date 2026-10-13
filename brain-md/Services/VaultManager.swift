@@ -132,6 +132,8 @@ public final class VaultManager: ObservableObject, VaultManaging {
         set { editing.hasUnsavedChanges = newValue }
     }
     @Published public var searchQuery: String = ""
+    /// The order you dragged notes into, per folder (see SidebarOrder.swift).
+    @Published var customOrder: [String: [String]] = [:]
     @Published public var recentActivities: [ActivityLog] = []
     @Published public var totalNotesCount: Int = 0
     @Published public var allTags: [String: Int] = [:]
@@ -157,6 +159,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         
         self.vaultURL = defaultVault.standardized.resolvingSymlinksInPath()
         register(activeSession)
+        loadCustomOrder()
         setupVaultDirectory()
         refreshFiles()
         startFileWatcher()
@@ -455,7 +458,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(
             at: url,
-            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .creationDateKey, .fileSizeKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
@@ -464,7 +467,8 @@ public final class VaultManager: ObservableObject, VaultManaging {
         var items: [NoteItem] = []
         
         for file in contents {
-            let resourceValues = try? file.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey])
+            let resourceValues = try? file.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey, .creationDateKey, .fileSizeKey])
+            let created = resourceValues?.creationDate
             let isDir = resourceValues?.isDirectory ?? false
             let modDate = resourceValues?.contentModificationDate ?? Date()
             let size = resourceValues?.fileSize ?? 0
@@ -480,6 +484,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
                     isDirectory: true,
                     children: children,
                     modifiedAt: modDate,
+                    createdAt: created,
                     size: 0
                 ))
             } else if file.pathExtension.lowercased() == "md" || file.pathExtension.lowercased() == "markdown" || file.pathExtension.lowercased() == "txt" {
@@ -503,6 +508,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
                     isDirectory: false,
                     children: nil,
                     modifiedAt: modDate,
+                    createdAt: created,
                     size: Int64(size),
                     tags: noteTags
                 ))
@@ -515,6 +521,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
                     isDirectory: false,
                     children: nil,
                     modifiedAt: modDate,
+                    createdAt: created,
                     size: Int64(size),
                     tags: []
                 ))
@@ -1024,6 +1031,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
             try FileManager.default.moveItem(at: oldURL, to: newURL)
             let newRelPath = relativePath(of: newURL, relativeTo: vaultURL)
             refreshFiles()
+            customOrderItemMoved(from: oldRelativePath, to: newRelPath)
             
             // A renamed note opens in the front tab, unless a tab already shows it.
             if !isDir.boolValue, !shown.contains(where: { $0.1 == oldRelativePath }) {
@@ -1101,6 +1109,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
             try fm.moveItem(at: sourceURL, to: targetURL)
             let newRelPath = relativePath(of: targetURL, relativeTo: vaultURL)
             refreshFiles()
+            customOrderItemMoved(from: sourceRelativePath, to: newRelPath)
             
             if !isSourceDirectory, !shown.contains(where: { $0.1 == sourceRelativePath }) {
                 selectNote(byRelativePath: newRelPath)
@@ -1268,6 +1277,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         editorTitle = ""
         vaultURL = newURL.standardized.resolvingSymlinksInPath()
         UserDefaults.standard.set(vaultURL.path, forKey: userDefaultsVaultKey)
+        loadCustomOrder()
         refreshFiles()
         startFileWatcher()
         tabsDefaults = defaults

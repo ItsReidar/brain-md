@@ -51,6 +51,7 @@ brew install --cask itsreidar/tap/brain-md
 ### 🗂️ Organize
 
 - **Native tabs.** ⌘-click a note, or press ⌘T. Every tab keeps its own edits, and your tabs come back next time.
+- **Your own order.** Drag notes into the order you like, or sort by name or date, folders or notes first.
 - **Jump anywhere.** The Quick Switcher (⌘O) finds any note as you type.
 - **See how notes connect.** A 3D brain graph of your notes, folders, links and tags (⌥⌘G).
 - **Safe deletes.** ⌘⌫ or **Move to Trash** sends notes to the macOS Trash, so Finder's **Put Back** can undo it.

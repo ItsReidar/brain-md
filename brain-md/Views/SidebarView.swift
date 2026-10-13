@@ -12,6 +12,8 @@ public struct SidebarView: View {
     @ObservedObject var session: EditorSession
     @AppStorage(AIFeatures.key) private var showsAIFeatures = true
     @AppStorage("sidebar_search_by_meaning") private var searchByMeaning = false
+    @AppStorage(SidebarSortMode.key) private var sortMode: SidebarSortMode = .name
+    @AppStorage(SidebarOrder.foldersFirstKey) private var foldersFirst = true
     @ObservedObject private var semanticSearch = SemanticSearch.shared
     @ObservedObject private var modelStore = ModelStore.shared
     @ObservedObject var httpServer = MCPHTTPServer.shared
@@ -226,21 +228,46 @@ public struct SidebarView: View {
     // MARK: - File Tree
 
     /// A small uppercase label with a rule, separating the tree's sections ("Notes", "App Folders").
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: String, showsSort: Bool = false) -> some View {
         HStack(spacing: 6) {
             Text(title)
                 .font(.system(size: 10, weight: .semibold))
                 .textCase(.uppercase)
                 .foregroundColor(.secondary)
+                .accessibilityAddTraits(.isHeader)
             Rectangle()
                 .fill(Color.primary.opacity(0.12))
                 .frame(height: 1)
+                .accessibilityHidden(true)
+            if showsSort { sortMenu }
         }
         .padding(.horizontal, 6)
         .padding(.top, 10)
         .padding(.bottom, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// How the notes are sorted, at the end of the NOTES header.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort By", selection: $sortMode) {
+                ForEach(SidebarSortMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Toggle("Folders First", isOn: $foldersFirst)
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sort Notes: \(sortMode.title)")
+        .accessibilityLabel("Sort Notes")
+        .accessibilityValue(sortMode.title)
     }
 
     private func treeRow(_ item: NoteItem, folderIcon: String? = nil) -> some View {
@@ -263,6 +290,14 @@ public struct SidebarView: View {
                     try vault.moveItem(sourceRelativePath: sourcePath, toDirectoryRelativePath: targetDirectory)
                 }
             },
+            onPlaceBefore: { sourcePath, target in
+                // Dragging is how you sort by hand: it switches to Custom, starting from what you see.
+                let shown = sortMode
+                sortMode = .custom
+                vault.reportingErrors("Couldn't Move") {
+                    try vault.moveInOrder(sourcePath, before: target, mode: shown, foldersFirst: foldersFirst)
+                }
+            },
             folderIcon: folderIcon
         )
     }
@@ -274,9 +309,10 @@ public struct SidebarView: View {
                     tagsSection
                 }
                 
-                let tree = VaultManager.splitAppFolders(vault.rootItems, appFolders: vault.appFolderNames)
+                let sorted = SidebarOrder.sorted(vault.rootItems, mode: sortMode, foldersFirst: foldersFirst, custom: vault.customOrder)
+                let tree = VaultManager.splitAppFolders(sorted, appFolders: vault.appFolderNames)
                 if !tree.user.isEmpty {
-                    sectionHeader("Notes")
+                    sectionHeader("Notes", showsSort: true)
                 }
                 ForEach(tree.user) { item in
                     treeRow(item)
@@ -648,6 +684,8 @@ private struct ItemRowView: View {
     let onRename: (NoteItem) -> Void
     let onDelete: (NoteItem) -> Void
     let onMove: (String, String) -> Void
+    /// Dropping on a note places the dragged item right before it.
+    let onPlaceBefore: (String, NoteItem) -> Void
     /// Replaces the folder icon, for app folders.
     var folderIcon: String? = nil
     
@@ -668,7 +706,8 @@ private struct ItemRowView: View {
                                     onSelect: onSelect,
                                     onRename: onRename,
                                     onDelete: onDelete,
-                                    onMove: onMove
+                                    onMove: onMove,
+                                    onPlaceBefore: onPlaceBefore
                                 )
                             }
                         }
@@ -745,20 +784,21 @@ private struct ItemRowView: View {
             }
             .dropDestination(for: String.self) { droppedItems, _ in
                 guard let sourcePath = droppedItems.first, sourcePath != item.relativePath else { return false }
-                let parentDir = (item.relativePath as NSString).deletingLastPathComponent
-                onMove(sourcePath, parentDir)
+                onPlaceBefore(sourcePath, item)
                 return true
             } isTargeted: { targeted in
                 self.isDropTargeted = targeted
             }
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isDropTargeted ? Color.accentColor.opacity(0.18) : (selectedItem?.id == item.id ? Color.accentColor.opacity(0.15) : Color.clear))
+                    .fill(selectedItem?.id == item.id ? Color.accentColor.opacity(0.15) : Color.clear)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isDropTargeted ? Color.accentColor : Color.clear, lineWidth: 1.5)
-            )
+            // Where the dragged item will land: right above this row.
+            .overlay(alignment: .top) {
+                if isDropTargeted {
+                    Capsule().fill(Color.accentColor).frame(height: 2).offset(y: -1)
+                }
+            }
             .contextMenu {
                 if item.isAttachment {
                     Button("Copy Markdown Link") {

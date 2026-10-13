@@ -141,6 +141,15 @@ TEST_RUNNER_BRAINMD_UI_VAULT="$V" xcodebuild test -project brain-md.xcodeproj -s
 
 The deleted test files end up in your Trash.
 
+### Sidebar order (UI test)
+
+`brain-mdUITests/SidebarOrderUITests` drags one note above another in the real app and checks the order after a relaunch. Like the delete test, it needs a vault prepared beforehand, here with only `Alpha.md`, `Beta.md` and `Gamma.md` at the root. Quit every running Brain.md first, including MCP servers started by other tools, because XCUITest stops other copies of the app:
+
+```bash
+V=$(mktemp -d)/vault && mkdir -p "$V" && for n in Alpha Beta Gamma; do printf '# %s\n' "$n" > "$V/$n.md"; done
+TEST_RUNNER_BRAINMD_SORT_VAULT="$V" xcodebuild test -project brain-md.xcodeproj -scheme brain-md -destination 'platform=macOS' -only-testing:brain-mdUITests/SidebarOrderUITests
+```
+
 ### Test Coverage Breakdown
 
 | Test Name | Verifies |
