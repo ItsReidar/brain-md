@@ -456,7 +456,7 @@ public struct GeneralSettingsPane: View {
 
       SettingsCard(
         title: "Sidebar",
-        footer: "Choose how notes are sorted with the ↑↓ button at the bottom of the sidebar, or drag notes into your own order."
+        footer: "Choose how notes are sorted with the ↑↓ button next to the sidebar's NOTES header, or drag notes into your own order."
       ) {
         SettingsRow(
           title: "Show first",

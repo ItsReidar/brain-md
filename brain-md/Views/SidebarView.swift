@@ -228,21 +228,46 @@ public struct SidebarView: View {
     // MARK: - File Tree
 
     /// A small uppercase label with a rule, separating the tree's sections ("Notes", "App Folders").
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: String, showsSort: Bool = false) -> some View {
         HStack(spacing: 6) {
             Text(title)
                 .font(.system(size: 10, weight: .semibold))
                 .textCase(.uppercase)
                 .foregroundColor(.secondary)
+                .accessibilityAddTraits(.isHeader)
             Rectangle()
                 .fill(Color.primary.opacity(0.12))
                 .frame(height: 1)
+                .accessibilityHidden(true)
+            if showsSort { sortMenu }
         }
         .padding(.horizontal, 6)
         .padding(.top, 10)
         .padding(.bottom, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// How the notes are sorted, at the end of the NOTES header.
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort By", selection: $sortMode) {
+                ForEach(SidebarSortMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Toggle("Folders First", isOn: $foldersFirst)
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sort Notes: \(sortMode.title)")
+        .accessibilityLabel("Sort Notes")
+        .accessibilityValue(sortMode.title)
     }
 
     private func treeRow(_ item: NoteItem, folderIcon: String? = nil) -> some View {
@@ -287,7 +312,7 @@ public struct SidebarView: View {
                 let sorted = SidebarOrder.sorted(vault.rootItems, mode: sortMode, foldersFirst: foldersFirst, custom: vault.customOrder)
                 let tree = VaultManager.splitAppFolders(sorted, appFolders: vault.appFolderNames)
                 if !tree.user.isEmpty {
-                    sectionHeader("Notes")
+                    sectionHeader("Notes", showsSort: true)
                 }
                 ForEach(tree.user) { item in
                     treeRow(item)
@@ -494,25 +519,6 @@ public struct SidebarView: View {
             }
             .buttonStyle(.plain)
             .help("New Folder")
-
-            Menu {
-                Picker("Sort By", selection: $sortMode) {
-                    ForEach(SidebarSortMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.inline)
-                Divider()
-                Toggle("Folders First", isOn: $foldersFirst)
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(.system(size: 12))
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Sort Notes")
-            .accessibilityLabel("Sort Notes")
             
             Button(action: { vault.refreshFiles() }) {
                 Image(systemName: "arrow.clockwise")

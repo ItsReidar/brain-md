@@ -98,7 +98,7 @@ When a note or folder is moved or renamed, `VaultManager` preserves the active s
 
 ## Sorting the Sidebar
 
-The **↑↓** button at the bottom of the sidebar sorts notes by **Name**, **Date Modified** (newest first), **Date Created** (newest first) or **Custom**. **Settings › General › Sidebar › Show first** (also in that menu as **Folders First**) puts folders or notes first in every folder, whatever the sort.
+The **↑↓** button next to the sidebar's **NOTES** header sorts notes by **Name**, **Date Modified** (newest first), **Date Created** (newest first) or **Custom**. **Settings › General › Sidebar › Show first** (also in that menu as **Folders First**) puts folders or notes first in every folder, whatever the sort.
 
 Drag a note onto another to put it right above it. Dragging always works: in another sort mode it switches to **Custom**, starting from the order you were looking at. Dropping on a note in another folder moves the file there; dropping on a folder moves it into that folder, at the end. New notes appear after the ones you've arranged.
 
