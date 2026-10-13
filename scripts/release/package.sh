@@ -62,8 +62,39 @@ staging="$BUILD_ROOT/dmg"
 dmg="$DIST_DIR/$(dmg_name "$version")"
 cask="$DIST_DIR/$CASK_NAME.rb"
 
-# Only ever delete the script's own build directory.
-case "$BUILD_ROOT" in "$REPO_ROOT"/build/*) rm -rf "$BUILD_ROOT" ;; *) die "unexpected build dir: $BUILD_ROOT" ;; esac
+# Only ever delete the script's own build directory with robust retry/atomic rename.
+clean_build_dir() {
+    local target="$1"
+    case "$target" in
+        "$REPO_ROOT"/build/*) ;;
+        *) die "unexpected build dir: $target" ;;
+    esac
+
+    mkdir -p "$REPO_ROOT/build"
+    touch "$REPO_ROOT/build/.metadata_never_index"
+
+    [[ -e "$target" ]] || return 0
+
+    local attempt=1
+    while (( attempt <= 5 )); do
+        if rm -rf "$target" 2>/dev/null && [[ ! -e "$target" ]]; then
+            return 0
+        fi
+
+        local trash_name="${target}.deleting.$$.${RANDOM}"
+        if mv "$target" "$trash_name" 2>/dev/null; then
+            ( rm -rf "$trash_name" >/dev/null 2>&1 & )
+            return 0
+        fi
+
+        sleep 0.5
+        attempt=$((attempt + 1))
+    done
+
+    die "failed to clean build directory after 5 retries: $target"
+}
+
+clean_build_dir "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT" "$DIST_DIR"
 
 # 1. Archive. Xcode signs ad hoc here; the identity is applied explicitly in step 2, so the
