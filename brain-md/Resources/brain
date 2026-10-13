@@ -1,8 +1,19 @@
 #!/bin/sh
 # Opens Markdown files in Brain.md from the terminal: brain [file ...]
 # Homebrew links this as `brain`; files inside the vault open as their note.
+
+# Open the Brain.md this command ships in (Homebrew's link points into it), not whichever copy
+# macOS finds first for the bundle ID: old Xcode and test builds can be registered too.
+app=$(cd "$(dirname "$(realpath "$0")")/../.." 2>/dev/null && pwd)
+open_brain() {
+    case "$app" in
+        *.app) exec open -a "$app" "$@" ;;
+        *) exec open -b itsreidar.brain-md "$@" ;;
+    esac
+}
+
 if [ $# -eq 0 ]; then
-    exec open -b itsreidar.brain-md
+    open_brain
 fi
 # Missing files are created empty, so `brain new.md` starts a new note. The attribute tells
 # Brain.md to trash the file if it's closed without anything written to it.
@@ -12,4 +23,4 @@ for file in "$@"; do
         xattr -w itsreidar.brain-md.new 1 "$file"
     fi
 done
-exec open -b itsreidar.brain-md -- "$@"
+open_brain -- "$@"
