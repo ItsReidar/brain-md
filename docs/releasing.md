@@ -108,6 +108,16 @@ Standard GitHub-hosted runners are free for public repositories. Updating the ta
 
 ## Troubleshooting
 
+### Brain.md opens an old build
+
+Xcode registers every Brain.md it builds with Launch Services, so Finder, the Dock or `open -b itsreidar.brain-md` can open an old Debug or release build instead of the installed app. `package.sh` unregisters the copies it builds (also when it fails) and deletes the DMG staging copy. To clean up copies from Xcode or elsewhere, unregister everything except the installed app:
+
+```bash
+LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+$LSR -dump | awk '/^path:/{sub(/^path: +/,""); sub(/ \(0x[0-9a-f]+\)$/,""); p=$0} /^identifier: +itsreidar.brain-md$/{print p}' | sort -u | grep -v '^/Applications/brain-md.app$' | while read -r p; do $LSR -u "$p"; done
+```
+
+
 - **"brain-md is damaged and can't be opened"**: the signature is broken, usually because files in the bundle changed after signing. Rebuild, then check with `codesign --verify --deep --strict --verbose=2 /Applications/brain-md.app`.
 - **Build fails**: `package.sh` prints the last 30 lines; the full log is `build/release/xcodebuild.log`.
 - **Checking the cask**: Homebrew only lints casks inside a tap. Run `brew style --cask itsreidar/tap/brain-md` and `brew audit --cask --strict itsreidar/tap/brain-md` after the tap is updated.

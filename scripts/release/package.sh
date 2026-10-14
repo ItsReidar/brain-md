@@ -94,6 +94,17 @@ clean_build_dir() {
     die "failed to clean build directory after 5 retries: $target"
 }
 
+# Xcode registers every Brain.md it builds with Launch Services, and macOS may then open one of
+# these build copies (Finder, the Dock, `open -b`) instead of the installed app. Forget them on
+# the way out, also when the build fails halfway.
+unregister_build_copies() {
+    local lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+    [[ -x "$lsregister" && -d "$BUILD_ROOT" ]] || return 0
+    find "$BUILD_ROOT" -name '*.app' -type d -prune -print0 |
+        while IFS= read -r -d '' copy; do "$lsregister" -u "$copy" >/dev/null 2>&1 || true; done
+}
+trap unregister_build_copies EXIT
+
 clean_build_dir "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT" "$DIST_DIR"
 
@@ -150,6 +161,8 @@ ditto "$app" "$staging/$APP_BUNDLE"
 ln -s /Applications "$staging/Applications"
 hdiutil create -quiet -ov -volname "$DISPLAY_NAME" -srcfolder "$staging" -format UDZO "$dmg"
 hdiutil verify -quiet "$dmg" || die "DMG verification failed"
+unregister_build_copies
+rm -rf "$staging" # only needed to make the DMG; a copy left here is one more app macOS can pick
 
 # 4. Checksum and cask.
 sha256="$(shasum -a 256 "$dmg" | awk '{print $1}')"
