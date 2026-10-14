@@ -57,6 +57,7 @@ public final class MCPServer: MCPServing {
 
     /// The Read-Only switch in Settings › MCP Server.
     static let readOnlyKey = "mcp_read_only"
+    private static let inlineTagRegex = try! NSRegularExpression(pattern: #"(?:^|\s)#([a-zA-Z0-9_\-\/]+)"#)
     
     init(
         vault: (any VaultManaging)? = nil, defaults: UserDefaults = .standard,
@@ -535,24 +536,44 @@ public final class MCPServer: MCPServing {
     }
     
     private func handleListNotes(args: [String: AnyCodableValue]) -> MCPToolResult {
-        let paths = vault.getAllNotePaths()
         let folder = args["folder"]?.stringValue
-        
-        let filtered = paths.filter { path in
-            guard let f = folder, !f.isEmpty else { return true }
-            return path.hasPrefix(f)
-        }
-        
         let isoFormatter = ISO8601DateFormatter()
-        let items: [NoteListingItem] = filtered.map { path in
-            let itemURL = vault.vaultURL.appendingPathComponent(path)
-            let size = (try? itemURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            let modDate = (try? itemURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
-            return NoteListingItem(
-                path: path,
-                sizeBytes: Int64(size),
-                lastModified: isoFormatter.string(from: modDate)
-            )
+        
+        var items: [NoteListingItem] = []
+        if !vault.rootItems.isEmpty {
+            func collectItems(from nodes: [NoteItem]) {
+                for node in nodes {
+                    if node.isDirectory, let children = node.children {
+                        collectItems(from: children)
+                    } else if !node.isDirectory && node.isMarkdown {
+                        if let f = folder, !f.isEmpty, !node.relativePath.hasPrefix(f) {
+                            continue
+                        }
+                        items.append(NoteListingItem(
+                            path: node.relativePath,
+                            sizeBytes: node.size,
+                            lastModified: isoFormatter.string(from: node.modifiedAt)
+                        ))
+                    }
+                }
+            }
+            collectItems(from: vault.rootItems)
+        } else {
+            let paths = vault.getAllNotePaths()
+            let filtered = paths.filter { path in
+                guard let f = folder, !f.isEmpty else { return true }
+                return path.hasPrefix(f)
+            }
+            items = filtered.map { path in
+                let itemURL = vault.vaultURL.appendingPathComponent(path)
+                let size = (try? itemURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                let modDate = (try? itemURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
+                return NoteListingItem(
+                    path: path,
+                    sizeBytes: Int64(size),
+                    lastModified: isoFormatter.string(from: modDate)
+                )
+            }
         }
         
         if let json = try? encoder.encode(items), let str = String(data: json, encoding: .utf8) {
@@ -714,13 +735,14 @@ public final class MCPServer: MCPServing {
         
         let allPaths = vault.getAllNotePaths()
         let graphService = NoteGraphService.shared
+        let linkIndex = LinkResolutionIndex(allNotePaths: allPaths)
         
         // 1. Outgoing links from this note
         let wikilinks = graphService.extractWikilinks(from: targetContent)
         let mdLinks = graphService.extractMarkdownLinks(from: targetContent)
         var resolvedOutgoing: Set<String> = []
         for rawLink in (wikilinks + mdLinks) {
-            if let resolved = graphService.resolveLinkTarget(rawLink, fromSourcePath: path, allNotePaths: allPaths) {
+            if let resolved = graphService.resolveLinkTarget(rawLink, fromSourcePath: path, index: linkIndex) {
                 resolvedOutgoing.insert(resolved)
             }
         }
@@ -732,7 +754,7 @@ public final class MCPServer: MCPServing {
             let otherWikilinks = graphService.extractWikilinks(from: otherContent)
             let otherMdLinks = graphService.extractMarkdownLinks(from: otherContent)
             for rawLink in (otherWikilinks + otherMdLinks) {
-                if let resolved = graphService.resolveLinkTarget(rawLink, fromSourcePath: otherPath, allNotePaths: allPaths),
+                if let resolved = graphService.resolveLinkTarget(rawLink, fromSourcePath: otherPath, index: linkIndex),
                    resolved == path {
                     incomingBacklinks.insert(otherPath)
                     break
@@ -759,10 +781,9 @@ public final class MCPServer: MCPServing {
         let (fm, _) = FrontmatterParser.parse(content)
         var tags = Set(fm?.tags ?? [])
         
-        let pattern = #"(?:^|\s)#([a-zA-Z0-9_\-\/]+)"#
-        if let regex = try? NSRegularExpression(pattern: pattern) {
+        if content.contains("#") {
             let nsString = content as NSString
-            let matches = regex.matches(in: content, range: NSRange(location: 0, length: nsString.length))
+            let matches = Self.inlineTagRegex.matches(in: content, range: NSRange(location: 0, length: nsString.length))
             for match in matches {
                 if match.numberOfRanges > 1 {
                     let rawTag = nsString.substring(with: match.range(at: 1))

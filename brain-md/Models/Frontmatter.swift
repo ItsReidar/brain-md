@@ -60,56 +60,102 @@ public enum FrontmatterParser {
     
     /// Parses a Markdown document into structured frontmatter (if present) and the remaining body markdown.
     public static func parse(_ text: String) -> (frontmatter: ParsedFrontmatter?, body: String) {
-        // Strip BOM if present
-        var cleaned = text
-        if cleaned.hasPrefix("\u{FEFF}") {
-            cleaned = String(cleaned.dropFirst())
+        let cleaned: Substring
+        if text.hasPrefix("\u{FEFF}") {
+            cleaned = text.dropFirst()
+        } else {
+            cleaned = Substring(text)
         }
         
-        // Frontmatter must begin on the very first non-empty line with '---'
-        let lines = cleaned.components(separatedBy: "\n")
-        guard let firstIndex = lines.firstIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
-            return (nil, text)
-        }
+        var cursor = cleaned.startIndex
+        let end = cleaned.endIndex
         
-        let firstLine = lines[firstIndex].trimmingCharacters(in: .whitespaces)
-        guard firstLine == "---" else {
-            return (nil, text)
-        }
-        
-        // Find closing '---' or '...' delimiter
-        var closingIndex: Int? = nil
-        for i in (firstIndex + 1)..<lines.count {
-            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
-            if trimmed == "---" || trimmed == "..." {
-                closingIndex = i
-                break
+        func nextLine() -> (line: Substring, afterNewline: String.Index)? {
+            guard cursor < end else { return nil }
+            if let nl = cleaned[cursor...].firstIndex(of: "\n") {
+                let line = cleaned[cursor..<nl]
+                let next = cleaned.index(after: nl)
+                cursor = next
+                return (line, next)
+            } else {
+                let line = cleaned[cursor..<end]
+                cursor = end
+                return (line, end)
             }
         }
         
-        guard let closingIdx = closingIndex else {
+        // Frontmatter must begin on the very first non-empty line with '---'
+        var foundOpen = false
+        while let (line, _) = nextLine() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                if trimmed == "---" {
+                    foundOpen = true
+                    break
+                } else {
+                    return (nil, text)
+                }
+            }
+        }
+        guard foundOpen else { return (nil, text) }
+        
+        // Collect YAML lines until closing '---' or '...' delimiter
+        var yamlLines: [String] = []
+        var bodyStart: String.Index? = nil
+        while let (line, afterNL) = nextLine() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == "---" || trimmed == "..." {
+                bodyStart = afterNL
+                break
+            }
+            yamlLines.append(String(line))
+        }
+        
+        guard let bodyIdx = bodyStart else {
             // Unclosed frontmatter - treat as regular text
             return (nil, text)
         }
         
-        let yamlLines = Array(lines[(firstIndex + 1)..<closingIdx])
         let rawYAML = yamlLines.joined(separator: "\n")
-        
-        // Extract remaining body
-        let bodyLines = Array(lines[(closingIdx + 1)...])
-        var body = bodyLines.joined(separator: "\n")
-        if body.hasPrefix("\n") {
-            body = String(body.dropFirst())
+        var bodySlice = cleaned[bodyIdx..<end]
+        if bodySlice.hasPrefix("\n") {
+            bodySlice = bodySlice.dropFirst()
         }
+        let body = String(bodySlice)
         
         let (properties, allTags) = parseYAMLProperties(yamlLines)
-        
         if properties.isEmpty && allTags.isEmpty && rawYAML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return (nil, body)
         }
         
         let parsed = ParsedFrontmatter(rawYAML: rawYAML, properties: properties, tags: allTags)
         return (parsed, body)
+    }
+    
+    /// Reads only the frontmatter header from a file on disk to extract its tags without reading the entire document body.
+    public static func parseTags(from fileURL: URL) -> [String] {
+        let headerCap = 8192
+        if let handle = try? FileHandle(forReadingFrom: fileURL) {
+            defer { try? handle.close() }
+            if let data = try? handle.read(upToCount: headerCap) {
+                if data.count < headerCap, let str = String(data: data, encoding: .utf8) {
+                    return parse(str).frontmatter?.tags ?? []
+                }
+                if let prefixStr = String(decoding: data, as: UTF8.self) as String? {
+                    let trimmed = prefixStr.drop(while: { $0 == "\u{FEFF}" || $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" })
+                    if !trimmed.hasPrefix("---") {
+                        return []
+                    }
+                    if let parsed = parse(prefixStr).frontmatter {
+                        return parsed.tags
+                    }
+                }
+            }
+        }
+        if let full = try? String(contentsOf: fileURL, encoding: .utf8) {
+            return parse(full).frontmatter?.tags ?? []
+        }
+        return []
     }
     
     // MARK: - YAML Property Extractor

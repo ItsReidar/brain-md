@@ -210,22 +210,23 @@ public struct BrainGraphModalView: View {
         var tagMap: [String: [String]] = [:]
         collectTags(from: vault.rootItems.filter { !vault.isInAppFolder($0.relativePath) }, map: &tagMap)
         
-        let builtGraph = NoteGraphService.shared.buildGraph(
-            notePaths: notePaths,
-            noteContents: contents,
-            noteTags: tagMap,
-            includeTags: includeTags
-        )
+        let currentIncludeTags = includeTags
+        let builtGraph = await Task.detached(priority: .userInitiated) {
+            NoteGraphService.shared.buildGraph(
+                notePaths: notePaths,
+                noteContents: contents,
+                noteTags: tagMap,
+                includeTags: currentIncludeTags
+            )
+        }.value
         
-        await MainActor.run {
-            self.graphData = builtGraph
-            self.isLoading = false
-            // Keep selected node if still exists
-            if let sel = selectedNode, let updated = builtGraph.nodeMap[sel.id] {
-                self.selectedNode = updated
-            } else {
-                self.selectedNode = nil
-            }
+        self.graphData = builtGraph
+        self.isLoading = false
+        // Keep selected node if still exists
+        if let sel = selectedNode, let updated = builtGraph.nodeMap[sel.id] {
+            self.selectedNode = updated
+        } else {
+            self.selectedNode = nil
         }
     }
     

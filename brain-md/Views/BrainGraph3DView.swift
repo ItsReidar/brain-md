@@ -393,6 +393,8 @@ public struct Graph3DSceneView: NSViewRepresentable {
         }
         
         private var animStates: [String: NodeAnimState] = [:]
+        private var nodeSceneMap: [String: SCNNode] = [:]
+        private var edgeSceneMap: [String: SCNNode] = [:]
         private var edgeNodeMap: [(id: String, sourceId: String, targetId: String, lineNode: SCNNode)] = []
         private var lastAnimTime: TimeInterval = 0
         
@@ -436,8 +438,10 @@ public struct Graph3DSceneView: NSViewRepresentable {
         
         private func rebuildGraphNodes(in graphRoot: SCNNode, data: GraphData) {
             graphRoot.childNodes.forEach { $0.removeFromParentNode() }
-            animStates.removeAll()
-            edgeNodeMap.removeAll()
+            animStates.removeAll(keepingCapacity: true)
+            nodeSceneMap.removeAll(keepingCapacity: true)
+            edgeSceneMap.removeAll(keepingCapacity: true)
+            edgeNodeMap.removeAll(keepingCapacity: true)
             lastAnimTime = 0
             
             // Vibrant glossy cluster color palette (matching reference)
@@ -452,6 +456,7 @@ public struct Graph3DSceneView: NSViewRepresentable {
             ]
             
             var groupColors: [String: NSColor] = [:]
+            var groupMaterials: [String: SCNMaterial] = [:]
             var colorIndex = 0
             
             let camera = scnView?.cameraNode ?? scnView?.scene?.rootNode.childNode(withName: "defaultCamera", recursively: true)
@@ -460,41 +465,35 @@ public struct Graph3DSceneView: NSViewRepresentable {
             for node in data.nodes {
                 let group = node.group
                 if groupColors[group] == nil {
-                    groupColors[group] = colorPalette[colorIndex % colorPalette.count]
+                    let c = colorPalette[colorIndex % colorPalette.count]
+                    groupColors[group] = c
+                    let mat = SCNMaterial()
+                    mat.lightingModel = .lambert
+                    mat.diffuse.contents = c
+                    mat.specular.contents = NSColor.clear
+                    mat.shininess = 0.0
+                    mat.emission.contents = NSColor.clear
+                    groupMaterials[group] = mat
                     colorIndex += 1
                 }
-                let color = groupColors[group]!
+                let material = groupMaterials[group]!
                 
                 let radius: CGFloat
                 let sphere: SCNSphere
-                let material = SCNMaterial()
                 
                 if node.isFolder {
                     // Larger, prominent matte folder hub
                     radius = max(0.95, 0.95 + sqrt(CGFloat(node.degree)) * 0.12)
                     sphere = SCNSphere(radius: radius)
                     sphere.segmentCount = 36
-                    
-                    material.lightingModel = .lambert
-                    material.diffuse.contents = color
-                    material.specular.contents = NSColor.clear
-                    material.shininess = 0.0
-                    material.emission.contents = NSColor.clear
                 } else {
                     // Crisp, matte note node
                     radius = max(0.28, 0.28 + sqrt(CGFloat(node.degree)) * 0.08)
                     sphere = SCNSphere(radius: radius)
-                    sphere.segmentCount = 24
-                    
-                    material.lightingModel = .lambert
-                    material.diffuse.contents = color
-                    material.specular.contents = NSColor.clear
-                    material.shininess = 0.0
-                    material.emission.contents = NSColor.clear
+                    sphere.segmentCount = data.nodes.count > 500 ? 12 : 24
                 }
                 
                 sphere.materials = [material]
-                
                 let basePos = SCNVector3(CGFloat(node.position.x), CGFloat(node.position.y), CGFloat(node.position.z))
                 let phase = Double(animStates.count) * 1.61803398875
                 animStates[node.id] = NodeAnimState(
@@ -509,13 +508,14 @@ public struct Graph3DSceneView: NSViewRepresentable {
                 scnNode.position = basePos
                 
                 // Add Billboard Badge Label for folders and connected notes
-                let showLabel = node.isFolder || node.degree >= 2 || data.nodes.count <= 35
+                let showLabel = node.isFolder || (data.nodes.count <= 300 && node.degree >= 2) || (data.nodes.count > 300 && node.degree >= 6) || data.nodes.count <= 35
                 if showLabel {
                     let badgeNode = createLabelBadgeNode(title: node.title, isFolder: node.isFolder, radius: radius, nodeId: node.id, cameraNode: camera)
                     scnNode.addChildNode(badgeNode)
                 }
                 
                 graphRoot.addChildNode(scnNode)
+                nodeSceneMap[node.id] = scnNode
             }
             
             // 2. Build Connection Lines (Synapses)
@@ -553,6 +553,7 @@ public struct Graph3DSceneView: NSViewRepresentable {
                 let lineNode = createLineNode(from: p1, to: p2, color: edgeColor, opacity: opacity, radius: radius)
                 lineNode.name = "edge:\(edge.id)"
                 graphRoot.addChildNode(lineNode)
+                edgeSceneMap[edge.id] = lineNode
                 edgeNodeMap.append((id: edge.id, sourceId: edge.sourceId, targetId: edge.targetId, lineNode: lineNode))
             }
         }
@@ -577,8 +578,7 @@ public struct Graph3DSceneView: NSViewRepresentable {
             var updatedPositions: [String: SCNVector3] = [:]
             
             for (nodeId, var state) in animStates {
-                guard let scnNode = root.childNode(withName: "node:\(nodeId)", recursively: false) else { continue }
-                
+                guard let scnNode = nodeSceneMap[nodeId] else { continue }
                 // Ambient organic floating
                 let amp: Double = state.isFolder ? 0.05 : 0.15
                 let floatX = amp * sin(0.85 * t + state.phase)
@@ -798,8 +798,7 @@ public struct Graph3DSceneView: NSViewRepresentable {
             
             // Update node opacity
             for node in data.nodes {
-                guard let scnNode = graphRoot.childNode(withName: "node:\(node.id)", recursively: false) else { continue }
-                
+                guard let scnNode = nodeSceneMap[node.id] else { continue }
                 var matches = true
                 if hasFilter {
                     matches = node.title.lowercased().contains(cleanFilter) ||
@@ -817,8 +816,7 @@ public struct Graph3DSceneView: NSViewRepresentable {
             
             // Update edge opacity
             for edge in data.edges {
-                guard let edgeNode = graphRoot.childNode(withName: "edge:\(edge.id)", recursively: false) else { continue }
-                
+                guard let edgeNode = edgeSceneMap[edge.id] else { continue }
                 var edgeVisible = true
                 if hasSelection, let sel = selectedId {
                     edgeVisible = (edge.sourceId == sel || edge.targetId == sel)

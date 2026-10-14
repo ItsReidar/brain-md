@@ -317,7 +317,7 @@ final class MarkdownNSTextView: NSTextView {
     /// Dynamically resizes the NSTextView's frame height to match the text layout.
     /// In AppKit, NSTextView with isVerticallyResizable only grows; it never shrinks
     /// when shorter documents are loaded, causing bloated scroll ranges and blank voids.
-    func adjustFrameToFitContent() {
+    func adjustFrameToFitContent(forceFullLayout: Bool = false) {
         guard let layoutManager = self.layoutManager,
               let textContainer = self.textContainer,
               let scrollView = self.enclosingScrollView else { return }
@@ -326,7 +326,14 @@ final class MarkdownNSTextView: NSTextView {
         if frame.origin != .zero {
             setFrameOrigin(.zero)
         }
-        layoutManager.ensureLayout(for: textContainer)
+        let textLen = (self.string as NSString).length
+        if textLen > 16_000 && !forceFullLayout {
+            layoutManager.allowsNonContiguousLayout = true
+            layoutManager.ensureLayout(forBoundingRect: scrollView.contentView.bounds, in: textContainer)
+        } else {
+            layoutManager.allowsNonContiguousLayout = textLen > 16_000
+            layoutManager.ensureLayout(for: textContainer)
+        }
         let usedRect = layoutManager.usedRect(for: textContainer)
         let minHeight = scrollView.contentSize.height
         let targetHeight = max(minHeight, ceil(usedRect.height + textContainerInset.height * 2))
@@ -337,7 +344,7 @@ final class MarkdownNSTextView: NSTextView {
     
     override func didChangeText() {
         super.didChangeText()
-        adjustFrameToFitContent()
+        adjustFrameToFitContent(forceFullLayout: false)
     }
     
     override func viewDidMoveToWindow() {

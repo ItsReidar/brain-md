@@ -304,7 +304,7 @@ public struct SidebarView: View {
     
     private var fileTreeList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
+            LazyVStack(alignment: .leading, spacing: 2) {
                 if !vault.allTags.isEmpty {
                     tagsSection
                 }
@@ -453,7 +453,7 @@ public struct SidebarView: View {
             } else {
                 List(results) { res in
                     Button(action: {
-                        if let item = findItem(path: res.relativePath, in: vault.rootItems) {
+                        if let item = vault.noteItem(atRelativePath: res.relativePath) {
                             openFromSidebar(item)
                         }
                     }) {
@@ -606,7 +606,7 @@ public struct SidebarView: View {
     private func tagFilteredNotesList(tag: String) -> some View {
         let matchingNotes = vault.getNotes(taggedWith: tag)
         return ScrollView {
-            VStack(alignment: .leading, spacing: 3) {
+            LazyVStack(alignment: .leading, spacing: 3) {
                 if matchingNotes.isEmpty {
                     VStack(spacing: 8) {
                         Spacer()

@@ -3,6 +3,7 @@
 //  brain-md
 //
 
+import Accelerate
 import CryptoKit
 import Foundation
 
@@ -218,9 +219,12 @@ actor SemanticIndex {
     static func dot(_ query: [Float], _ data: Data) -> Float {
         data.withUnsafeBytes { raw in
             let values = raw.bindMemory(to: Float.self)
-            var sum: Float = 0
-            for index in 0..<min(values.count, query.count) { sum += query[index] * values[index] }
-            return sum
+            let count = min(values.count, query.count)
+            guard count > 0 else { return 0 }
+            if count == query.count && count == values.count {
+                return vDSP.dot(query, values)
+            }
+            return vDSP.dot(query.prefix(count), values.prefix(count))
         }
     }
 
