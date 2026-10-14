@@ -6,47 +6,78 @@
 import Foundation
 import SwiftUI
 import Combine
+import CoreServices
 
 // MARK: - Thread-Safe File Monitor
 
 private final class VaultFileMonitor: @unchecked Sendable {
     private let lock = NSLock()
+    nonisolated(unsafe) private var stream: FSEventStreamRef?
     nonisolated(unsafe) private var source: DispatchSourceFileSystemObject?
     nonisolated(unsafe) private var debounceWorkItem: DispatchWorkItem?
+    nonisolated(unsafe) private var onChangeCallback: (@Sendable () -> Void)?
+    private let queue = DispatchQueue(label: "brain-md.vault-monitor", qos: .utility)
     
     nonisolated init() {}
     
     nonisolated func start(url: URL, onChange: @escaping @Sendable () -> Void) {
         stop()
+        lock.lock()
+        onChangeCallback = onChange
+        lock.unlock()
+        
+        let pathsToWatch = [url.path] as CFArray
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
+        let callback: FSEventStreamCallback = { _, clientCallBackInfo, _, _, _, _ in
+            guard let info = clientCallBackInfo else { return }
+            let monitor = Unmanaged<VaultFileMonitor>.fromOpaque(info).takeUnretainedValue()
+            monitor.scheduleDebouncedChange()
+        }
+        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagUseCFTypes)
+        if let createdStream = FSEventStreamCreate(kCFAllocatorDefault, callback, &context, pathsToWatch, FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.20, flags) {
+            FSEventStreamSetDispatchQueue(createdStream, queue)
+            FSEventStreamStart(createdStream)
+            lock.lock()
+            stream = createdStream
+            lock.unlock()
+            return
+        }
+        
         let fd = open(url.path, O_EVTONLY)
         guard fd >= 0 else { return }
-        
         let s = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .extend, .attrib, .link, .delete],
-            queue: DispatchQueue.global(qos: .utility)
+            queue: queue
         )
-        
         s.setEventHandler { [weak self] in
-            guard let self = self else { return }
-            self.lock.lock()
-            self.debounceWorkItem?.cancel()
-            let workItem = DispatchWorkItem {
-                onChange()
-            }
-            self.debounceWorkItem = workItem
-            self.lock.unlock()
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25, execute: workItem)
+            self?.scheduleDebouncedChange()
         }
         s.setCancelHandler {
             close(fd)
         }
-        
         lock.lock()
         source = s
         lock.unlock()
-        
         s.resume()
+    }
+    
+    private nonisolated func scheduleDebouncedChange() {
+        lock.lock()
+        debounceWorkItem?.cancel()
+        let cb = onChangeCallback
+        let workItem = DispatchWorkItem {
+            cb?()
+        }
+        debounceWorkItem = workItem
+        lock.unlock()
+        queue.asyncAfter(deadline: .now() + 0.25, execute: workItem)
     }
     
     nonisolated func stop() {
@@ -54,6 +85,13 @@ private final class VaultFileMonitor: @unchecked Sendable {
         defer { lock.unlock() }
         debounceWorkItem?.cancel()
         debounceWorkItem = nil
+        onChangeCallback = nil
+        if let st = stream {
+            FSEventStreamStop(st)
+            FSEventStreamInvalidate(st)
+            FSEventStreamRelease(st)
+            stream = nil
+        }
         if let s = source {
             s.cancel()
             source = nil
@@ -143,6 +181,15 @@ public final class VaultManager: ObservableObject, VaultManaging {
     
     private let fileMonitor = VaultFileMonitor()
     private let userDefaultsVaultKey = "brain_md_vault_path"
+    private struct CachedNoteEntry {
+        var modifiedAt: Date
+        var size: Int64
+        var tags: [String]
+        var content: String?
+    }
+    private var noteCache: [String: CachedNoteEntry] = [:]
+    private var itemsByPath: [String: NoteItem] = [:]
+    private var cachedAllNotePaths: [String] = []
     
     public init(customVaultURL: URL? = nil) {
         let fileManager = FileManager.default
@@ -417,28 +464,36 @@ public final class VaultManager: ObservableObject, VaultManaging {
             rootItems = []
             totalNotesCount = 0
             allTags = [:]
+            itemsByPath = [:]
+            cachedAllNotePaths = []
+            noteCache = [:]
             return
         }
         
         var count = 0
-        rootItems = scanDirectory(url: vaultURL, base: vaultURL, noteCount: &count)
-        totalNotesCount = count
-        
-        // Aggregate vault-wide tag dictionary
+        var lookup: [String: NoteItem] = [:]
+        lookup.reserveCapacity(itemsByPath.count)
+        var notePaths: [String] = []
+        notePaths.reserveCapacity(cachedAllNotePaths.count)
         var tagCounts: [String: Int] = [:]
-        func collectTags(from items: [NoteItem]) {
-            for item in items {
-                if item.isDirectory, let children = item.children {
-                    collectTags(from: children)
-                } else {
-                    for tag in item.tags {
-                        tagCounts[tag, default: 0] += 1
-                    }
-                }
-            }
-        }
-        collectTags(from: rootItems)
+        
+        rootItems = scanDirectory(
+            url: vaultURL,
+            relativePrefix: "",
+            noteCount: &count,
+            lookup: &lookup,
+            notePaths: &notePaths,
+            tagCounts: &tagCounts
+        )
+        totalNotesCount = count
+        itemsByPath = lookup
+        cachedAllNotePaths = notePaths
         allTags = tagCounts
+        
+        // Prune deleted files from noteCache
+        if noteCache.count > count + 64 {
+            noteCache = noteCache.filter { lookup[$0.key] != nil }
+        }
         
         // Invalidate selected tag if no longer exists in vault
         if let currentTag = selectedTag, tagCounts[currentTag] == nil {
@@ -446,7 +501,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
         
         for session in sessions {
-            if let current = session.selectedItem, !fm.fileExists(atPath: current.url.path) {
+            if let current = session.selectedItem, lookup[current.relativePath] == nil && !fm.fileExists(atPath: current.url.path) {
                 session.selectedItem = nil
                 session.editorContent = ""
                 session.editorTitle = ""
@@ -454,7 +509,14 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
     }
     
-    private func scanDirectory(url: URL, base: URL, noteCount: inout Int) -> [NoteItem] {
+    private func scanDirectory(
+        url: URL,
+        relativePrefix: String,
+        noteCount: inout Int,
+        lookup: inout [String: NoteItem],
+        notePaths: inout [String],
+        tagCounts: inout [String: Int]
+    ) -> [NoteItem] {
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(
             at: url,
@@ -465,20 +527,30 @@ public final class VaultManager: ObservableObject, VaultManaging {
         }
         
         var items: [NoteItem] = []
+        items.reserveCapacity(contents.count)
         
         for file in contents {
             let resourceValues = try? file.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey, .creationDateKey, .fileSizeKey])
             let created = resourceValues?.creationDate
             let isDir = resourceValues?.isDirectory ?? false
             let modDate = resourceValues?.contentModificationDate ?? Date()
-            let size = resourceValues?.fileSize ?? 0
+            let size = Int64(resourceValues?.fileSize ?? 0)
             
-            let relPath = relativePath(of: file, relativeTo: base)
+            let fileName = file.lastPathComponent
+            let relPath = relativePrefix.isEmpty ? fileName : "\(relativePrefix)/\(fileName)"
+            let ext = file.pathExtension.lowercased()
             
             if isDir {
-                let children = scanDirectory(url: file, base: base, noteCount: &noteCount)
-                items.append(NoteItem(
-                    name: file.lastPathComponent,
+                let children = scanDirectory(
+                    url: file,
+                    relativePrefix: relPath,
+                    noteCount: &noteCount,
+                    lookup: &lookup,
+                    notePaths: &notePaths,
+                    tagCounts: &tagCounts
+                )
+                let item = NoteItem(
+                    name: fileName,
                     relativePath: relPath,
                     url: file,
                     isDirectory: true,
@@ -486,22 +558,26 @@ public final class VaultManager: ObservableObject, VaultManaging {
                     modifiedAt: modDate,
                     createdAt: created,
                     size: 0
-                ))
-            } else if file.pathExtension.lowercased() == "md" || file.pathExtension.lowercased() == "markdown" || file.pathExtension.lowercased() == "txt" {
+                )
+                lookup[relPath] = item
+                items.append(item)
+            } else if ext == "md" || ext == "markdown" || ext == "txt" {
                 noteCount += 1
                 
-                // Parse frontmatter tags if Markdown file
                 var noteTags: [String] = []
-                if file.pathExtension.lowercased() == "md" || file.pathExtension.lowercased() == "markdown" {
-                    if let content = try? String(contentsOf: file, encoding: .utf8) {
-                        let (fm, _) = FrontmatterParser.parse(content)
-                        if let parsedFM = fm {
-                            noteTags = parsedFM.tags
-                        }
+                if ext == "md" || ext == "markdown" {
+                    if let cached = noteCache[relPath], cached.modifiedAt == modDate, cached.size == size {
+                        noteTags = cached.tags
+                    } else {
+                        noteTags = FrontmatterParser.parseTags(from: file)
+                        noteCache[relPath] = CachedNoteEntry(modifiedAt: modDate, size: size, tags: noteTags, content: nil)
+                    }
+                    for tag in noteTags {
+                        tagCounts[tag, default: 0] += 1
                     }
                 }
                 
-                items.append(NoteItem(
+                let item = NoteItem(
                     name: file.deletingPathExtension().lastPathComponent,
                     relativePath: relPath,
                     url: file,
@@ -509,31 +585,39 @@ public final class VaultManager: ObservableObject, VaultManaging {
                     children: nil,
                     modifiedAt: modDate,
                     createdAt: created,
-                    size: Int64(size),
+                    size: size,
                     tags: noteTags
-                ))
-            } else if !file.lastPathComponent.hasPrefix(".") && !file.pathExtension.isEmpty {
-                // Non-markdown attachment (images, pdfs, media, etc.)
-                items.append(NoteItem(
-                    name: file.lastPathComponent,
+                )
+                lookup[relPath] = item
+                items.append(item)
+            } else if !fileName.hasPrefix(".") && !ext.isEmpty {
+                let item = NoteItem(
+                    name: fileName,
                     relativePath: relPath,
                     url: file,
                     isDirectory: false,
                     children: nil,
                     modifiedAt: modDate,
                     createdAt: created,
-                    size: Int64(size),
+                    size: size,
                     tags: []
-                ))
+                )
+                lookup[relPath] = item
+                items.append(item)
             }
         }
         
-        return items.sorted { a, b in
+        items.sort { a, b in
             if a.isDirectory != b.isDirectory {
                 return a.isDirectory && !b.isDirectory
             }
             return a.name.localizedStandardCompare(b.name) == .orderedAscending
         }
+        
+        if relativePrefix.isEmpty {
+            collectNotePaths(in: items, paths: &notePaths)
+        }
+        return items
     }
     
     public func selectNote(_ item: NoteItem) {
@@ -563,6 +647,9 @@ public final class VaultManager: ObservableObject, VaultManaging {
     }
 
     func noteItem(atRelativePath path: String) -> NoteItem? {
+        if let found = itemsByPath[path] {
+            return found
+        }
         func findIn(items: [NoteItem]) -> NoteItem? {
             for item in items {
                 if item.relativePath == path { return item }
@@ -700,23 +787,49 @@ public final class VaultManager: ObservableObject, VaultManaging {
     // MARK: - CRUD API (Protocol Implementation)
     
     public func listFiles(relativeSubdirectory: String? = nil) throws -> [NoteItem] {
-        var base = vaultURL
-        if let sub = relativeSubdirectory, !sub.isEmpty {
-            base = try resolveSecurePath(relativePath: sub)
+        guard let sub = relativeSubdirectory?.trimmingCharacters(in: CharacterSet(charactersIn: "/")), !sub.isEmpty else {
+            return rootItems
+        }
+        let base = try resolveSecurePath(relativePath: sub)
+        if let dirItem = itemsByPath[sub], dirItem.isDirectory, let children = dirItem.children {
+            return children
         }
         var count = 0
-        return scanDirectory(url: base, base: vaultURL, noteCount: &count)
+        var lookup: [String: NoteItem] = [:]
+        var notePaths: [String] = []
+        var tagCounts: [String: Int] = [:]
+        return scanDirectory(url: base, relativePrefix: sub, noteCount: &count, lookup: &lookup, notePaths: &notePaths, tagCounts: &tagCounts)
     }
     
     public func readFile(relativePath: String) throws -> String {
         let fileURL = try resolveSecurePath(relativePath: relativePath)
+        if let cached = noteCache[relativePath], let content = cached.content,
+           let rv = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+           rv.contentModificationDate == cached.modifiedAt, Int64(rv.fileSize ?? -1) == cached.size {
+            return content
+        }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             throw BrainError.fileNotFound(path: relativePath)
         }
         do {
-            return try String(contentsOf: fileURL, encoding: .utf8)
+            let text = try String(contentsOf: fileURL, encoding: .utf8)
+            if var entry = noteCache[relativePath] {
+                entry.content = text
+                noteCache[relativePath] = entry
+            }
+            return text
         } catch {
             throw BrainError.readFailed(path: relativePath, reason: error.localizedDescription)
+        }
+    }
+    
+    private func updateCacheAfterWrite(relativePath: String, fileURL: URL, content: String) {
+        if let rv = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) {
+            let modDate = rv.contentModificationDate ?? Date()
+            let size = Int64(rv.fileSize ?? content.utf8.count)
+            let ext = fileURL.pathExtension.lowercased()
+            let tags = (ext == "md" || ext == "markdown") ? (FrontmatterParser.parse(content).frontmatter?.tags ?? []) : []
+            noteCache[relativePath] = CachedNoteEntry(modifiedAt: modDate, size: size, tags: tags, content: content)
         }
     }
     
@@ -736,6 +849,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         
         do {
             try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            updateCacheAfterWrite(relativePath: cleanPath, fileURL: fileURL, content: content)
             refreshFiles()
             selectNote(byRelativePath: cleanPath)
             logActivity(action: "Created Note", detail: cleanPath, isError: false)
@@ -756,6 +870,8 @@ public final class VaultManager: ObservableObject, VaultManaging {
         
         do {
             try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            let cleanRel = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            updateCacheAfterWrite(relativePath: cleanRel, fileURL: fileURL, content: content)
             refreshFiles()
             logActivity(action: "Updated Note", detail: relativePath, isError: false)
         } catch {
@@ -776,6 +892,8 @@ public final class VaultManager: ObservableObject, VaultManaging {
             if let data = contentToAppend.data(using: .utf8) {
                 try fileHandle.write(contentsOf: data)
             }
+            let cleanRel = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            noteCache.removeValue(forKey: cleanRel)
             refreshFiles()
             logActivity(action: "Appended Note", detail: relativePath, isError: false)
         } catch {
@@ -855,6 +973,8 @@ public final class VaultManager: ObservableObject, VaultManaging {
                 session.editorContent = ""
                 session.editorTitle = ""
             }
+            let cleanRel = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            noteCache.removeValue(forKey: cleanRel)
             refreshFiles()
             logActivity(action: permanently ? "Deleted Permanently" : "Moved to Trash", detail: relativePath, isError: false)
         } catch let error as BrainError {
@@ -1030,6 +1150,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
         do {
             try FileManager.default.moveItem(at: oldURL, to: newURL)
             let newRelPath = relativePath(of: newURL, relativeTo: vaultURL)
+            migrateCacheEntries(from: oldRelativePath, to: newRelPath)
             refreshFiles()
             customOrderItemMoved(from: oldRelativePath, to: newRelPath)
             
@@ -1043,6 +1164,23 @@ public final class VaultManager: ObservableObject, VaultManaging {
             throw BrainError.writeFailed(path: oldRelativePath, reason: error.localizedDescription)
         }
     }
+    private func migrateCacheEntries(from oldPath: String, to newPath: String) {
+        let cleanOld = oldPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let cleanNew = newPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard cleanOld != cleanNew else { return }
+        if let entry = noteCache.removeValue(forKey: cleanOld) {
+            noteCache[cleanNew] = entry
+        }
+        let oldDirPrefix = cleanOld + "/"
+        let matchingKeys = noteCache.keys.filter { $0.hasPrefix(oldDirPrefix) }
+        for key in matchingKeys {
+            if let entry = noteCache.removeValue(forKey: key) {
+                let suffix = key.dropFirst(cleanOld.count)
+                noteCache[cleanNew + suffix] = entry
+            }
+        }
+    }
+
     
     public func moveItem(sourceRelativePath: String, toDirectoryRelativePath: String) throws {
         let sourceURL = try resolveSecurePath(relativePath: sourceRelativePath)
@@ -1108,6 +1246,7 @@ public final class VaultManager: ObservableObject, VaultManaging {
             
             try fm.moveItem(at: sourceURL, to: targetURL)
             let newRelPath = relativePath(of: targetURL, relativeTo: vaultURL)
+            migrateCacheEntries(from: sourceRelativePath, to: newRelPath)
             refreshFiles()
             customOrderItemMoved(from: sourceRelativePath, to: newRelPath)
             
@@ -1171,69 +1310,74 @@ public final class VaultManager: ObservableObject, VaultManaging {
             targetQuery = String(targetQuery.dropFirst(4)).trimmingCharacters(in: .whitespaces)
             isTagOnly = true
         }
+        guard !targetQuery.isEmpty else { return [] }
         
         var results: [NoteSearchResult] = []
-        searchRecursive(directory: vaultURL, base: vaultURL, query: targetQuery, isTagOnly: isTagOnly, results: &results)
+        searchItems(in: rootItems, query: targetQuery, isTagOnly: isTagOnly, results: &results)
         return results
     }
     
-    private func searchRecursive(directory: URL, base: URL, query: String, isTagOnly: Bool, results: inout [NoteSearchResult]) {
-        let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
-        
-        for file in files {
-            let isDir = (try? file.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDir {
-                searchRecursive(directory: file, base: base, query: query, isTagOnly: isTagOnly, results: &results)
-            } else if file.pathExtension.lowercased() == "md" || file.pathExtension.lowercased() == "markdown" || file.pathExtension.lowercased() == "txt" {
-                let relPath = relativePath(of: file, relativeTo: base)
-                let title = file.deletingPathExtension().lastPathComponent
-                let content = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
-                
-                let (fm, _) = FrontmatterParser.parse(content)
-                let noteTags = fm?.tags ?? []
+    private func searchItems(in items: [NoteItem], query: String, isTagOnly: Bool, results: inout [NoteSearchResult]) {
+        for item in items {
+            if item.isDirectory {
+                if let children = item.children {
+                    searchItems(in: children, query: query, isTagOnly: isTagOnly, results: &results)
+                }
+            } else if item.isMarkdown {
+                let noteTags = item.tags
                 let tagMatches = noteTags.contains(where: { $0.lowercased().contains(query) })
                 
                 if isTagOnly {
                     if tagMatches {
                         results.append(NoteSearchResult(
-                            relativePath: relPath,
-                            title: title,
+                            relativePath: item.relativePath,
+                            title: item.displayName,
                             snippet: "Tags: " + noteTags.map { "#\($0)" }.joined(separator: ", ")
                         ))
                     }
                 } else {
-                    let titleMatches = title.lowercased().contains(query)
-                    let contentMatches = content.lowercased().contains(query)
+                    let title = item.displayName
+                    let titleMatches = title.range(of: query, options: [.caseInsensitive, .literal]) != nil
+                    
+                    let content: String
+                    if let cached = noteCache[item.relativePath], let c = cached.content,
+                       cached.modifiedAt == item.modifiedAt, cached.size == item.size {
+                        content = c
+                    } else {
+                        content = (try? String(contentsOf: item.url, encoding: .utf8)) ?? ""
+                        noteCache[item.relativePath] = CachedNoteEntry(
+                            modifiedAt: item.modifiedAt,
+                            size: item.size,
+                            tags: item.tags,
+                            content: content
+                        )
+                    }
+                    
+                    let contentRange = content.range(of: query, options: [.caseInsensitive, .literal])
+                    let contentMatches = contentRange != nil
                     
                     if titleMatches || contentMatches || tagMatches {
                         var snippet = ""
                         if tagMatches && !contentMatches && !titleMatches {
                             snippet = "Tags: " + noteTags.map { "#\($0)" }.joined(separator: ", ")
-                        } else if let range = content.range(of: query, options: .caseInsensitive) {
+                        } else if let range = contentRange {
                             let start = content.index(range.lowerBound, offsetBy: -30, limitedBy: content.startIndex) ?? content.startIndex
                             let end = content.index(range.upperBound, offsetBy: 60, limitedBy: content.endIndex) ?? content.endIndex
                             snippet = "..." + content[start..<end].replacingOccurrences(of: "\n", with: " ") + "..."
                         }
                         results.append(NoteSearchResult(
-                            relativePath: relPath,
+                            relativePath: item.relativePath,
                             title: title,
                             snippet: snippet
                         ))
                     }
                 }
-            } else if !file.lastPathComponent.hasPrefix(".") && !file.pathExtension.isEmpty && !isTagOnly {
-                let fileName = file.lastPathComponent
-                if fileName.lowercased().contains(query) {
-                    let relPath = relativePath(of: file, relativeTo: base)
+            } else if item.isAttachment && !isTagOnly {
+                if item.name.range(of: query, options: [.caseInsensitive, .literal]) != nil {
                     results.append(NoteSearchResult(
-                        relativePath: relPath,
-                        title: fileName,
-                        snippet: "Attachment (\(file.pathExtension.uppercased()))"
+                        relativePath: item.relativePath,
+                        title: item.name,
+                        snippet: "Attachment (\(item.url.pathExtension.uppercased()))"
                     ))
                 }
             }
@@ -1241,8 +1385,12 @@ public final class VaultManager: ObservableObject, VaultManaging {
     }
     
     public func getAllNotePaths() -> [String] {
+        if !cachedAllNotePaths.isEmpty || rootItems.isEmpty {
+            return cachedAllNotePaths
+        }
         var paths: [String] = []
         collectNotePaths(in: rootItems, paths: &paths)
+        cachedAllNotePaths = paths
         return paths
     }
     
@@ -1276,6 +1424,9 @@ public final class VaultManager: ObservableObject, VaultManaging {
         editorContent = ""
         editorTitle = ""
         vaultURL = newURL.standardized.resolvingSymlinksInPath()
+        noteCache = [:]
+        itemsByPath = [:]
+        cachedAllNotePaths = []
         UserDefaults.standard.set(vaultURL.path, forKey: userDefaultsVaultKey)
         loadCustomOrder()
         refreshFiles()

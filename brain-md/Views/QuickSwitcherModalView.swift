@@ -12,20 +12,17 @@ public struct QuickSwitcherModalView: View {
     
     @State private var query: String = ""
     @State private var selectedIndex: Int = 0
+    @State private var allItems: [QuickSwitcherItem] = []
+    @State private var filteredNotes: [QuickSwitcherItem] = []
     @FocusState private var isSearchFocused: Bool
     
     public init(vault: VaultManager) {
         self.vault = vault
     }
     
-    private var allNotePaths: [String] {
-        vault.getAllNotePaths()
-    }
-    
-    private var filteredNotes: [QuickSwitcherItem] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        
-        let items: [QuickSwitcherItem] = allNotePaths.map { path in
+    private func rebuildItems() {
+        let paths = vault.getAllNotePaths()
+        allItems = paths.map { path in
             let fileName = (path as NSString).lastPathComponent
             let title = fileName.lowercased().hasSuffix(".md") ? String(fileName.dropLast(3)) : fileName
             let folder = (path as NSString).deletingLastPathComponent
@@ -35,24 +32,26 @@ public struct QuickSwitcherModalView: View {
                 folder: folder.isEmpty ? "Root" : folder
             )
         }
-        
+        updateFilteredNotes()
+    }
+    
+    private func updateFilteredNotes() {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if trimmed.isEmpty {
-            return items
+            filteredNotes = allItems
+            return
         }
-        
-        return items.filter { item in
-            item.title.lowercased().contains(trimmed) || item.relativePath.lowercased().contains(trimmed)
+        filteredNotes = allItems.filter { item in
+            item.lowerTitle.contains(trimmed) || item.lowerRelativePath.contains(trimmed)
         }.sorted { a, b in
-            // Exact prefix or title match prioritizes first
-            let aTitleMatch = a.title.lowercased().hasPrefix(trimmed)
-            let bTitleMatch = b.title.lowercased().hasPrefix(trimmed)
+            let aTitleMatch = a.lowerTitle.hasPrefix(trimmed)
+            let bTitleMatch = b.lowerTitle.hasPrefix(trimmed)
             if aTitleMatch != bTitleMatch {
                 return aTitleMatch && !bTitleMatch
             }
             return a.title.localizedStandardCompare(b.title) == .orderedAscending
         }
     }
-    
     public var body: some View {
         VStack(spacing: 0) {
             // Search Input Header
@@ -70,6 +69,7 @@ public struct QuickSwitcherModalView: View {
                     }
                     .onChange(of: query) { _, _ in
                         selectedIndex = 0
+                        updateFilteredNotes()
                     }
                 
                 if !query.isEmpty {
@@ -187,7 +187,11 @@ public struct QuickSwitcherModalView: View {
         .frame(width: 560, height: 380)
         .background(Color(NSColor.windowBackgroundColor))
         .onAppear {
+            rebuildItems()
             isSearchFocused = true
+        }
+        .onChange(of: vault.totalNotesCount) { _, _ in
+            rebuildItems()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("QuickSwitcherDown"))) { _ in
             if selectedIndex < filteredNotes.count - 1 {
@@ -220,6 +224,16 @@ public struct QuickSwitcherItem: Identifiable, Hashable, Sendable {
     public let relativePath: String
     public let title: String
     public let folder: String
+    let lowerTitle: String
+    let lowerRelativePath: String
+    
+    public init(relativePath: String, title: String, folder: String) {
+        self.relativePath = relativePath
+        self.title = title
+        self.folder = folder
+        self.lowerTitle = title.lowercased()
+        self.lowerRelativePath = relativePath.lowercased()
+    }
 }
 
 private struct QuickSwitcherRow: View {

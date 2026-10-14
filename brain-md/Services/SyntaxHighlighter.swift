@@ -842,8 +842,16 @@ public struct MarkdownSyntaxHighlighter: Sendable {
             .ligature: 0
         ], range: fullRange)
         
+        let hasHash = string.contains("#")
+        let hasDash = string.contains("-")
+        let hasStar = string.contains("*")
+        let hasUnderscore = string.contains("_")
+        let hasTilde = string.contains("~")
+        let hasBracket = string.contains("[")
+        let hasBacktick = string.contains("`")
+        
         // 2. YAML Frontmatter
-        if let fmMatch = frontmatterRegex.firstMatch(in: string, range: fullRange) {
+        if hasDash, string.hasPrefix("---"), let fmMatch = frontmatterRegex.firstMatch(in: string, range: fullRange) {
             textStorage.addAttribute(.foregroundColor, value: theme.quote, range: fmMatch.range)
             let innerRange = fmMatch.range(at: 1)
             let keyMatches = frontmatterKeyRegex.matches(in: string, range: innerRange)
@@ -859,192 +867,268 @@ public struct MarkdownSyntaxHighlighter: Sendable {
         }
         
         // 3. Headings (# Title)
-        let headingMatches = headingRegex.matches(in: string, range: fullRange)
-        for m in headingMatches {
-            let markRange = m.range(at: 1)
-            let titleRange = m.range(at: 2)
-            let hashCount = markRange.length
-            
-            // Subtle visual scale factor for headings in raw text
-            let scale: CGFloat
-            switch hashCount {
-            case 1: scale = 1.25
-            case 2: scale = 1.15
-            case 3: scale = 1.08
-            default: scale = 1.0
-            }
-            let headingFont = NSFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.bold), size: baseFont.pointSize * scale) ?? boldFont
-            
-            let headingStyle = NSMutableParagraphStyle()
-            headingStyle.lineSpacing = 4
-            headingStyle.paragraphSpacingBefore = hashCount <= 2 ? 14 : (hashCount == 3 ? 10 : 6)
-            headingStyle.paragraphSpacing = 4
-            textStorage.addAttribute(.paragraphStyle, value: headingStyle, range: m.range)
-            
-            textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: markRange)
-            textStorage.addAttribute(.font, value: headingFont, range: markRange)
-            
-            if titleRange.length > 0 {
-                textStorage.addAttribute(.foregroundColor, value: theme.heading, range: titleRange)
-                textStorage.addAttribute(.font, value: headingFont, range: titleRange)
+        if hasHash {
+            let headingMatches = headingRegex.matches(in: string, range: fullRange)
+            if !headingMatches.isEmpty {
+                let h1Font = NSFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.bold), size: baseFont.pointSize * 1.25) ?? boldFont
+                let h2Font = NSFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.bold), size: baseFont.pointSize * 1.15) ?? boldFont
+                let h3Font = NSFont(descriptor: baseFont.fontDescriptor.withSymbolicTraits(.bold), size: baseFont.pointSize * 1.08) ?? boldFont
+                
+                let h12Style = NSMutableParagraphStyle()
+                h12Style.lineSpacing = 4
+                h12Style.paragraphSpacingBefore = 14
+                h12Style.paragraphSpacing = 4
+                
+                let h3Style = NSMutableParagraphStyle()
+                h3Style.lineSpacing = 4
+                h3Style.paragraphSpacingBefore = 10
+                h3Style.paragraphSpacing = 4
+                
+                let h4Style = NSMutableParagraphStyle()
+                h4Style.lineSpacing = 4
+                h4Style.paragraphSpacingBefore = 6
+                h4Style.paragraphSpacing = 4
+                
+                for m in headingMatches {
+                    let markRange = m.range(at: 1)
+                    let titleRange = m.range(at: 2)
+                    let hashCount = markRange.length
+                    
+                    let headingFont: NSFont
+                    let headingStyle: NSMutableParagraphStyle
+                    switch hashCount {
+                    case 1:
+                        headingFont = h1Font
+                        headingStyle = h12Style
+                    case 2:
+                        headingFont = h2Font
+                        headingStyle = h12Style
+                    case 3:
+                        headingFont = h3Font
+                        headingStyle = h3Style
+                    default:
+                        headingFont = boldFont
+                        headingStyle = h4Style
+                    }
+                    textStorage.addAttribute(.paragraphStyle, value: headingStyle, range: m.range)
+                    textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: markRange)
+                    textStorage.addAttribute(.font, value: headingFont, range: markRange)
+                    
+                    if titleRange.length > 0 {
+                        textStorage.addAttribute(.foregroundColor, value: theme.heading, range: titleRange)
+                        textStorage.addAttribute(.font, value: headingFont, range: titleRange)
+                    }
+                }
             }
         }
         
         // 4. Blockquotes (> Quote)
-        let quoteMatches = blockquoteRegex.matches(in: string, range: fullRange)
-        for m in quoteMatches {
-            let markRange = m.range(at: 1)
-            let textRange = m.range(at: 2)
-            textStorage.addAttribute(.foregroundColor, value: theme.quote, range: markRange)
-            textStorage.addAttribute(.font, value: boldFont, range: markRange)
-            if textRange.length > 0 {
-                textStorage.addAttribute(.foregroundColor, value: theme.quote, range: textRange)
-                textStorage.addAttribute(.font, value: italicFont, range: textRange)
+        if string.contains(">") {
+            let quoteMatches = blockquoteRegex.matches(in: string, range: fullRange)
+            for m in quoteMatches {
+                let markRange = m.range(at: 1)
+                let textRange = m.range(at: 2)
+                textStorage.addAttribute(.foregroundColor, value: theme.quote, range: markRange)
+                textStorage.addAttribute(.font, value: boldFont, range: markRange)
+                if textRange.length > 0 {
+                    textStorage.addAttribute(.foregroundColor, value: theme.quote, range: textRange)
+                    textStorage.addAttribute(.font, value: italicFont, range: textRange)
+                }
             }
         }
         
         // 5. Unordered List Bullets (- , * , + )
-        let bulletMatches = bulletListRegex.matches(in: string, range: fullRange)
-        for m in bulletMatches {
-            let markRange = m.range(at: 2)
-            textStorage.addAttribute(.foregroundColor, value: theme.listMarker, range: markRange)
-            textStorage.addAttribute(.font, value: boldFont, range: markRange)
+        if hasDash || hasStar || string.contains("+") {
+            let bulletMatches = bulletListRegex.matches(in: string, range: fullRange)
+            for m in bulletMatches {
+                let markRange = m.range(at: 2)
+                textStorage.addAttribute(.foregroundColor, value: theme.listMarker, range: markRange)
+                textStorage.addAttribute(.font, value: boldFont, range: markRange)
+            }
         }
         
         // 6. Numbered Lists (1. , 2. )
-        let numberMatches = numberListRegex.matches(in: string, range: fullRange)
-        for m in numberMatches {
-            let markRange = m.range(at: 2)
-            textStorage.addAttribute(.foregroundColor, value: theme.number, range: markRange)
-            textStorage.addAttribute(.font, value: boldFont, range: markRange)
+        if string.contains(". ") {
+            let numberMatches = numberListRegex.matches(in: string, range: fullRange)
+            for m in numberMatches {
+                let markRange = m.range(at: 2)
+                textStorage.addAttribute(.foregroundColor, value: theme.number, range: markRange)
+                textStorage.addAttribute(.font, value: boldFont, range: markRange)
+            }
         }
         
         // 7. Task Checkboxes ([ ], [x])
-        let taskMatches = taskBoxRegex.matches(in: string, range: fullRange)
-        for m in taskMatches {
-            let boxRange = m.range(at: 2)
-            textStorage.addAttribute(.foregroundColor, value: theme.taskBox, range: boxRange)
-            textStorage.addAttribute(.font, value: boldFont, range: boxRange)
+        if hasBracket {
+            let taskMatches = taskBoxRegex.matches(in: string, range: fullRange)
+            for m in taskMatches {
+                let boxRange = m.range(at: 2)
+                textStorage.addAttribute(.foregroundColor, value: theme.taskBox, range: boxRange)
+                textStorage.addAttribute(.font, value: boldFont, range: boxRange)
+            }
         }
         
         // 8. Horizontal Rules (---, ***)
-        let hrMatches = hrRegex.matches(in: string, range: fullRange)
-        for m in hrMatches {
-            textStorage.addAttribute(.foregroundColor, value: theme.horizontalRule, range: m.range)
+        if hasDash || hasStar || hasUnderscore {
+            let hrMatches = hrRegex.matches(in: string, range: fullRange)
+            for m in hrMatches {
+                textStorage.addAttribute(.foregroundColor, value: theme.horizontalRule, range: m.range)
+            }
         }
         
         // 9. Bold + Italic (***text***)
-        let boldItalicMatches = boldItalicRegex.matches(in: string, range: fullRange)
-        for m in boldItalicMatches {
-            textStorage.addAttribute(.font, value: boldItalicFont, range: m.range)
-            textStorage.addAttribute(.foregroundColor, value: theme.bold, range: m.range)
+        if (hasStar && string.contains("***")) || (hasUnderscore && string.contains("___")) {
+            let boldItalicMatches = boldItalicRegex.matches(in: string, range: fullRange)
+            for m in boldItalicMatches {
+                textStorage.addAttribute(.font, value: boldItalicFont, range: m.range)
+                textStorage.addAttribute(.foregroundColor, value: theme.bold, range: m.range)
+            }
         }
         
         // 10. Bold (**text**)
-        let boldMatches = boldRegex.matches(in: string, range: fullRange)
-        for m in boldMatches {
-            textStorage.addAttribute(.font, value: boldFont, range: m.range)
-            textStorage.addAttribute(.foregroundColor, value: theme.bold, range: m.range)
+        if (hasStar && string.contains("**")) || (hasUnderscore && string.contains("__")) {
+            let boldMatches = boldRegex.matches(in: string, range: fullRange)
+            for m in boldMatches {
+                textStorage.addAttribute(.font, value: boldFont, range: m.range)
+                textStorage.addAttribute(.foregroundColor, value: theme.bold, range: m.range)
+            }
         }
         
         // 11. Italic (*text*)
-        let italicMatches = italicRegex.matches(in: string, range: fullRange)
-        for m in italicMatches {
-            textStorage.addAttribute(.font, value: italicFont, range: m.range)
-            textStorage.addAttribute(.foregroundColor, value: theme.italic, range: m.range)
+        if hasStar || hasUnderscore {
+            let italicMatches = italicRegex.matches(in: string, range: fullRange)
+            for m in italicMatches {
+                textStorage.addAttribute(.font, value: italicFont, range: m.range)
+                textStorage.addAttribute(.foregroundColor, value: theme.italic, range: m.range)
+            }
         }
         
         // 12. Strikethrough (~~text~~)
-        let strikeMatches = strikethroughRegex.matches(in: string, range: fullRange)
-        for m in strikeMatches {
-            textStorage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: m.range)
-            textStorage.addAttribute(.strikethroughColor, value: theme.horizontalRule, range: m.range)
+        if hasTilde && string.contains("~~") {
+            let strikeMatches = strikethroughRegex.matches(in: string, range: fullRange)
+            for m in strikeMatches {
+                textStorage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: m.range)
+                textStorage.addAttribute(.strikethroughColor, value: theme.horizontalRule, range: m.range)
+            }
         }
         
         // 13. Links & Images ([text](url), ![alt](url))
-        let imgMatches = imageRegex.matches(in: string, range: fullRange)
-        for m in imgMatches {
-            textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: m.range(at: 1))
-        }
-        
-        let linkMatches = linkRegex.matches(in: string, range: fullRange)
-        for m in linkMatches {
-            let labelRange = m.range(at: 2)
-            let urlRange = m.range(at: 4)
-            textStorage.addAttribute(.foregroundColor, value: theme.url, range: m.range(at: 1)) // [
-            textStorage.addAttribute(.foregroundColor, value: theme.link, range: labelRange) // text
-            textStorage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: labelRange)
-            textStorage.addAttribute(.foregroundColor, value: theme.url, range: m.range(at: 3)) // ](
-            textStorage.addAttribute(.foregroundColor, value: theme.url, range: urlRange) // url
-            textStorage.addAttribute(.foregroundColor, value: theme.url, range: m.range(at: 5)) // )
+        if hasBracket && string.contains("](") {
+            if string.contains("![") {
+                let imgMatches = imageRegex.matches(in: string, range: fullRange)
+                for m in imgMatches {
+                    textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: m.range(at: 1))
+                }
+            }
+            
+            let linkMatches = linkRegex.matches(in: string, range: fullRange)
+            for m in linkMatches {
+                let labelRange = m.range(at: 2)
+                let urlRange = m.range(at: 4)
+                textStorage.addAttribute(.foregroundColor, value: theme.url, range: m.range(at: 1)) // [
+                textStorage.addAttribute(.foregroundColor, value: theme.link, range: labelRange) // text
+                textStorage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: labelRange)
+                textStorage.addAttribute(.foregroundColor, value: theme.url, range: m.range(at: 3)) // ](
+                textStorage.addAttribute(.foregroundColor, value: theme.url, range: urlRange) // url
+                textStorage.addAttribute(.foregroundColor, value: theme.url, range: m.range(at: 5)) // )
+            }
         }
         
         // 14. Tags (#tag)
-        let tagMatches = tagRegex.matches(in: string, range: fullRange)
-        for m in tagMatches {
-            textStorage.addAttribute(.foregroundColor, value: theme.tag, range: m.range)
-            textStorage.addAttribute(.font, value: boldFont, range: m.range)
+        if hasHash {
+            let tagMatches = tagRegex.matches(in: string, range: fullRange)
+            for m in tagMatches {
+                textStorage.addAttribute(.foregroundColor, value: theme.tag, range: m.range)
+                textStorage.addAttribute(.font, value: boldFont, range: m.range)
+            }
         }
         
         // 14b. LaTeX math ($…$, $$…$$); inline code and code blocks below take precedence
-        for regex in [displayMathRegex, inlineMathRegex] {
-            for m in regex.matches(in: string, range: fullRange) {
+        if string.contains("$") {
+            if string.contains("$$") {
+                for m in displayMathRegex.matches(in: string, range: fullRange) {
+                    textStorage.addAttribute(.font, value: monoFont, range: m.range)
+                    textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
+                }
+            }
+            for m in inlineMathRegex.matches(in: string, range: fullRange) {
                 textStorage.addAttribute(.font, value: monoFont, range: m.range)
                 textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
             }
         }
 
         // 15. Inline Code (`code`)
-        let codeMatches = inlineCodeRegex.matches(in: string, range: fullRange)
-        for m in codeMatches {
-            textStorage.addAttribute(.font, value: monoFont, range: m.range)
-            textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
-            textStorage.addAttribute(.backgroundColor, value: theme.code.withAlphaComponent(0.12), range: m.range)
-        }
-        
-        // 16. Code Blocks (```lang ... ```)
-        let blockMatches = codeBlockRegex.matches(in: string, range: fullRange)
-        for m in blockMatches {
-            textStorage.addAttribute(.font, value: monoFont, range: m.range)
-            textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
-            textStorage.addAttribute(.backgroundColor, value: theme.codeBlockFence.withAlphaComponent(0.08), range: m.range)
+        if hasBacktick {
+            let codeMatches = inlineCodeRegex.matches(in: string, range: fullRange)
+            let codeBg = theme.code.withAlphaComponent(0.12)
+            for m in codeMatches {
+                textStorage.addAttribute(.font, value: monoFont, range: m.range)
+                textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
+                textStorage.addAttribute(.backgroundColor, value: codeBg, range: m.range)
+            }
+            
+            // 16. Code Blocks (```lang ... ```)
+            if string.contains("```") {
+                let blockMatches = codeBlockRegex.matches(in: string, range: fullRange)
+                let fenceBg = theme.codeBlockFence.withAlphaComponent(0.08)
+                for m in blockMatches {
+                    textStorage.addAttribute(.font, value: monoFont, range: m.range)
+                    textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
+                    textStorage.addAttribute(.backgroundColor, value: fenceBg, range: m.range)
+                }
+            }
         }
         
         // 17. Tilde Code Blocks (~~~lang ... ~~~)
-        let tildeBlockMatches = tildeCodeBlockRegex.matches(in: string, range: fullRange)
-        for m in tildeBlockMatches {
-            textStorage.addAttribute(.font, value: monoFont, range: m.range)
-            textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
-            textStorage.addAttribute(.backgroundColor, value: theme.codeBlockFence.withAlphaComponent(0.08), range: m.range)
+        if hasTilde && string.contains("~~~") {
+            let tildeBlockMatches = tildeCodeBlockRegex.matches(in: string, range: fullRange)
+            let fenceBg = theme.codeBlockFence.withAlphaComponent(0.08)
+            for m in tildeBlockMatches {
+                textStorage.addAttribute(.font, value: monoFont, range: m.range)
+                textStorage.addAttribute(.foregroundColor, value: theme.code, range: m.range)
+                textStorage.addAttribute(.backgroundColor, value: fenceBg, range: m.range)
+            }
         }
         
         // 18. HTML Tags (<tag>, </tag>)
-        let htmlTagMatches = htmlTagRegex.matches(in: string, range: fullRange)
-        for m in htmlTagMatches {
-            textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: m.range)
+        if string.contains("<") {
+            let htmlTagMatches = htmlTagRegex.matches(in: string, range: fullRange)
+            for m in htmlTagMatches {
+                textStorage.addAttribute(.foregroundColor, value: theme.headingMarker, range: m.range)
+            }
         }
         
         // 19. Text Highlight (==text==)
-        let hlMatches = highlightRegex.matches(in: string, range: fullRange)
-        for m in hlMatches {
-            textStorage.addAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.35), range: m.range)
+        if string.contains("==") {
+            let hlMatches = highlightRegex.matches(in: string, range: fullRange)
+            let hlBg = NSColor.systemYellow.withAlphaComponent(0.35)
+            for m in hlMatches {
+                textStorage.addAttribute(.backgroundColor, value: hlBg, range: m.range)
+            }
         }
         
         // 20. Subscript (~text~) and Superscript (^text^)
-        let subFont = NSFont.systemFont(ofSize: baseFont.pointSize * 0.85)
-        let subMatches = subscriptRegex.matches(in: string, range: fullRange)
-        for m in subMatches {
-            textStorage.addAttribute(.font, value: subFont, range: m.range)
-        }
-        let supMatches = superscriptRegex.matches(in: string, range: fullRange)
-        for m in supMatches {
-            textStorage.addAttribute(.font, value: subFont, range: m.range)
+        if hasTilde || string.contains("^") {
+            let subFont = NSFont.systemFont(ofSize: baseFont.pointSize * 0.85)
+            if hasTilde {
+                let subMatches = subscriptRegex.matches(in: string, range: fullRange)
+                for m in subMatches {
+                    textStorage.addAttribute(.font, value: subFont, range: m.range)
+                }
+            }
+            if string.contains("^") {
+                let supMatches = superscriptRegex.matches(in: string, range: fullRange)
+                for m in supMatches {
+                    textStorage.addAttribute(.font, value: subFont, range: m.range)
+                }
+            }
         }
         
         // 21. Emoji Shortcodes (:tada:)
-        let emojiMatches = emojiShortcodeRegex.matches(in: string, range: fullRange)
-        for m in emojiMatches {
-            textStorage.addAttribute(.foregroundColor, value: theme.taskBox, range: m.range)
+        if string.contains(":") {
+            let emojiMatches = emojiShortcodeRegex.matches(in: string, range: fullRange)
+            for m in emojiMatches {
+                textStorage.addAttribute(.foregroundColor, value: theme.taskBox, range: m.range)
+            }
         }
     }
     
