@@ -23,6 +23,19 @@
 brew install --cask itsreidar/tap/brain-md
 ```
 
+
+<p align="center">
+  <img src="assets/screenshot-1-split-editor.png" width="100%" alt="Brain.md Split View Editor and Live Markdown Preview" />
+</p>
+<p align="center">
+  <img src="assets/screenshot-2-mcp-server.png" width="100%" alt="Built-in Model Context Protocol (MCP) Server Inspector" />
+</p>
+<p align="center">
+  <img src="assets/screenshot-3-settings-general.png" width="100%" alt="General Settings — AI Features, Default Markdown App, and Sidebar Order" />
+</p>
+<p align="center">
+  <img src="assets/screenshot-4-local-ai.png" width="100%" alt="Local AI & Voice Settings — On-Device MLX Models" />
+</p>
 ---
 
 ## Why brain.md
